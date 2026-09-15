@@ -2,8 +2,9 @@ import { useRouter } from 'expo-router';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { CalendarDays, House, Lightbulb, Plus, UserRound, type LucideIcon } from 'lucide-react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { PressableScale, Text, colors, layout, palette, radii } from '@/design-system';
+import { PressableScale, Text, colors, layout, motion, palette, radii } from '@/design-system';
 
 const ICONS: Record<string, LucideIcon> = {
   index: House,
@@ -22,7 +23,6 @@ export function AppTabBar({ state, descriptors, navigation, insets }: BottomTabB
     const focused = state.index === index;
     const label = descriptors[route.key].options.title ?? route.name;
     const Icon = ICONS[route.name] ?? House;
-    const color = focused ? colors.textTitle : colors.textBody;
 
     const onPress = () => {
       const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
@@ -37,8 +37,19 @@ export function AppTabBar({ state, descriptors, navigation, insets }: BottomTabB
         accessibilityLabel={label}
         onPress={onPress}
         style={styles.tab}>
-        <Icon size={22} color={color} strokeWidth={focused ? 2.25 : 2} />
-        <Text variant="caption" weight={focused ? 'semibold' : 'medium'} color={color} style={styles.label}>
+        {/* Tab attiva: pillola navy dietro l'icona, come gli stati selezionati del design system. */}
+        <View style={styles.iconSlot}>
+          {focused && <Animated.View entering={FadeIn.duration(motion.base)} style={styles.indicator} />}
+          {/* Sul web la pillola, posizionata in assoluto, verrebbe dipinta sopra l'svg: l'icona sta in un contenitore sopra. */}
+          <View style={styles.icon}>
+            <Icon size={22} color={focused ? palette.white : colors.textBody} strokeWidth={focused ? 2.25 : 2} />
+          </View>
+        </View>
+        <Text
+          variant="caption"
+          weight={focused ? 'bold' : 'medium'}
+          color={focused ? colors.textTitle : colors.textBody}
+          style={styles.label}>
           {label}
         </Text>
       </Pressable>
@@ -79,6 +90,17 @@ const styles = StyleSheet.create({
     gap: 3,
     minHeight: layout.hitMin + 4,
   },
+  iconSlot: { width: 56, height: 32, alignItems: 'center', justifyContent: 'center' },
+  indicator: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: radii.pill,
+    backgroundColor: colors.actionPrimary,
+  },
+  icon: { position: 'relative', zIndex: 1 },
   label: { fontSize: 10, lineHeight: 13 },
   center: { flex: 1, alignItems: 'center' },
   plus: {
