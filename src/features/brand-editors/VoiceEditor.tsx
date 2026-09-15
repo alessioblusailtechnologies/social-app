@@ -21,6 +21,7 @@ import {
 import { currentVoiceCard, isConnected, type Voice, type VoiceCard } from '@/domain/brand';
 import { CHANNELS } from '@/domain/catalog';
 import { formatTimestamp } from '@/lib/dates';
+import { apiErrorMessage } from '@/services';
 import { useAnalyzeVoice } from '@/services/queries';
 import type { VoiceSample } from '@/services/types';
 
@@ -63,7 +64,7 @@ export function VoiceEditor({ value, onChange, context }: EditorProps<Voice>) {
           setTexts('');
           toast(`Scheda voce v${version} pronta.`);
         },
-        onError: () => toast('Analisi non riuscita. Riprova.'),
+        onError: (error) => toast(apiErrorMessage(error, 'Analisi non riuscita. Riprova.')),
       },
     );
   };

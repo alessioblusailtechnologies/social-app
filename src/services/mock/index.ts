@@ -549,7 +549,7 @@ const ACCENTS: [RegExp, string][] = [
   [/[ùú]/g, 'u'],
 ];
 
-function createMockChannelService(): ChannelService {
+export function createMockChannelService(): ChannelService {
   return {
     async connect(_channel: ChannelId, identity: Identity) {
       await delay(latency(900, 1300));

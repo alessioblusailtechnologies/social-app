@@ -3,26 +3,24 @@ import { Archivo_400Regular } from '@expo-google-fonts/archivo/400Regular';
 import { Archivo_500Medium } from '@expo-google-fonts/archivo/500Medium';
 import { Archivo_600SemiBold } from '@expo-google-fonts/archivo/600SemiBold';
 import { Archivo_700Bold } from '@expo-google-fonts/archivo/700Bold';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AppFrame, ToastProvider, colors } from '@/design-system';
+import { ServerUnavailable } from '@/features/auth/ServerUnavailable';
+import { useSessionHydrated, useSignedIn } from '@/services/http/session';
 import { useActiveBrand, useWorkspace } from '@/services/queries';
+import { queryClient } from '@/services/query-client';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  // I dati del mock cambiano solo con le mutation, che aggiornano la cache da sole.
-  const [queryClient] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } }),
-  );
-
   return (
     <GestureHandlerRootView style={styles.root}>
       <QueryClientProvider client={queryClient}>
@@ -44,9 +42,12 @@ function RootNavigator() {
     Archivo_600SemiBold,
     Archivo_700Bold,
   });
+  const sessionHydrated = useSessionHydrated();
+  const signedIn = useSignedIn();
   const workspace = useWorkspace();
   const { brand } = useActiveBrand();
-  const ready = (fontsLoaded || fontError !== null) && !workspace.isPending;
+  // Senza sessione il workspace non si chiede: si aspetta solo di aver riletto la sessione salvata.
+  const ready = (fontsLoaded || fontError !== null) && sessionHydrated && (!signedIn || !workspace.isPending);
 
   useEffect(() => {
     if (ready) SplashScreen.hide();
@@ -54,9 +55,16 @@ function RootNavigator() {
 
   if (!ready) return null;
 
+  if (signedIn && workspace.isError) {
+    return (
+      <ServerUnavailable error={workspace.error} retrying={workspace.isFetching} onRetry={() => workspace.refetch()} />
+    );
+  }
+
+  // L'ordine conta: quando una guardia si chiude, il router porta alla prima schermata ancora aperta.
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surfaceApp } }}>
-      <Stack.Protected guard={brand !== null}>
+      <Stack.Protected guard={signedIn && brand !== null}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="brand/[section]" />
         <Stack.Screen name="idea/[id]" />
@@ -71,8 +79,13 @@ function RootNavigator() {
         <Stack.Screen name="content/[slotId]" />
         <Stack.Screen name="draft/[contentId]" />
       </Stack.Protected>
-      <Stack.Screen name="onboarding" />
-      <Stack.Screen name="design-system" />
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="design-system" />
+      </Stack.Protected>
+      <Stack.Protected guard={!signedIn}>
+        <Stack.Screen name="sign-in" />
+      </Stack.Protected>
     </Stack>
   );
 }

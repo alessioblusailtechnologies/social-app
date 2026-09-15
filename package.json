@@ -49,6 +49,14 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/__rsc_tests__/",
+      "<rootDir>/be-node/"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/be-node/"
+    ],
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/$1"
     }

@@ -5,6 +5,7 @@ import type { Content, RewriteInstruction } from '@/domain/content';
 import type { Idea, IdeaDraft, IdeaFormat, IdeaSource, IdeaStatus } from '@/domain/idea';
 import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
 
+import { useSignedIn } from './http/session';
 import { services } from './index';
 import type { DirectContentRequest, SlotPatch, VoiceSample, Workspace } from './types';
 
@@ -277,7 +278,9 @@ export function useSetIdeaStatus(brandId: string) {
 const WORKSPACE_KEY = ['workspace'] as const;
 
 export function useWorkspace() {
-  return useQuery({ queryKey: WORKSPACE_KEY, queryFn: () => services.brands.getWorkspace() });
+  // Con il backend il workspace è dell'account: senza sessione non c'è niente da chiedere.
+  const signedIn = useSignedIn();
+  return useQuery({ queryKey: WORKSPACE_KEY, queryFn: () => services.brands.getWorkspace(), enabled: signedIn });
 }
 
 export function useActiveBrand() {

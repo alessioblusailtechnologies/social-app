@@ -1,0 +1,291 @@
+import { createClient } from '@supabase/supabase-js';
+import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { z } from 'zod';
+
+import type { BrandDraft } from '@/domain/brand';
+import { createEmptyDraft } from '@/domain/catalog';
+import { createThemes } from '@/domain/themes';
+
+import type { AiEngine, AiRequest } from '../src/ai/engine';
+import { buildApp } from '../src/api/app';
+import { supabaseVerifier } from '../src/api/plugins/auth';
+import { config } from '../src/config';
+import { closeDb, db } from '../src/db/pool';
+import { supabaseAuthGateway } from '../src/services/auth';
+
+/**
+ * Il giro completo contro il database e Supabase Auth del file .env, con un'AI finta:
+ * due account nuovi, il flusso di brand, idee, piano e contenuti, e la RLS fra i due.
+ * Gli account di collaudo si cancellano alla fine (con loro, a cascata, tutti i dati).
+ */
+
+try {
+  process.loadEnvFile(new URL('../.env', import.meta.url));
+} catch {
+  /* senza .env il giro si salta */
+}
+const enabled = Boolean(process.env.DATABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+const FAKE_OUTPUTS: Record<string, unknown> = {
+  ideas: {
+    ideas: [
+      {
+        title: 'Tre numeri sul lievito madre',
+        angleLabel: 'Il caso con i numeri',
+        angle: 'Ore di lievitazione, farine usate, pagnotte al giorno.',
+        rationale: 'Il tema pesa 60% nel piano.',
+        themeId: null,
+        formats: ['carousel'],
+        channels: ['linkedin', 'instagram'],
+        signal: { kind: 'theme', label: 'Il pane di ogni giorno' },
+      },
+      {
+        title: 'Una notte al forno',
+        angleLabel: 'Il dietro le quinte',
+        angle: 'Dalle 3 alle 7, cosa succede prima dell’apertura.',
+        rationale: 'Settembre, si riparte.',
+        themeId: null,
+        formats: ['video'],
+        channels: ['instagram'],
+        signal: { kind: 'season', label: 'Settembre · calendario' },
+      },
+    ],
+  },
+  content: {
+    title: 'Il pane che non ha fretta',
+    themeId: null,
+    headline: 'Il pane che non ha fretta',
+    variants: ['linkedin', 'instagram', 'facebook', 'tiktok', 'x'].map((channel) => ({
+      channel,
+      text: `Testo per ${channel}.`,
+      hashtags: ['#pane', 'lievito madre'],
+    })),
+    slides: [{ title: 'Uno', body: 'Primo punto' }],
+    scenes: [],
+  },
+  rewrite: { text: 'Testo più corto.' },
+};
+
+const fakeAi: AiEngine & { tasks: string[] } = {
+  tasks: [],
+  run<S extends z.ZodType>(request: AiRequest<S>): Promise<z.output<S>> {
+    this.tasks.push(request.task);
+    return Promise.resolve(request.schema.parse(FAKE_OUTPUTS[request.task]));
+  },
+};
+
+describe.skipIf(!enabled)('API contro il database', () => {
+  let app: FastifyInstance;
+  const stamp = Date.now().toString(36);
+  const password = `Collaudo-${stamp}-presenza!`;
+  const created: string[] = [];
+  let tokenA = '';
+  let tokenB = '';
+  let brandId = '';
+
+  const call = (token: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, payload?: object) =>
+    app.inject({ method, url, ...(payload && { payload }), headers: { authorization: `Bearer ${token}` } });
+  const json = <T>(response: LightMyRequestResponse, status: number): T => {
+    expect(response.statusCode, response.body).toBe(status);
+    return response.json<T>();
+  };
+
+  beforeAll(async () => {
+    const settings = config();
+    app = buildApp({
+      logger: false,
+      pool: db(),
+      verifyToken: supabaseVerifier(settings),
+      auth: supabaseAuthGateway(settings),
+      ai: () => fakeAi,
+    });
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    const settings = config();
+    const admin = createClient(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    for (const id of created) await admin.auth.admin.deleteUser(id);
+    await app?.close();
+    await closeDb();
+  });
+
+  it('registra due account e rifiuta credenziali e token sbagliati', async () => {
+    for (const label of ['a', 'b']) {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/auth/sign-up',
+        payload: { email: `collaudo+${stamp}-${label}@presenza-collaudo.it`, password, name: `Collaudo ${label}` },
+      });
+      const body = json<{ accessToken: string; account: { id: string; name: string } }>(response, 201);
+      created.push(body.account.id);
+      if (label === 'a') tokenA = body.accessToken;
+      else tokenB = body.accessToken;
+    }
+
+    const again = await app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up',
+      payload: { email: `collaudo+${stamp}-a@presenza-collaudo.it`, password: 'unaltrapassword' },
+    });
+    expect(json<{ code: string }>(again, 409).code).toBe('EMAIL_TAKEN');
+
+    const wrong = await app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-in',
+      payload: { email: `collaudo+${stamp}-a@presenza-collaudo.it`, password: 'sbagliata' },
+    });
+    expect(json<{ code: string }>(wrong, 401).code).toBe('INVALID_CREDENTIALS');
+
+    const signedIn = await app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-in',
+      payload: { email: `COLLAUDO+${stamp}-a@presenza-collaudo.it`, password },
+    });
+    expect(json<{ account: { name: string } }>(signedIn, 200).account.name).toBe('Collaudo a');
+
+    expect((await app.inject({ method: 'GET', url: '/api/workspace' })).statusCode).toBe(401);
+    expect((await call('non-un-token', 'GET', '/api/workspace')).statusCode).toBe(401);
+    expect(json<{ id: string }>(await call(tokenA, 'GET', '/api/auth/me'), 200).id).toBe(created[0]);
+  });
+
+  it('crea il brand, lo modifica e lo tiene lontano dall’altro account', async () => {
+    expect(json(await call(tokenA, 'GET', '/api/workspace'), 200)).toEqual({ brands: [], activeBrandId: null });
+
+    const draft: BrandDraft = createEmptyDraft('company');
+    draft.identity = { ...draft.identity, name: 'Forno Aurora', pitch: 'Pane a lievito madre a Bologna.' };
+    draft.channels.linkedin.selected = true;
+    draft.channels.instagram.selected = true;
+    draft.themes = createThemes(['Il pane di ogni giorno', 'Dietro il banco']);
+
+    const brand = json<{ id: string; themes: { id: string }[] }>(await call(tokenA, 'POST', '/api/brands', draft), 201);
+    brandId = brand.id;
+    const workspace = json<{ brands: unknown[]; activeBrandId: string }>(await call(tokenA, 'GET', '/api/workspace'), 200);
+    expect(workspace.activeBrandId).toBe(brandId);
+    expect(workspace.brands).toHaveLength(1);
+
+    const updated = json<{ positioning: { postsPerWeek: number } }>(
+      await call(tokenA, 'PUT', `/api/brands/${brandId}/sections/positioning`, {
+        value: { goals: ['Vendere di più'], audiences: ['Famiglie'], postsPerWeek: 2 },
+      }),
+      200,
+    );
+    expect(updated.positioning.postsPerWeek).toBe(2);
+    expect((await call(tokenA, 'PUT', `/api/brands/${brandId}/sections/positioning`, { value: { goals: 3 } })).statusCode).toBe(400);
+
+    // L'altro account non vede il brand e non può toccarlo.
+    expect(json(await call(tokenB, 'GET', '/api/workspace'), 200)).toEqual({ brands: [], activeBrandId: null });
+    expect((await call(tokenB, 'PUT', `/api/brands/${brandId}/sections/identity`, { value: draft.identity })).statusCode).toBe(404);
+    expect((await call(tokenB, 'GET', `/api/brands/${brandId}/ideas`)).statusCode).toBe(404);
+    expect((await call(tokenB, 'PUT', '/api/workspace/active-brand', { brandId })).statusCode).toBe(404);
+  });
+
+  it('idee, piano e contenuti seguono il flusso dell’app', async () => {
+    const ideas = json<{ id: string; status: string; channels: string[] }[]>(
+      await call(tokenA, 'POST', `/api/brands/${brandId}/ideas/generate`, { count: 2 }),
+      200,
+    );
+    expect(ideas.map((idea) => idea.status)).toEqual(['new', 'new']);
+    expect(ideas[1].channels).toEqual(['instagram']);
+    const saved = json<{ status: string; decidedAt: string }>(
+      await call(tokenA, 'PATCH', `/api/ideas/${ideas[0].id}`, { status: 'saved' }),
+      200,
+    );
+    expect(saved.status).toBe('saved');
+    expect(saved.decidedAt).toBeTruthy();
+    expect((await call(tokenB, 'PATCH', `/api/ideas/${ideas[0].id}`, { status: 'discarded' })).statusCode).toBe(404);
+
+    const proposal = json<{ date: string }[]>(
+      await call(tokenA, 'POST', `/api/brands/${brandId}/plan/proposal`, {
+        startDate: '2030-01-07',
+        weeks: 1,
+        perWeek: 2,
+        channels: ['linkedin'],
+      }),
+      200,
+    );
+    expect(proposal.length).toBeGreaterThan(0);
+    const slots = json<{ id: string; status: string; origin: string }[]>(
+      await call(tokenA, 'POST', `/api/brands/${brandId}/plan/confirm`, { drafts: proposal }),
+      201,
+    );
+    expect(slots.every((slot) => slot.origin === 'session')).toBe(true);
+
+    const placed = json<{ id: string; ideaId: string; status: string }>(
+      await call(tokenA, 'POST', `/api/brands/${brandId}/plan/ideas`, { ideaId: ideas[0].id }),
+      200,
+    );
+    expect(placed.ideaId).toBe(ideas[0].id);
+    expect(placed.status).toBe('toPrepare');
+
+    const prepared = json<{ content: { id: string; revision: number; variants: { hashtags: string[] }[] }; slot: { status: string } }>(
+      await call(tokenA, 'POST', `/api/slots/${placed.id}/content/prepare`, {}),
+      200,
+    );
+    expect(prepared.slot.status).toBe('toApprove');
+    expect(prepared.content.variants[0].hashtags).toEqual(['#pane', '#lievitomadre']);
+    const again = json<{ content: { id: string; revision: number } }>(
+      await call(tokenA, 'POST', `/api/slots/${placed.id}/content/prepare`, { format: 'carousel' }),
+      200,
+    );
+    expect(again.content.id).toBe(prepared.content.id);
+    expect(again.content.revision).toBe(1);
+
+    const contentId = prepared.content.id;
+    const rewritten = json<{ variants: { text: string }[] }>(
+      await call(tokenA, 'POST', `/api/contents/${contentId}/variants/linkedin/rewrite`, { instruction: 'Più corto' }),
+      200,
+    );
+    expect(rewritten.variants.find(Boolean)?.text).toBeDefined();
+    expect(json<{ slot: { status: string } }>(await call(tokenA, 'POST', `/api/contents/${contentId}/approve`), 200).slot.status).toBe('scheduled');
+    expect(json<{ slot: { status: string } }>(await call(tokenA, 'POST', `/api/contents/${contentId}/reopen`), 200).slot.status).toBe('toApprove');
+    expect((await call(tokenB, 'GET', `/api/contents/${contentId}`)).statusCode).toBe(404);
+
+    // Cambiare idea all'uscita invalida la bozza nata dall'idea.
+    const changed = json<{ status: string }>(await call(tokenA, 'PATCH', `/api/slots/${placed.id}`, { ideaId: null }), 200);
+    expect(changed.status).toBe('empty');
+    expect(json(await call(tokenA, 'GET', `/api/slots/${placed.id}/content`), 200)).toEqual({ content: null });
+
+    const direct = json<{ id: string; slotId: null; title: string }>(
+      await call(tokenA, 'POST', `/api/brands/${brandId}/contents`, {
+        source: { kind: 'prompt', text: 'Abbiamo cambiato farina: racconto perché' },
+        channels: ['linkedin', 'instagram'],
+        format: 'post',
+      }),
+      201,
+    );
+    expect(direct.title).toBe('Il pane che non ha fretta');
+    expect(json<unknown[]>(await call(tokenA, 'GET', `/api/brands/${brandId}/contents/drafts`), 200)).toHaveLength(1);
+    const scheduled = json<{ content: { slotId: string; status: string }; slot: { id: string; status: string; contentTitle: string } }>(
+      await call(tokenA, 'POST', `/api/contents/${direct.id}/schedule`, { date: '2030-01-10', time: '18:30', publishNow: true }),
+      200,
+    );
+    expect(scheduled.slot.status).toBe('published');
+    expect(scheduled.slot.contentTitle).toBe(direct.title);
+    expect(scheduled.content.status).toBe('approved');
+
+    // Togliere l'uscita riporta il contenuto diretto tra le bozze.
+    expect((await call(tokenA, 'DELETE', `/api/slots/${scheduled.slot.id}`)).statusCode).toBe(204);
+    const back = json<{ slotId: string | null; status: string }>(await call(tokenA, 'GET', `/api/contents/${direct.id}`), 200);
+    expect(back).toMatchObject({ slotId: null, status: 'draft' });
+
+    expect(fakeAi.tasks).toEqual(['ideas', 'content', 'content', 'rewrite', 'content']);
+  });
+
+  it('carica e azzera il profilo di esempio', async () => {
+    const demo = json<{ id: string }>(await call(tokenB, 'POST', '/api/demo'), 201);
+    const slots = json<{ status: string }[]>(await call(tokenB, 'GET', `/api/brands/${demo.id}/slots`), 200);
+    expect(slots).toHaveLength(7);
+    const contents = json<{ status: string }[]>(await call(tokenB, 'GET', `/api/brands/${demo.id}/contents`), 200);
+    expect(contents.length).toBe(5);
+    expect(json<unknown[]>(await call(tokenB, 'GET', `/api/brands/${demo.id}/ideas`), 200)).toHaveLength(12);
+
+    expect((await call(tokenB, 'DELETE', '/api/demo')).statusCode).toBe(204);
+    expect(json(await call(tokenB, 'GET', '/api/workspace'), 200)).toEqual({ brands: [], activeBrandId: null });
+    // L'azzeramento di B non tocca A.
+    expect(json<{ brands: unknown[] }>(await call(tokenA, 'GET', '/api/workspace'), 200).brands).toHaveLength(1);
+  });
+});

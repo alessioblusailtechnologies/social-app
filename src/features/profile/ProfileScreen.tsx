@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { APP_NAME, DEMO_MODE } from '@/config';
+import { API_URL, APP_NAME, DEMO_MODE } from '@/config';
 import {
   Badge,
   Button,
@@ -24,6 +24,8 @@ import { kindLabel } from '@/domain/catalog';
 import { completeness, SECTION_KEYS, sectionCopy, sectionHint } from '@/domain/sections';
 import { BrandAvatar } from '@/features/brand-editors';
 import { useOnboardingStore } from '@/features/onboarding/store';
+import { auth } from '@/services';
+import { useSessionStore } from '@/services/http/session';
 import { useResetDemo } from '@/services/queries';
 
 import { SectionPreview } from './SectionPreview';
@@ -113,8 +115,26 @@ export function ProfileScreen({ brand, brandCount }: { brand: Brand; brandCount:
         />
       ))}
 
+      {API_URL !== null && <AccountPanel />}
       {DEMO_MODE && <DemoPanel />}
     </ScrollView>
+  );
+}
+
+function AccountPanel() {
+  const account = useSessionStore((state) => state.account);
+
+  return (
+    <Panel label="Account" gap={8}>
+      {account ? (
+        <Text variant="body" numberOfLines={1}>
+          {account.name ? `${account.name} · ${account.email}` : account.email}
+        </Text>
+      ) : null}
+      <Button variant="ghost" block onPress={() => auth?.signOut()}>
+        Esci
+      </Button>
+    </Panel>
   );
 }
 
@@ -147,7 +167,11 @@ function DemoPanel() {
 
   return (
     <Panel label="Demo" gap={8}>
-      <Text variant="caption">Tutti i dati sono simulati e restano su questo dispositivo.</Text>
+      <Text variant="caption">
+        {API_URL === null
+          ? 'Tutti i dati sono simulati e restano su questo dispositivo.'
+          : 'I dati stanno sul tuo account: azzerarli elimina brand, idee, piano e contenuti.'}
+      </Text>
       <Button variant="ghost" block onPress={() => router.push('/design-system')}>
         Catalogo del design system
       </Button>
