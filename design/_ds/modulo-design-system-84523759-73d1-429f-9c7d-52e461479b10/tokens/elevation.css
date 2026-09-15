@@ -1,0 +1,7 @@
+:root{
+/* Flat system: one lift, used only where a white card sits on the dark app ground. */
+--shadow-none:none;
+--shadow-card:0 18px 48px rgba(15,19,48,.28);
+--shadow-raised:0 6px 18px rgba(15,19,48,.18);
+--shadow-press:0 2px 6px rgba(15,19,48,.16);
+}

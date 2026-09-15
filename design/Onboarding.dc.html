@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/tokens/colors.css">
+<link rel="stylesheet" href="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/tokens/typography.css">
+<link rel="stylesheet" href="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/tokens/radii.css">
+<link rel="stylesheet" href="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/tokens/motion.css">
+<link rel="stylesheet" href="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/tokens/base.css">
+<link rel="stylesheet" href="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/styles.css">
+<script src="_ds/modulo-design-system-84523759-73d1-429f-9c7d-52e461479b10/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:#ECEEEF;font-family:Archivo,system-ui,sans-serif}
+a{color:#FF6B35}a:hover{color:#E5541F}
+</style>
+</helmet>
+
+<div style="display:flex;align-items:flex-start;gap:40px;padding:40px;box-sizing:border-box;background:#ECEEEF;min-height:100%;flex-wrap:wrap">
+
+  <div style="display:flex;flex-direction:column;gap:16px;flex:none">
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">Presenza · primo avvio</span>
+      <span style="font:700 23px/1.18 Archivo,system-ui;letter-spacing:-.015em;color:#2F3452">Onboarding · {{ stepName }}</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;max-width:402px">
+      <sc-for list="{{ jump }}" as="j" hint-placeholder-count="8">
+        <button type="button" onClick="{{ j.go }}" style="{{ j.style }}">{{ j.label }}</button>
+      </sc-for>
+    </div>
+
+    <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ false }}" width="{{ 402 }}" height="{{ 874 }}" hint-size="402px,874px">
+      <div style="position:relative;height:874px;background:#ECEEEF;overflow:hidden;display:flex;flex-direction:column">
+
+        <div style="flex:none;padding:52px 20px 12px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <sc-if value="{{ canBack }}" hint-placeholder-val="{{ false }}">
+              <button type="button" onClick="{{ back }}" style="width:36px;height:36px;flex:none;border:none;border-radius:9999px;background:#FFFFFF;color:#2F3452;font:500 15px/1 Archivo,system-ui;cursor:pointer">‹</button>
+            </sc-if>
+            <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A;flex:1">{{ stepCounter }}</span>
+            <sc-if value="{{ canSkip }}" hint-placeholder-val="{{ false }}">
+              <button type="button" onClick="{{ skip }}" style="border:none;background:transparent;color:#8A8F9A;font:500 11px/1 Archivo,system-ui;cursor:pointer;min-height:32px;padding:0 4px">Lo faccio dopo</button>
+            </sc-if>
+          </div>
+          <div style="display:flex;gap:4px">
+            <sc-for list="{{ progress }}" as="p" hint-placeholder-count="8">
+              <span style="{{ p.style }}"></span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="flex:1;min-height:0;overflow:auto;padding:6px 20px 24px;box-sizing:border-box;display:grid;grid-auto-rows:min-content;align-content:start;row-gap:14px">
+
+          <div style="display:flex;flex-direction:column;gap:6px;padding:0 2px">
+            <span style="font:700 23px/1.18 Archivo,system-ui;letter-spacing:-.015em;color:#2F3452;text-wrap:pretty">{{ title }}</span>
+            <span style="font:400 12px/1.7 Archivo,system-ui;color:#8A8F9A;text-wrap:pretty">{{ subtitle }}</span>
+          </div>
+
+          <sc-if value="{{ isIntro }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="ModuloDesignSystem_845237.Card" media="{{ patternMedia }}" mediaHeight="{{ 160 }}" elevated="{{ false }}" hint-size="100%,360px">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <span style="font:700 19px/1.22 Archivo,system-ui;letter-spacing:-.015em;color:#2F3452;text-wrap:pretty">Otto minuti, una volta sola</span>
+                <span style="font:400 12px/1.7 Archivo,system-ui;color:#8A8F9A;text-wrap:pretty">Ti chiedo chi sei, cosa vuoi ottenere, i canali, i temi, come scrivi e come vuoi apparire. Da lì genero proposte che sembrano scritte da te. Ogni cosa si cambia anche dopo, dal Profilo.</span>
+                <div style="display:flex;flex-direction:column;gap:7px;padding-top:4px">
+                  <sc-for list="{{ introList }}" as="i" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <span style="{{ i.dot }}"></span>
+                      <span style="font:400 12px/1.5 Archivo,system-ui;color:#2F3452">{{ i.label }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </x-import>
+          </sc-if>
+
+          <sc-if value="{{ isWho }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-auto-rows:min-content;row-gap:10px">
+              <sc-for list="{{ whoFields }}" as="f" hint-placeholder-count="4">
+                <div style="background:#FFFFFF;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:4px">
+                  <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">{{ f.label }}</span>
+                  <input type="text" value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" style="border:none;outline:none;background:transparent;font:400 14px/1.5 Archivo,system-ui;color:#2F3452;min-width:0;min-height:26px">
+                </div>
+              </sc-for>
+              <div style="background:#FFFFFF;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">In una frase, cosa fate</span>
+                <textarea value="{{ pitch }}" onChange="{{ setPitch }}" placeholder="Es. mettiamo l'AI nei processi noiosi delle PMI italiane, partendo da dove il dolore è misurabile" style="border:none;outline:none;background:transparent;font:400 14px/1.6 Archivo,system-ui;color:#2F3452;min-height:78px;resize:none"></textarea>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isGoal }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-auto-rows:min-content;row-gap:14px">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A;padding:0 2px">Perché pubblichi</span>
+                <div style="display:flex;gap:7px;flex-wrap:wrap">
+                  <sc-for list="{{ goals }}" as="g" hint-placeholder-count="5">
+                    <button type="button" onClick="{{ g.go }}" style="{{ g.style }}">{{ g.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A;padding:0 2px">Chi vuoi raggiungere</span>
+                <div style="display:flex;gap:7px;flex-wrap:wrap">
+                  <sc-for list="{{ audiences }}" as="a" hint-placeholder-count="5">
+                    <button type="button" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="background:#FFFFFF;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">Quanto vuoi pubblicare</span>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <button type="button" onClick="{{ lessFreq }}" style="width:44px;height:44px;flex:none;border:1.5px solid #CDD1D4;border-radius:9999px;background:transparent;color:#2F3452;font:600 16px/1 Archivo,system-ui;cursor:pointer">–</button>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:2px;align-items:center">
+                    <span style="font:700 23px/1.1 Archivo,system-ui;color:#2F3452">{{ freq }}</span>
+                    <span style="font:400 11px/1.3 Archivo,system-ui;color:#8A8F9A">{{ freqNote }}</span>
+                  </div>
+                  <button type="button" onClick="{{ moreFreq }}" style="width:44px;height:44px;flex:none;border:1.5px solid #CDD1D4;border-radius:9999px;background:transparent;color:#2F3452;font:600 16px/1 Archivo,system-ui;cursor:pointer">+</button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isChannels }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-auto-rows:min-content;row-gap:10px">
+              <sc-for list="{{ channels }}" as="c" hint-placeholder-count="3">
+                <div style="background:#FFFFFF;border-radius:20px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+                  <span style="{{ c.markStyle }}">{{ c.mark }}</span>
+                  <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0">
+                    <span style="font:600 13px/1.3 Archivo,system-ui;color:#2F3452">{{ c.name }}</span>
+                    <span style="{{ c.stateStyle }}">{{ c.state }}</span>
+                  </div>
+                  <x-import component-from-global-scope="ModuloDesignSystem_845237.Button" dc-props="{{ c.btnProps }}" hint-size="auto,36px">{{ c.cta }}</x-import>
+                </div>
+              </sc-for>
+              <span style="font:400 11px/1.6 Archivo,system-ui;color:#8A8F9A;padding:4px 2px;text-wrap:pretty">Serve almeno un canale per pubblicare. Gli altri li colleghi quando vuoi: le proposte si adattano ai canali attivi.</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isThemes }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-auto-rows:min-content;row-gap:10px">
+              <sc-for list="{{ themes }}" as="t" hint-placeholder-count="4">
+                <div style="background:#FFFFFF;border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="{{ t.dot }}"></span>
+                    <span style="font:600 13px/1.35 Archivo,system-ui;color:#2F3452;flex:1;text-wrap:pretty">{{ t.name }}</span>
+                    <span style="font:700 15px/1 Archivo,system-ui;color:#2F3452">{{ t.weight }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <button type="button" onClick="{{ t.less }}" style="width:44px;height:36px;flex:none;border:1.5px solid #CDD1D4;border-radius:9999px;background:transparent;color:#2F3452;font:600 15px/1 Archivo,system-ui;cursor:pointer">–</button>
+                    <span style="{{ t.barStyle }}"></span>
+                    <button type="button" onClick="{{ t.more }}" style="width:44px;height:36px;flex:none;border:1.5px solid #CDD1D4;border-radius:9999px;background:transparent;color:#2F3452;font:600 15px/1 Archivo,system-ui;cursor:pointer">+</button>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px">
+                <span style="{{ totalStyle }}">{{ totalLabel }}</span>
+                <button type="button" onClick="{{ addTheme }}" style="border:none;background:transparent;color:#FF6B35;font:500 12px/1 Archivo,system-ui;cursor:pointer;min-height:36px">Aggiungi un tema</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isVoice }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-auto-rows:min-content;row-gap:10px">
+              <sc-if value="{{ voiceReady }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#FFFFFF;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <x-import component-from-global-scope="ModuloDesignSystem_845237.Badge" dc-props="{{ voiceBadge }}" hint-size="auto,20px">Scheda voce v1</x-import>
+                    <span style="font:400 11px/1.3 Archivo,system-ui;color:#8A8F9A">{{ voiceSource }}</span>
+                  </div>
+                  <sc-for list="{{ voiceRows }}" as="r" hint-placeholder-count="4">
+                    <div style="display:flex;flex-direction:column;gap:3px;border-top:1px solid #ECEEEF;padding-top:9px">
+                      <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">{{ r.k }}</span>
+                      <span style="font:400 12px/1.6 Archivo,system-ui;color:#2F3452;text-wrap:pretty">{{ r.v }}</span>
+                    </div>
+                  </sc-for>
+                  <x-import component-from-global-scope="ModuloDesignSystem_845237.Button" variant="ghost" block="{{ true }}" onClick="{{ redoVoice }}" hint-size="100%,44px">Aggiungi altri testi</x-import>
+                </div>
+              </sc-if>
+              <sc-if value="{{ voiceBusy }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#FFFFFF;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:12px">
+                  <span style="font:600 12px/1.3 Archivo,system-ui;color:#2F3452">Sto leggendo i tuoi testi</span>
+                  <sc-for list="{{ skeleton }}" as="k" hint-placeholder-count="5">
+                    <span style="{{ k.style }}"></span>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ voiceEmpty }}" hint-placeholder-val="{{ true }}">
+                <div style="display:grid;grid-auto-rows:min-content;row-gap:10px">
+                  <sc-for list="{{ voiceSources }}" as="s" hint-placeholder-count="3">
+                    <button type="button" onClick="{{ s.go }}" style="border:none;border-radius:20px;background:#FFFFFF;cursor:pointer;padding:16px;display:flex;align-items:center;gap:12px;text-align:left">
+                      <span style="{{ s.icon }}"></span>
+                      <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0">
+                        <span style="font:600 13px/1.3 Archivo,system-ui;color:#2F3452">{{ s.title }}</span>
+                        <span style="font:400 11px/1.5 Archivo,system-ui;color:#8A8F9A;text-wrap:pretty">{{ s.meta }}</span>
+                      </div>
+                      <span style="color:#CDD1D4;font:700 15px/1 Archivo,system-ui;flex:none">›</span>
+                    </button>
+                  </sc-for>
+                  <span style="font:400 11px/1.6 Archivo,system-ui;color:#8A8F9A;padding:4px 2px;text-wrap:pretty">Più testi tuoi leggo, meno correzioni farai dopo. Con tre post ci siamo, con dieci si sente la differenza.</span>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isBrand }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-auto-rows:min-content;row-gap:12px">
+              <div style="background:#FFFFFF;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">Logo</span>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <span style="{{ logoStyle }}">{{ logoGlyph }}</span>
+                  <div style="display:flex;flex-direction:column;gap:3px;flex:1;min-width:0">
+                    <span style="font:600 12px/1.3 Archivo,system-ui;color:#2F3452">{{ logoTitle }}</span>
+                    <span style="font:400 11px/1.5 Archivo,system-ui;color:#8A8F9A;text-wrap:pretty">{{ logoNote }}</span>
+                  </div>
+                  <x-import component-from-global-scope="ModuloDesignSystem_845237.Button" variant="secondary" size="sm" onClick="{{ uploadLogo }}" hint-size="auto,36px">{{ logoCta }}</x-import>
+                </div>
+              </div>
+
+              <div style="background:#FFFFFF;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:12px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">Palette</span>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ palettes }}" as="p" hint-placeholder-count="3">
+                    <button type="button" onClick="{{ p.go }}" style="{{ p.style }}">
+                      <div style="display:flex;gap:5px;flex:none">
+                        <sc-for list="{{ p.swatches }}" as="s" hint-placeholder-count="4">
+                          <span style="{{ s.style }}"></span>
+                        </sc-for>
+                      </div>
+                      <span style="font:500 12px/1.3 Archivo,system-ui;color:#2F3452;flex:1;text-align:left">{{ p.label }}</span>
+                      <span style="{{ p.check }}"></span>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="background:#FFFFFF;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">Stile delle immagini</span>
+                <div style="display:flex;gap:7px;flex-wrap:wrap">
+                  <sc-for list="{{ imageStyles }}" as="i" hint-placeholder-count="3">
+                    <button type="button" onClick="{{ i.go }}" style="{{ i.style }}">{{ i.label }}</button>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding-top:4px">
+                  <div style="display:flex;flex-direction:column;gap:2px;flex:1">
+                    <span style="font:600 12px/1.3 Archivo,system-ui;color:#2F3452">Firma visiva sulle immagini</span>
+                    <span style="font:400 11px/1.4 Archivo,system-ui;color:#8A8F9A">Logo piccolo in basso a destra</span>
+                  </div>
+                  <button type="button" onClick="{{ toggleMark }}" aria-label="Firma visiva" style="{{ markTrack }}"><span style="{{ markKnob }}"></span></button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isRefs }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-auto-rows:min-content;row-gap:12px">
+              <div style="background:#FFFFFF;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">Chi scrive come vorresti scrivere</span>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <div style="flex:1;display:flex;align-items:center;background:#ECEEEF;border-radius:12px;padding:0 14px;min-height:44px">
+                    <input type="text" value="{{ refDraft }}" onChange="{{ setRefDraft }}" placeholder="linkedin.com/in/… oppure @nome" style="flex:1;border:none;outline:none;background:transparent;font:400 13px/1.4 Archivo,system-ui;color:#2F3452;min-width:0">
+                  </div>
+                  <x-import component-from-global-scope="ModuloDesignSystem_845237.Button" variant="primary" size="sm" onClick="{{ addRef }}" hint-size="auto,36px">Aggiungi</x-import>
+                </div>
+                <div style="display:flex;gap:7px;flex-wrap:wrap">
+                  <sc-for list="{{ refs }}" as="r" hint-placeholder-count="2">
+                    <button type="button" onClick="{{ r.remove }}" style="min-height:34px;padding:0 12px;border-radius:9999px;border:1.5px solid #CDD1D4;background:transparent;color:#2F3452;font:500 11px/1 Archivo,system-ui;cursor:pointer">{{ r.label }} ✕</button>
+                  </sc-for>
+                </div>
+                <span style="font:400 11px/1.6 Archivo,system-ui;color:#8A8F9A;text-wrap:pretty">Non li imito: li uso per capire quali strutture funzionano nel tuo settore.</span>
+              </div>
+
+              <div style="background:#FFFFFF;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">Fonti dei segnali</span>
+                <div style="display:flex;gap:7px;flex-wrap:wrap">
+                  <sc-for list="{{ sources }}" as="s" hint-placeholder-count="6">
+                    <button type="button" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="background:#FFFFFF;border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px">
+                <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">Le tue date</span>
+                <sc-for list="{{ milestones }}" as="m" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:10px;border-top:1px solid #ECEEEF;padding-top:9px">
+                    <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">
+                      <span style="font:600 12px/1.3 Archivo,system-ui;color:#2F3452;text-wrap:pretty">{{ m.label }}</span>
+                      <span style="font:400 11px/1.4 Archivo,system-ui;color:#8A8F9A">{{ m.date }}</span>
+                    </div>
+                    <button type="button" onClick="{{ m.remove }}" aria-label="Rimuovi" style="width:36px;height:36px;flex:none;border:none;background:transparent;color:#8A8F9A;font:500 14px/1 Archivo,system-ui;cursor:pointer">✕</button>
+                  </div>
+                </sc-for>
+                <x-import component-from-global-scope="ModuloDesignSystem_845237.Button" variant="ghost" block="{{ true }}" onClick="{{ addMilestone }}" hint-size="100%,44px">Aggiungi una data</x-import>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-auto-rows:min-content;row-gap:12px">
+              <div style="background:#FFFFFF;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:10px">
+                <sc-for list="{{ summary }}" as="s" hint-placeholder-count="7">
+                  <button type="button" onClick="{{ s.go }}" style="border:none;background:transparent;cursor:pointer;text-align:left;display:flex;align-items:flex-start;gap:12px;border-top:1px solid #ECEEEF;padding:10px 0 0">
+                    <span style="{{ s.tick }}"></span>
+                    <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">
+                      <span style="font:600 12px/1.3 Archivo,system-ui;color:#2F3452">{{ s.k }}</span>
+                      <span style="font:400 11px/1.55 Archivo,system-ui;color:#8A8F9A;text-wrap:pretty">{{ s.v }}</span>
+                    </div>
+                    <span style="color:#CDD1D4;font:700 14px/1 Archivo,system-ui;flex:none">›</span>
+                  </button>
+                </sc-for>
+              </div>
+              <span style="font:400 11px/1.6 Archivo,system-ui;color:#8A8F9A;padding:0 2px;text-wrap:pretty">Tutto resta modificabile dal Profilo. La prima sessione dura un quarto d'ora e ti lascia 8–10 contenuti approvati in coda.</span>
+            </div>
+          </sc-if>
+
+        </div>
+
+        <div style="flex:none;background:#ECEEEF;border-top:1px solid #CDD1D4;padding:12px 20px 30px;display:flex;flex-direction:column;gap:8px">
+          <x-import component-from-global-scope="ModuloDesignSystem_845237.Button" dc-props="{{ primaryProps }}" hint-size="100%,52px">{{ primaryLabel }}</x-import>
+          <sc-if value="{{ secondaryLabel }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="ModuloDesignSystem_845237.Button" variant="ghost" block="{{ true }}" onClick="{{ secondary }}" hint-size="100%,44px">{{ secondaryLabel }}</x-import>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:16px;right:16px;bottom:120px;z-index:80;background:#2F3452;border-radius:16px;padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 10px 24px rgba(28,33,80,.4)">
+            <span style="font:400 12px/1.45 Archivo,system-ui;color:#FFFFFF;flex:1;text-wrap:pretty">{{ toast }}</span>
+          </div>
+        </sc-if>
+
+      </div>
+    </x-import>
+  </div>
+
+  <div style="flex:1;min-width:320px;max-width:440px;display:flex;flex-direction:column;gap:16px">
+    <div style="background:#FFFFFF;border-radius:24px;padding:22px 20px;display:flex;flex-direction:column;gap:10px">
+      <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#FF6B35">Struttura</span>
+      <span style="font:700 19px/1.22 Archivo,system-ui;letter-spacing:-.015em;color:#2F3452">Otto passi, uno per decisione</span>
+      <p style="margin:0;font:400 12px/1.7 Archivo,system-ui;color:#8A8F9A;text-wrap:pretty">Un passo chiede una cosa sola e il bottone in basso è sempre lo stesso: «Continua». I passi che l'app può rimediare da sola — voce, identità visiva, riferimenti — hanno «Lo faccio dopo» in alto a destra; quelli senza cui il prodotto non funziona (chi sei, canali, temi) no. La barra di avanzamento mostra otto segmenti: l'utente vede sempre quanto manca, e dal riepilogo finale può tornare su ogni passo.</p>
+    </div>
+
+    <div style="background:#FFFFFF;border-radius:24px;padding:22px 20px;display:flex;flex-direction:column;gap:14px">
+      <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8A8F9A">Cosa raccoglie ogni passo</span>
+      <sc-for list="{{ specSteps }}" as="s" hint-placeholder-count="8">
+        <div style="display:flex;gap:12px;align-items:flex-start;border-top:1px solid #ECEEEF;padding-top:10px">
+          <span style="font:700 12px/1.5 Archivo,system-ui;color:#2F3452;width:16px;flex:none">{{ s.n }}</span>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <span style="font:600 12px/1.35 Archivo,system-ui;color:#2F3452">{{ s.title }}</span>
+            <span style="font:400 12px/1.6 Archivo,system-ui;color:#8A8F9A;text-wrap:pretty">{{ s.body }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="background:#2F3452;border-radius:24px;padding:22px 20px;display:flex;flex-direction:column;gap:8px">
+      <span style="font:600 10px/1.3 Archivo,system-ui;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.72)">Da decidere con te</span>
+      <p style="margin:0;font:400 12px/1.7 Archivo,system-ui;color:rgba(255,255,255,.72);text-wrap:pretty">Se l'analisi della voce possa partire direttamente dallo storico del canale collegato (più veloce, ma richiede più permessi), quanti testi sono il minimo per generare la scheda v1, e se l'identità visiva debba accettare un file di brand già pronto invece delle palette proposte.</p>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:940,&quot;height&quot;:1000}}">
+class Component extends DCLogic {
+  state = {
+    step: 0,
+    name: 'Marco Sereni', role: 'Founder', company: 'Nodo', site: 'nodo.it',
+    pitch: '',
+    goals: { 'Autorevolezza nel settore': true }, audiences: { 'Founder di PMI': true },
+    freq: 3,
+    channels: { LinkedIn: 'connected', Instagram: 'idle', X: 'idle' },
+    themes: [
+      { name: 'AI applicata ai processi', w: 40, color: '#2F3452' },
+      { name: 'Assunzioni e cultura', w: 30, color: '#FF6B35' },
+      { name: 'Numeri e prezzi', w: 20, color: '#D9E05B' },
+      { name: 'Dietro le quinte', w: 10, color: '#6DD47E' }
+    ],
+    voice: 'empty', voiceSource: '', voiceBusy: false,
+    logo: false, palette: 0, imgStyle: 'Geometrico piatto', mark: true,
+    refDraft: '', refs: ['linkedin.com/in/ellenberg', '@pieromolino'],
+    sources: { 'Il Sole 24 Ore': true, 'Startup Italia': true, 'La tua rete LinkedIn': true, 'Eventi di settore': true, 'Discussioni su X': false, 'Le tue milestone': true },
+    milestones: [
+      { label: 'Primo cliente che ha pagato', date: '3 ottobre 2024' },
+      { label: 'Primo assunto', date: '25 settembre 2025' }
+    ],
+    toast: null
+  };
+
+  steps() {
+    return [
+      { key: 'intro', name: 'Benvenuto', title: 'Ciao, costruiamo la tua presenza', sub: 'Prima di generare qualsiasi cosa ho bisogno di sapere chi sei e come parli. Poi lavoro da solo.' },
+      { key: 'who', name: 'Chi sei', title: 'Chi sei e cosa fai', sub: 'Serve nei post: nomi, ruolo e una frase che dice cosa fate davvero.' },
+      { key: 'goal', name: 'Obiettivo', title: 'Perché pubblichi e per chi', sub: 'Da qui decido il taglio: un post per founder non somiglia a un post per candidati.' },
+      { key: 'channels', name: 'Canali', title: 'Collega i canali', sub: 'Pubblico io al posto tuo, quindi mi serve il permesso. Puoi partire anche da uno solo.' },
+      { key: 'themes', name: 'Temi', title: 'I tuoi quattro temi', sub: 'Il peso dice quanto spazio vuoi dare a ognuno nel piano. Somma 100.' },
+      { key: 'voice', name: 'Voce', title: 'Come scrivi', sub: 'Leggo testi tuoi e ne ricavo registro, ritmo e lessico. È la parte che fa la differenza.' },
+      { key: 'brand', name: 'Identità', title: 'Come vuoi apparire', sub: 'Logo, palette e stile delle immagini generate. Vale per carosello, copertine e video.' },
+      { key: 'refs', name: 'Riferimenti', title: 'Riferimenti e fonti', sub: 'Chi leggi, da dove arrivano i segnali e le date che ti riguardano.' },
+      { key: 'done', name: 'Pronto', title: 'Tutto pronto, Marco', sub: 'Ecco cosa ho capito di te. Controlla e apriamo la prima sessione.' }
+    ];
+  }
+
+  say(msg) { clearTimeout(this._t); this.setState({ toast: msg }); this._t = setTimeout(() => this.setState({ toast: null }), 3600); }
+
+  next() {
+    const s = this.steps();
+    if (this.state.step >= s.length - 1) { this.say('Apro la prima sessione di pianificazione.'); return; }
+    this.setState(st => ({ step: st.step + 1 }));
+  }
+
+  chip(on) {
+    return 'flex:none;min-height:38px;padding:0 14px;border-radius:9999px;cursor:pointer;font:500 12px/1 Archivo,system-ui;border:1.5px solid ' + (on ? '#2F3452' : '#CDD1D4') + ';' + (on ? 'background:#2F3452;color:#FFFFFF' : 'background:#FFFFFF;color:#2F3452');
+  }
+
+  renderVals() {
+    const S = this.state, steps = this.steps(), cur = steps[S.step], key = cur.key;
+
+    const jump = steps.map((s, i) => ({
+      label: s.name, go: () => this.setState({ step: i }),
+      style: 'min-height:32px;padding:0 11px;border-radius:9999px;cursor:pointer;font:500 11px/1 Archivo,system-ui;border:1.5px solid #2F3452;' +
+        (i === S.step ? 'background:#2F3452;color:#FFFFFF' : 'background:transparent;color:#2F3452')
+    }));
+
+    const progress = steps.map((s, i) => ({
+      style: 'flex:1;height:4px;border-radius:9999px;background:' + (i < S.step ? '#2F3452' : i === S.step ? '#FF6B35' : '#CDD1D4')
+    }));
+
+    const total = S.themes.reduce((a, t) => a + t.w, 0);
+    const themes = S.themes.map((t, i) => ({
+      name: t.name, weight: t.w + '%',
+      dot: 'width:10px;height:10px;border-radius:9999px;flex:none;background:' + t.color,
+      barStyle: 'flex:1;height:8px;border-radius:9999px;background:linear-gradient(to right,' + t.color + ' ' + t.w + '%,#ECEEEF ' + t.w + '%)',
+      less: () => this.setState(st => { const th = st.themes.slice(); th[i] = Object.assign({}, th[i], { w: Math.max(0, th[i].w - 5) }); return { themes: th }; }),
+      more: () => this.setState(st => { const th = st.themes.slice(); th[i] = Object.assign({}, th[i], { w: Math.min(100, th[i].w + 5) }); return { themes: th }; })
+    }));
+
+    const channels = ['LinkedIn', 'Instagram', 'X'].map(c => {
+      const st = S.channels[c];
+      const connected = st === 'connected';
+      return {
+        name: c, mark: c === 'LinkedIn' ? 'in' : c === 'Instagram' ? 'ig' : 'X',
+        markStyle: 'width:36px;height:36px;flex:none;border-radius:9px;background:' + (c === 'X' ? '#1C2150' : '#2F3452') + ';color:#FFFFFF;font:700 12px/36px Archivo,system-ui;text-align:center',
+        state: connected ? 'Collegato come @marcosereni · pubblico io' : st === 'busy' ? 'Ti porto sulla pagina di accesso…' : 'Non collegato',
+        stateStyle: 'font:400 11px/1.45 Archivo,system-ui;color:' + (connected ? '#2F3452' : '#8A8F9A'),
+        cta: connected ? 'Scollega' : 'Collega',
+        btnProps: {
+          variant: connected ? 'ghost' : 'primary', size: 'sm',
+          onClick: () => {
+            if (connected) { this.setState(s => ({ channels: Object.assign({}, s.channels, { [c]: 'idle' }) })); this.say(c + ' scollegato.'); return; }
+            this.setState(s => ({ channels: Object.assign({}, s.channels, { [c]: 'busy' }) }));
+            clearTimeout(this['_c' + c]);
+            this['_c' + c] = setTimeout(() => { this.setState(s => ({ channels: Object.assign({}, s.channels, { [c]: 'connected' }) })); this.say(c + ' collegato.'); }, 900);
+          }
+        }
+      };
+    });
+
+    const goalLabels = ['Autorevolezza nel settore', 'Trovare clienti', 'Attirare candidati', 'Raccogliere investimenti', 'Costruire una community'];
+    const audienceLabels = ['Founder di PMI', 'Direttori operativi', 'Sviluppatori', 'Investitori', 'Candidati'];
+    const toggler = (field) => (label) => this.setState(s => {
+      const m = Object.assign({}, s[field]);
+      if (m[label]) delete m[label]; else m[label] = true;
+      return { [field]: m };
+    });
+    const goals = goalLabels.map(l => ({ label: l, go: () => toggler('goals')(l), style: this.chip(!!S.goals[l]) }));
+    const audiences = audienceLabels.map(l => ({ label: l, go: () => toggler('audiences')(l), style: this.chip(!!S.audiences[l]) }));
+
+    const palettesDef = [
+      ['Indigo e coral', ['#1C2150', '#2F3452', '#FF6B35', '#ECEEEF']],
+      ['Navy e lime', ['#2F3452', '#D9E05B', '#6DD47E', '#FFFFFF']],
+      ['Solo navy e grigio', ['#2F3452', '#8A8F9A', '#CDD1D4', '#ECEEEF']]
+    ];
+    const palettes = palettesDef.map(([label, cols], i) => ({
+      label, go: () => { this.setState({ palette: i }); this.say('Palette scelta: ' + label.toLowerCase() + '.'); },
+      swatches: cols.map(c => ({ style: 'width:18px;height:18px;border-radius:5px;display:block;background:' + c + (c === '#FFFFFF' ? ';box-shadow:inset 0 0 0 1px #ECEEEF' : '') })),
+      style: 'border:1.5px solid ' + (S.palette === i ? '#2F3452' : '#ECEEEF') + ';border-radius:14px;background:transparent;cursor:pointer;padding:11px 12px;display:flex;align-items:center;gap:12px;min-height:52px',
+      check: 'width:16px;height:16px;flex:none;border-radius:9999px;' + (S.palette === i ? 'background:#2F3452' : 'box-shadow:inset 0 0 0 1.5px #CDD1D4')
+    }));
+
+    const imageStyles = ['Geometrico piatto', 'Fotografico desaturato', 'Solo testo'].map(l => ({
+      label: l, go: () => this.setState({ imgStyle: l }), style: this.chip(S.imgStyle === l)
+    }));
+
+    const sources = Object.keys(S.sources).map(l => ({
+      label: l, go: () => toggler('sources')(l), style: this.chip(!!S.sources[l])
+    }));
+
+    const refs = S.refs.map((r, i) => ({
+      label: r, remove: () => this.setState(s => ({ refs: s.refs.filter((_, j) => j !== i) }))
+    }));
+
+    const milestones = S.milestones.map((m, i) => ({
+      label: m.label, date: m.date, remove: () => this.setState(s => ({ milestones: s.milestones.filter((_, j) => j !== i) }))
+    }));
+
+    const skeleton = [92, 100, 78, 96, 60].map(w => ({ style: 'display:block;height:12px;border-radius:9999px;background:#ECEEEF;width:' + w + '%' }));
+
+    const voiceSources = [
+      { title: 'Incolla tre post che hai scritto', meta: 'Il modo più veloce: copia da LinkedIn o dalle note', c: '#FF6B35', src: 'tre post incollati' },
+      { title: 'Leggi lo storico di LinkedIn', meta: '38 post del 2026 già pubblicati sul tuo profilo collegato', c: '#2F3452', src: '38 post del tuo profilo' },
+      { title: 'Registra un minuto di voce', meta: 'Racconta com\u2019è andata la settimana: trascrivo e ne ricavo il ritmo', c: '#6DD47E', src: 'un minuto registrato' }
+    ].map(s => ({
+      title: s.title, meta: s.meta,
+      icon: 'width:36px;height:36px;flex:none;border-radius:10px;background:' + s.c,
+      go: () => {
+        this.setState({ voiceBusy: true, voiceSource: s.src });
+        clearTimeout(this._v);
+        this._v = setTimeout(() => this.setState({ voiceBusy: false, voice: 'ready' }), 1500);
+      }
+    }));
+
+    const summary = [
+      { k: 'Chi sei', v: S.name + ' · ' + S.role + ' di ' + S.company, i: 1 },
+      { k: 'Obiettivo', v: Object.keys(S.goals).join(', ') + ' · per ' + Object.keys(S.audiences).join(', '), i: 2 },
+      { k: 'Canali', v: Object.keys(S.channels).filter(c => S.channels[c] === 'connected').join(', ') + ' · ' + S.freq + ' uscite a settimana', i: 3 },
+      { k: 'Temi', v: S.themes.map(t => t.name.split(' ')[0] + ' ' + t.w + '%').join(' · '), i: 4 },
+      { k: 'Voce', v: S.voice === 'ready' ? 'Scheda v1 da ' + S.voiceSource : 'Da completare: nessun testo analizzato', i: 5 },
+      { k: 'Identità visiva', v: (S.logo ? 'Logo caricato' : 'Nessun logo') + ' · ' + palettesDef[S.palette][0].toLowerCase() + ' · ' + S.imgStyle.toLowerCase(), i: 6 },
+      { k: 'Riferimenti', v: S.refs.length + ' profili · ' + Object.keys(S.sources).filter(s => S.sources[s]).length + ' fonti · ' + S.milestones.length + ' date', i: 7 }
+    ].map(r => ({
+      k: r.k, v: r.v, go: () => this.setState({ step: r.i }),
+      tick: 'width:16px;height:16px;flex:none;margin-top:2px;border-radius:9999px;background:' + (r.k === 'Voce' && S.voice !== 'ready' ? '#FFC600' : '#6DD47E')
+    }));
+
+    const skippable = key === 'voice' || key === 'brand' || key === 'refs';
+    const primaryDisabled = (key === 'channels' && !Object.keys(S.channels).some(c => S.channels[c] === 'connected')) || (key === 'themes' && total !== 100);
+
+    return {
+      stepName: cur.name,
+      jump, progress,
+      stepCounter: key === 'intro' ? 'Configurazione' : 'Passo ' + S.step + ' di ' + (steps.length - 1),
+      canBack: S.step > 0,
+      back: () => this.setState(s => ({ step: Math.max(0, s.step - 1) })),
+      canSkip: skippable,
+      skip: () => { this.say('Salto: lo ritrovi nel Profilo.'); this.next(); },
+      title: cur.title, subtitle: cur.sub,
+
+      isIntro: key === 'intro', isWho: key === 'who', isGoal: key === 'goal', isChannels: key === 'channels',
+      isThemes: key === 'themes', isVoice: key === 'voice', isBrand: key === 'brand', isRefs: key === 'refs', isDone: key === 'done',
+
+      patternMedia: (window.ModuloDesignSystem_845237 && window.ModuloDesignSystem_845237.PatternGrid)
+        ? React.createElement(window.ModuloDesignSystem_845237.PatternGrid, { columns: 6, rows: 3, seed: 19 })
+        : null,
+      introList: ['Chi sei e per chi scrivi', 'I canali su cui pubblico io', 'Quattro temi con il loro peso', 'Come scrivi e come vuoi apparire'].map((l, i) => ({
+        label: l, dot: 'width:10px;height:10px;flex:none;border-radius:' + (i % 2 ? '9999px' : '2px') + ';background:' + ['#FF6B35', '#2F3452', '#D9E05B', '#6DD47E'][i]
+      })),
+
+      whoFields: [
+        { label: 'Nome e cognome', value: S.name, ph: 'Marco Sereni', set: (e) => this.setState({ name: e.target.value }) },
+        { label: 'Ruolo', value: S.role, ph: 'Founder', set: (e) => this.setState({ role: e.target.value }) },
+        { label: 'Azienda', value: S.company, ph: 'Nodo', set: (e) => this.setState({ company: e.target.value }) },
+        { label: 'Sito', value: S.site, ph: 'nodo.it', set: (e) => this.setState({ site: e.target.value }) }
+      ],
+      pitch: S.pitch, setPitch: (e) => this.setState({ pitch: e.target.value }),
+
+      goals, audiences,
+      freq: S.freq + (S.freq === 1 ? ' volta a settimana' : ' volte a settimana'),
+      freqNote: S.freq <= 2 ? 'Ritmo leggero: una sessione ogni tre settimane' : S.freq <= 4 ? 'Ritmo consigliato: una sessione ogni due settimane' : 'Ritmo alto: serve una sessione a settimana',
+      lessFreq: () => this.setState(s => ({ freq: Math.max(1, s.freq - 1) })),
+      moreFreq: () => this.setState(s => ({ freq: Math.min(7, s.freq + 1) })),
+
+      channels,
+
+      themes,
+      totalLabel: total === 100 ? 'Somma 100%: a posto' : 'Somma ' + total + '%: sistemala prima di continuare',
+      totalStyle: 'font:600 11px/1.4 Archivo,system-ui;color:' + (total === 100 ? '#8A8F9A' : '#FF6B35'),
+      addTheme: () => this.setState(s => ({ themes: s.themes.concat([{ name: 'Nuovo tema', w: 0, color: '#FFC600' }]) })),
+
+      voiceEmpty: S.voice === 'empty' && !S.voiceBusy,
+      voiceBusy: S.voiceBusy,
+      voiceReady: S.voice === 'ready' && !S.voiceBusy,
+      voiceSources, skeleton,
+      voiceBadge: { tone: 'mint', shape: 'pill', style: { height: 20, padding: '0 9px', fontSize: 9, letterSpacing: '.06em' } },
+      voiceSource: 'da ' + S.voiceSource,
+      voiceRows: [
+        { k: 'Registro', v: 'Diretto e concreto, prima persona plurale quando parli dell\u2019azienda. Nessuna domanda retorica in apertura.' },
+        { k: 'Ritmo', v: 'Frasi corte, un concetto per paragrafo, tre o quattro blocchi. Chiudi su un fatto, non su un invito.' },
+        { k: 'Lessico ammesso', v: '«in produzione», «processo», «margine», numeri sempre in cifre.' },
+        { k: 'Da evitare', v: '«rivoluzionario», «game changer», «unlockare», emoji, esclamativi.' }
+      ],
+      redoVoice: () => this.setState({ voice: 'empty' }),
+
+      logo: S.logo,
+      logoStyle: 'width:48px;height:48px;flex:none;border-radius:12px;display:block;text-align:center;font:700 13px/48px Archivo,system-ui;' + (S.logo ? 'background:#2F3452;color:#FFFFFF' : 'box-shadow:inset 0 0 0 1.5px #CDD1D4;color:#CDD1D4'),
+      logoGlyph: S.logo ? 'N' : '+',
+      logoTitle: S.logo ? 'nodo-logo.svg' : 'Nessun logo',
+      logoNote: S.logo ? 'SVG, sfondo trasparente. Lo uso in piccolo sulle immagini.' : 'SVG o PNG con sfondo trasparente, almeno 512px.',
+      logoCta: S.logo ? 'Sostituisci' : 'Carica',
+      uploadLogo: () => { this.setState({ logo: !S.logo }); this.say(S.logo ? 'Logo rimosso.' : 'Logo caricato: nodo-logo.svg.'); },
+      palettes, imageStyles,
+      toggleMark: () => this.setState(s => ({ mark: !s.mark })),
+      markTrack: 'width:52px;height:32px;flex:none;border:none;border-radius:9999px;cursor:pointer;padding:3px;display:flex;justify-content:' + (S.mark ? 'flex-end' : 'flex-start') + ';background:' + (S.mark ? '#6DD47E' : '#CDD1D4'),
+      markKnob: 'width:26px;height:26px;border-radius:9999px;background:#FFFFFF;display:block;box-shadow:0 1px 3px rgba(28,33,80,.3)',
+
+      refDraft: S.refDraft, setRefDraft: (e) => this.setState({ refDraft: e.target.value }),
+      addRef: () => {
+        const t = S.refDraft.trim();
+        if (!t) { this.say('Incolla un link o una @.'); return; }
+        this.setState(s => ({ refs: s.refs.concat([t]), refDraft: '' }));
+        this.say('Riferimento aggiunto.');
+      },
+      refs, sources, milestones,
+      addMilestone: () => { this.setState(s => ({ milestones: s.milestones.concat([{ label: 'Nuova data da nominare', date: 'Da scegliere' }]) })); this.say('Aggiunta: dalle un nome e una data.'); },
+
+      summary,
+
+      primaryLabel: key === 'intro' ? 'Iniziamo' : key === 'done' ? 'Apri la prima sessione · 15 min' : 'Continua',
+      primaryProps: {
+        variant: key === 'done' ? 'accent' : 'primary', size: 'lg', block: true, disabled: primaryDisabled,
+        onClick: () => {
+          if (primaryDisabled) { this.say(key === 'themes' ? 'I pesi devono sommare 100: adesso fanno ' + total + '%.' : 'Collega almeno un canale per continuare.'); return; }
+          this.next();
+        }
+      },
+      secondaryLabel: key === 'done' ? 'Lo faccio più tardi, portami in Home' : null,
+      secondary: () => this.say('Ti porto in Home: la coda è vuota, te lo ricorderò domani.'),
+
+      toast: S.toast,
+
+      specSteps: [
+        { n: '0', title: 'Benvenuto', body: 'Dice quanto dura e cosa chiederà. Card con pattern del sistema: unico passo puramente informativo.' },
+        { n: '1', title: 'Chi sei', body: 'Nome, ruolo, azienda, sito e una frase su cosa fate. Entra nei post e nel contesto dello Studio.' },
+        { n: '2', title: 'Obiettivo e pubblico', body: 'Chip multi-scelta più la frequenza desiderata, che determina il ritmo delle sessioni.' },
+        { n: '3', title: 'Canali', body: 'OAuth per LinkedIn, Instagram e X con stato esplicito. È l\u2019unico passo obbligatorio: senza un canale collegato «Continua» resta disabilitato.' },
+        { n: '4', title: 'Temi e pesi', body: 'Quattro temi precompilati dal pitch, pesi a scatti di 5. La somma deve fare 100 e lo dice in chiaro.' },
+        { n: '5', title: 'Voce', body: 'Tre modi per darmi testi reali: incollare post, leggere lo storico del canale, registrare un minuto. Il risultato è la scheda voce v1, mostrata subito.' },
+        { n: '6', title: 'Identità visiva', body: 'Logo, palette fra tre proposte, stile delle immagini generate e firma visiva. Nessun color picker libero: scelte curate.' },
+        { n: '7', title: 'Riferimenti e fonti', body: 'Profili che leggi, fonti dei segnali e le tue date ricorrenti, che diventano i segnali «ricorrenza» in Idee.' },
+        { n: '8', title: 'Riepilogo', body: 'Ogni riga è toccabile e riporta al passo. Pallino verde se completo, giallo se saltato. Chiude con la prima sessione.' }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

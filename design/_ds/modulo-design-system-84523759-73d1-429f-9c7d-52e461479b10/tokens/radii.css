@@ -1,0 +1,13 @@
+:root{
+--radius-0:0px;
+--radius-sm:8px;
+--radius-md:12px;
+--radius-lg:16px;
+--radius-card:24px;   /* white card — angoli molto arrotondati */
+--radius-pill:999px;
+--radius-full:50%;
+/* the leaf module: two opposite corners fully rounded */
+--radius-leaf:100% 0 100% 0;
+--radius-leaf-alt:0 100% 0 100%;
+--radius-quarter:100% 0 0 0;
+}

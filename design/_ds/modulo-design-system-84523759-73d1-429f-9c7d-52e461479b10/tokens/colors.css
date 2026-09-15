@@ -1,0 +1,54 @@
+:root{
+/* --- base palette --- */
+--indigo-900:#1C2150;   /* sfondo esterno — blu notte */
+--navy-700:#2F3452;     /* navy ardesia — testi e forme */
+--navy-500:#454B6E;
+--orange-500:#FF6B35;   /* accento caldo */
+--lime-400:#D9E05B;     /* accento acido */
+--mint-400:#6DD47E;     /* accento fresco */
+--yellow-400:#FFC600;   /* accento luminoso */
+--grey-100:#ECEEEF;     /* neutro — respiro fra i blocchi saturi */
+--grey-300:#CDD1D4;
+--grey-500:#8A8F9A;
+--white:#FFFFFF;
+--black:#000000;
+
+/* --- semantic: surfaces --- */
+--surface-app:var(--indigo-900);
+--surface-card:var(--white);
+--surface-sunken:var(--grey-100);
+--surface-inverse:var(--navy-700);
+--surface-scrim:rgba(28,33,80,.55);
+
+/* --- semantic: text --- */
+--text-title:var(--navy-700);
+--text-body:var(--grey-500);
+--text-on-dark:var(--white);
+--text-on-accent:var(--navy-700);
+--text-disabled:var(--grey-300);
+--text-link:var(--orange-500);
+--text-link-hover:#E5541F;
+
+/* --- semantic: lines --- */
+--border-subtle:var(--grey-100);
+--border-strong:var(--navy-700);
+--border-field:var(--grey-300);
+
+/* --- semantic: actions --- */
+--action-primary:var(--navy-700);
+--action-primary-hover:#252A45;
+--action-primary-press:#1C2138;
+--action-accent:var(--orange-500);
+--action-accent-hover:#F05C26;
+--action-accent-press:#DB4E1B;
+--focus-ring:var(--orange-500);
+
+/* --- pattern shape colours (the only place accents live) --- */
+--shape-1:var(--orange-500);
+--shape-2:var(--lime-400);
+--shape-3:var(--mint-400);
+--shape-4:var(--yellow-400);
+--shape-5:var(--navy-700);
+--shape-6:var(--grey-100);
+--shape-7:var(--white);
+}

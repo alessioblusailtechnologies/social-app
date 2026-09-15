@@ -1,0 +1,28 @@
+:root{
+/* scale — mobile-first, matches the onboarding card specimen */
+--size-display:32px;
+--size-title:23px;   /* card title: 22–24px */
+--size-subtitle:17px;
+--size-body:12px;    /* body copy: 11–12px */
+--size-body-lg:14px;
+--size-caption:11px;
+--size-label:12px;
+
+--lh-tight:1.18; /* @kind other */
+--lh-snug:1.4; /* @kind other */
+--lh-airy:1.9; /* @kind other */
+
+--weight-regular:400; /* @kind other */
+--weight-medium:500; /* @kind other */
+--weight-semibold:600; /* @kind other */
+--weight-bold:700; /* @kind other */
+
+--tracking-tight:-0.015em; /* @kind other */
+--tracking-normal:0; /* @kind other */
+--tracking-caps:0.08em; /* @kind other */
+
+/* composed roles */
+--text-style-title:var(--weight-bold) var(--size-title)/var(--lh-tight) var(--font-core);
+--text-style-body:var(--weight-regular) var(--size-body)/var(--lh-airy) var(--font-core);
+--text-style-label:var(--weight-semibold) var(--size-label)/var(--lh-snug) var(--font-core);
+}

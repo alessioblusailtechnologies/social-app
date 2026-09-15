@@ -1,0 +1,8 @@
+:root{
+/* 8pt grid, with a 4px half-step */
+--space-0:0px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:40px;--space-8:48px;--space-9:64px;--space-10:80px;
+--gutter-card:16px;      /* lateral padding inside the white card */
+--gutter-screen:24px;
+--tile:1fr; /* @kind other */
+--hit-min:44px;          /* minimum touch target */
+}
