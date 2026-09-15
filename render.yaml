@@ -42,8 +42,9 @@ services:
         value: info
       - key: APP_TIME_ZONE
         value: Europe/Rome
+      # DeepSeek diretta (server in Cina); con un Claude, `claude-opus-5`. Vedi be-node/src/ai/providers.ts.
       - key: AI_MODEL
-        value: claude-opus-5
+        value: deepseek-flash
       # L'app web qui sotto. Se Render le assegna un altro sottodominio, va corretto qui.
       - key: CORS_ORIGINS
         value: https://presenza-app.onrender.com
@@ -61,6 +62,10 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      # Per i modelli deepseek-*. Render chiede i `sync: false` solo alla creazione del Blueprint:
+      # su quello già creato va aggiunta dal pannello del servizio.
+      - key: DEEPSEEK_API_KEY
+        sync: false
 
   # --- App web: export statico di Expo ------------------------------------------
   - type: web
@@ -77,9 +82,9 @@ services:
       - key: NODE_VERSION
         value: "24"
       # Finisce dentro il bundle al momento della build: se cambia, serve un nuovo deploy dell'app.
-      # Se Render assegna all'API un altro sottodominio, va corretto qui.
+      # Il sottodominio lo assegna Render: `presenza-api` era già preso.
       - key: EXPO_PUBLIC_API_URL
-        value: https://presenza-api.onrender.com/api
+        value: https://presenza-api-stjx.onrender.com/api
     # L'app è una SPA: ogni percorso serve index.html e il routing lo fa Expo Router.
     routes:
       - type: rewrite

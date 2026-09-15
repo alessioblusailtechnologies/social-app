@@ -48,6 +48,12 @@ altro strumento, nessuna impostazione dal disco, permessi negati a tutto ciò ch
 indirizzi privati o locali vengono rifiutati prima di aprirli. Ogni sessione ha un tetto di tempo e di spesa, e
 il consumo finisce in `presenza.ai_usage`.
 
+Il modello si sceglie con `AI_MODEL`: un Claude da Anthropic, oppure `deepseek-flash` o `deepseek-v4-pro` da DeepSeek
+diretta, come in Velia. L'API di DeepSeek è compatibile con quella di Anthropic, quindi la sessione non cambia:
+cambiano indirizzo e chiave del processo di Claude Code (`src/ai/providers.ts`). Su DeepSeek `AI_EFFORT` e
+`AI_MAX_BUDGET_USD` non valgono, perché l'SDK conta la spesa al listino di Anthropic: restano i tetti di turni e di
+tempo, e il costo in `ai_usage` si calcola dai token al listino di punta di DeepSeek (fuori punta è la metà).
+
 Le rotte AI rispondono quando la sessione finisce: da qualche secondo per un ritocco a un paio di minuti per
 idee con ricerca sul web.
 
@@ -150,7 +156,8 @@ Primo avvio:
 
 1. Render → *New* → *Blueprint* → repo `alessioblusailtechnologies/social-app`, ramo `master`.
 2. Render chiede i valori `sync: false`: `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`,
-   `DATABASE_URL` e `ANTHROPIC_API_KEY`, da copiare da `be-node/.env`.
+   `DATABASE_URL`, `ANTHROPIC_API_KEY` e `DEEPSEEK_API_KEY`, da copiare da `be-node/.env`. Su un Blueprint già
+   creato Render non chiede i `sync: false` aggiunti dopo: si inseriscono dal pannello del servizio.
 3. Se i nomi `presenza-api` o `presenza-app` sono già presi, Render assegna un altro sottodominio: si correggono
    `CORS_ORIGINS` e `EXPO_PUBLIC_API_URL` in `render.yaml` (non nel pannello: la sync del Blueprint li riscriverebbe)
    e si pusha.
@@ -183,3 +190,5 @@ controlla che un account non veda le righe dell'altro e alla fine cancella le du
   lo sviluppo, non per la produzione.
 - **Tempi**: le rotte AI rispondono a generazione finita. Dietro un proxy con timeout di 100 secondi, come
   Cloudflare, le idee con ricerca sul web vanno spostate su un job con polling.
+- **DeepSeek**: i server sono in Cina. Con un modello `deepseek-*` l'indirizzo del sito, il profilo del brand e i
+  testi escono dall'UE: per clienti veri va deciso, o si torna a un Claude.

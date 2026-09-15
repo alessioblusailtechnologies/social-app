@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { ApiError } from '../contract/errors';
 import { assertPublicUrl } from '../lib/public-url';
+import { costAtTariff, type ModelTarget, type TokenCount } from './providers';
 
 /**
  * Il motore delle generazioni: per ogni richiesta una sessione dell'Agent SDK con output
@@ -66,6 +67,8 @@ export const unavailableEngine: AiEngine = {
 
 export interface AgentSdkEngineOptions {
   model: string;
+  /** Dove si serve il modello, Anthropic o un fornitore terzo: vedi `providers.ts`. */
+  target: ModelTarget;
   effort: Effort;
   timeoutMs: number;
   maxBudgetUsd: number;
@@ -119,7 +122,12 @@ export class AgentSdkEngine implements AiEngine {
     const options: Options = {
       cwd: this.workdir,
       model: this.options.model,
-      effort: request.effort ?? this.options.effort,
+      // Su un fornitore terzo niente `effort`, che è di Anthropic, e niente tetto di spesa dell'SDK, che conta al
+      // listino di Anthropic e scatterebbe a caso: restano i tetti di turni e di tempo.
+      ...(!this.options.target.tariff && {
+        effort: request.effort ?? this.options.effort,
+        maxBudgetUsd: this.options.maxBudgetUsd,
+      }),
       systemPrompt: request.system,
       tools,
       allowedTools: tools,
@@ -128,14 +136,13 @@ export class AgentSdkEngine implements AiEngine {
       settingSources: [],
       persistSession: false,
       maxTurns: tools.length > 0 ? MAX_TURNS_WITH_TOOLS : MAX_TURNS_WITHOUT_TOOLS,
-      maxBudgetUsd: this.options.maxBudgetUsd,
       outputFormat: {
         type: 'json_schema',
         schema: z.toJSONSchema(request.schema, { target: 'draft-7' }) as Record<string, unknown>,
       },
       abortController: abort,
       hooks: { PreToolUse: [{ hooks: [guardUrls] }] },
-      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: 'presenza-be/0.1.0' },
+      env: { ...(this.options.target.env ?? process.env), CLAUDE_AGENT_SDK_CLIENT_APP: 'presenza-be/0.1.0' },
       stderr: (data) => {
         stderr = `${stderr}${data}`.slice(-2000);
       },
@@ -168,6 +175,8 @@ export class AgentSdkEngine implements AiEngine {
       problem = failure instanceof Error ? failure.message : result ? 'risultato senza output strutturato' : 'sessione chiusa senza risultato';
     }
 
+    const tokens = sessionTokens(result);
+    const { tariff } = this.options.target;
     const usage: AiUsage = {
       task: request.task,
       accountId: request.accountId,
@@ -177,11 +186,11 @@ export class AgentSdkEngine implements AiEngine {
       error: problem,
       durationMs: Date.now() - started,
       turns: result?.num_turns ?? 0,
-      costUsd: result?.total_cost_usd ?? 0,
-      inputTokens: result?.usage.input_tokens ?? 0,
-      outputTokens: result?.usage.output_tokens ?? 0,
-      cacheReadTokens: result?.usage.cache_read_input_tokens ?? 0,
-      cacheWriteTokens: result?.usage.cache_creation_input_tokens ?? 0,
+      costUsd: tariff ? costAtTariff(tokens, tariff) : (result?.total_cost_usd ?? 0),
+      inputTokens: tokens.input,
+      outputTokens: tokens.output,
+      cacheReadTokens: tokens.cacheRead,
+      cacheWriteTokens: tokens.cacheWrite,
     };
     void this.options
       .recordUsage(usage)
@@ -195,4 +204,16 @@ export class AgentSdkEngine implements AiEngine {
     }
     throw new ApiError(502, 'AI_FAILED', 'Non sono riuscito a completare la generazione. Riprova.');
   }
+}
+
+/** I token di tutta la sessione: `usage` conta il solo ciclo principale, `modelUsage` anche il riassunto di WebFetch. */
+function sessionTokens(result: SDKResultMessage | undefined): TokenCount {
+  const tokens: TokenCount = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  for (const model of Object.values(result?.modelUsage ?? {})) {
+    tokens.input += model.inputTokens;
+    tokens.output += model.outputTokens;
+    tokens.cacheRead += model.cacheReadInputTokens;
+    tokens.cacheWrite += model.cacheCreationInputTokens;
+  }
+  return tokens;
 }

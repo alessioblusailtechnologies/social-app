@@ -21,9 +21,15 @@ const envSchema = z.object({
   SUPABASE_JWT_SECRET: optionalString,
   /** Ruolo `presenza_app` dal pooler in modalità sessione. */
   DATABASE_URL: z.string().min(1),
-  /** Senza chiave le rotte AI rispondono 503 e il resto dell'API funziona. */
-  ANTHROPIC_API_KEY: optionalString,
+  /**
+   * Un Claude, servito da Anthropic, o un modello di un fornitore terzo elencato in `ai/providers.ts`.
+   * Senza la chiave del suo fornitore le rotte AI rispondono 503 e il resto dell'API funziona.
+   */
   AI_MODEL: z.string().min(1).default('claude-opus-5'),
+  ANTHROPIC_API_KEY: optionalString,
+  /** DeepSeek diretta, per i modelli `deepseek-*`: API compatibile con Anthropic, server in Cina. */
+  DEEPSEEK_API_KEY: optionalString,
+  DEEPSEEK_BASE_URL: z.url().default('https://api.deepseek.com/anthropic'),
   /** Le generazioni; i ritocchi rapidi girano sempre a `low`. */
   AI_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(240_000),

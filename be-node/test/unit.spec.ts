@@ -7,6 +7,7 @@ import { createThemes } from '@/domain/themes';
 import { cleanLabels, describeBrand } from '../src/ai/brand-context';
 import { cleanHashtags } from '../src/ai/content';
 import { fitChannels } from '../src/ai/ideas';
+import { costAtTariff, modelTarget } from '../src/ai/providers';
 import { colorsFromHtml, countColors } from '../src/ai/site-colors';
 import { isPrivateAddress, toWebUrl } from '../src/lib/public-url';
 import { scheduleKey, toSlot } from '../src/data/slots';
@@ -101,5 +102,32 @@ describe('uscite', () => {
     expect(toSlot(row, new Date(2026, 8, 15, 8, 59)).status).toBe('scheduled');
     expect(toSlot(row, new Date(2026, 8, 15, 9, 1)).status).toBe('published');
     expect(toSlot({ ...row, status: 'toApprove' }, new Date(2026, 8, 16)).status).toBe('toApprove');
+  });
+});
+
+describe('fornitori del modello', () => {
+  const deepseek = { key: 'sk-deepseek-prova', baseUrl: 'https://api.deepseek.com/anthropic' };
+
+  it('un Claude va ad Anthropic, e senza chiave l’AI resta spenta', () => {
+    expect(modelTarget('claude-opus-5', { anthropic: 'sk-ant-prova', deepseek })).toEqual({});
+    expect(modelTarget('claude-opus-5', { anthropic: undefined, deepseek })).toBeNull();
+  });
+
+  it('DeepSeek cambia indirizzo e chiave del processo, e nient’altro', () => {
+    const processEnv = { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-ant-prova', CLAUDE_CODE_OAUTH_TOKEN: 'oauth-prova' };
+    const target = modelTarget('deepseek-flash', { anthropic: undefined, deepseek }, processEnv);
+    expect(target?.env).toEqual({
+      PATH: '/usr/bin',
+      ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+      ANTHROPIC_API_KEY: 'sk-deepseek-prova',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-flash',
+    });
+    expect(target?.tariff).toEqual({ input: 0.3, output: 1.2, cache: 0.006 });
+    expect(modelTarget('deepseek-flash', { anthropic: 'sk-ant-prova', deepseek: { ...deepseek, key: undefined } })).toBeNull();
+  });
+
+  it('il costo al listino tiene a parte la cache', () => {
+    const tariff = { input: 0.3, output: 1.2, cache: 0.006 };
+    expect(costAtTariff({ input: 1_000_000, output: 100_000, cacheRead: 2_000_000, cacheWrite: 0 }, tariff)).toBe(0.432);
   });
 });
