@@ -9,8 +9,10 @@ import {
   type RewriteInstruction,
   type VideoScene,
 } from '@/domain/content';
-import type { Idea, IdeaFormat } from '@/domain/idea';
+import type { Idea, IdeaFormat, IdeaSource } from '@/domain/idea';
 import { createRng, pick, seedFromString } from '@/lib/random';
+
+import { draftsFromSource } from './idea-generator';
 
 /**
  * Finta AI dei contenuti: dall'idea scrive una variante per canale e il visivo del formato,
@@ -201,6 +203,35 @@ export function generateContent(
       : [];
 
   return { format, variants, visual: { headline: clean(shortHook(idea.title)), slides, scenes } };
+}
+
+/**
+ * Contenuto creato direttamente da una fonte, senza idea salvata: l'AI sceglie un taglio
+ * (diverso a ogni revisione), lo lega al tema più vicino e scrive la bozza.
+ */
+export function generateDirectContent(
+  brand: Brand,
+  source: IdeaSource,
+  channels: ChannelId[],
+  format: IdeaFormat,
+  revision: number,
+  contentId: string,
+): GeneratedContent & { title: string; themeId: string | null } {
+  const [draft] = draftsFromSource(brand, source, revision);
+  const basis: Idea = {
+    ...draft,
+    id: contentId,
+    brandId: brand.id,
+    createdAt: '',
+    status: 'saved',
+    decidedAt: null,
+    formats: [format],
+  };
+  return {
+    ...generateContent(brand, basis, channels, format, revision),
+    title: draft.title,
+    themeId: draft.themeId,
+  };
 }
 
 /** Riscrittura veloce di un testo secondo un'istruzione. */

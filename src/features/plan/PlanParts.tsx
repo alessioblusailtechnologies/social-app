@@ -25,7 +25,7 @@ export const SLOT_TONES: Record<SlotStatus, BadgeTone> = {
 };
 
 export interface SlotCardProps {
-  slot: SlotDraft & { status: SlotStatus };
+  slot: SlotDraft & { status: SlotStatus; contentTitle?: string | null };
   idea: Idea | null;
   theme: Theme | null;
   onPress: () => void;
@@ -34,13 +34,15 @@ export interface SlotCardProps {
 }
 
 export function SlotCard({ slot, idea, theme, onPress, onFill }: SlotCardProps) {
-  const label = idea ? idea.title : theme ? `Serve un contenuto su «${theme.name}»` : 'Serve un contenuto';
+  // Le uscite nate da un contenuto creato direttamente non hanno idea, ma hanno il titolo del contenuto.
+  const title = idea?.title ?? slot.contentTitle ?? null;
+  const label = title ?? (theme ? `Serve un contenuto su «${theme.name}»` : 'Serve un contenuto');
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={`${slot.time}, ${SLOT_STATUS_LABELS[slot.status]}. ${label}`}
       onPress={onPress}
-      style={[styles.card, !idea && styles.cardEmpty]}>
+      style={[styles.card, !title && styles.cardEmpty]}>
       <View style={styles.row}>
         <Text variant="strongSmall">{slot.time}</Text>
         <View style={styles.marks}>
@@ -53,9 +55,9 @@ export function SlotCard({ slot, idea, theme, onPress, onFill }: SlotCardProps) 
           {SLOT_STATUS_LABELS[slot.status]}
         </Badge>
       </View>
-      {idea ? (
+      {title ? (
         <Text variant="strong" numberOfLines={2}>
-          {idea.title}
+          {title}
         </Text>
       ) : (
         <Text variant="body">{label}</Text>
@@ -66,7 +68,7 @@ export function SlotCard({ slot, idea, theme, onPress, onFill }: SlotCardProps) 
           {theme?.name ?? 'Senza tema'}
         </Text>
         {/* Solo testo: tutta la card apre già l'uscita, e un toccabile dentro un toccabile non è valido sul web. */}
-        {!idea && onFill && (
+        {!title && onFill && (
           <Text variant="action" color={colors.textLink}>
             Scegli un’idea
           </Text>

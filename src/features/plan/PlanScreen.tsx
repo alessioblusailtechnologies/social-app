@@ -23,6 +23,8 @@ import {
   screenStyles,
 } from '@/design-system';
 import type { Brand } from '@/domain/brand';
+import { channelName } from '@/domain/catalog';
+import { FORMAT_LABELS } from '@/domain/idea';
 import type { PlanSlot } from '@/domain/plan';
 import {
   addDays,
@@ -35,7 +37,7 @@ import {
   today,
   weekdayIndex,
 } from '@/lib/dates';
-import { useIdeas, usePlan } from '@/services/queries';
+import { useContentDrafts, useIdeas, usePlan } from '@/services/queries';
 
 import { BalancePanel, SlotCard } from './PlanParts';
 
@@ -47,6 +49,7 @@ export function PlanScreen({ brand }: { brand: Brand }) {
   const router = useRouter();
   const planQuery = usePlan(brand.id);
   const { data: ideas = [] } = useIdeas(brand.id);
+  const { data: drafts = [] } = useContentDrafts(brand.id);
   const now = today();
   const [view, setView] = useState<PlanView>('week');
   const [weekStart, setWeekStart] = useState(() => startOfWeek(now));
@@ -60,7 +63,7 @@ export function PlanScreen({ brand }: { brand: Brand }) {
   const weekEnd = addDays(weekStart, 6);
   const weekSlots = slots.filter((slot) => slot.date >= weekStart && slot.date <= weekEnd);
   const isCurrentWeek = weekStart === startOfWeek(now);
-  const filled = weekSlots.filter((slot) => slot.ideaId !== null).length;
+  const filled = weekSlots.filter((slot) => slot.ideaId !== null || Boolean(slot.contentTitle)).length;
   const target = Math.max(brand.positioning.postsPerWeek, weekSlots.length);
 
   const monthSlots = slots.filter((slot) => slot.date.startsWith(month.slice(0, 7)));
@@ -122,6 +125,28 @@ export function PlanScreen({ brand }: { brand: Brand }) {
           </Panel>
         ) : view === 'week' ? (
           <>
+            {drafts.length > 0 && (
+              <Panel label="Bozze da programmare" gap={0}>
+                {drafts.map((draft, i) => (
+                  <Pressable
+                    key={draft.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Bozza: ${draft.title}`}
+                    onPress={() => router.push({ pathname: '/draft/[contentId]', params: { contentId: draft.id } })}
+                    style={[styles.draftRow, i > 0 && styles.draftDivider]}>
+                    <View style={styles.draftText}>
+                      <Text variant="strongSmall" numberOfLines={2}>
+                        {draft.title}
+                      </Text>
+                      <Text variant="caption">
+                        {draft.channels.map(channelName).join(' · ')} · {FORMAT_LABELS[draft.format]}
+                      </Text>
+                    </View>
+                    <ChevronRight size={16} color={palette.grey300} />
+                  </Pressable>
+                ))}
+              </Panel>
+            )}
             <BalancePanel themes={brand.themes} slots={weekSlots} label={`${filled} di ${target} uscite con un contenuto`} />
 
             {weekSlots.length === 0 ? (
@@ -233,6 +258,9 @@ const styles = StyleSheet.create({
   navigatorLabel: { flex: 1, minHeight: 36, justifyContent: 'center' },
   content: { paddingHorizontal: layout.screenGutter, paddingBottom: 24, gap: 14 },
   empty: { gap: 10 },
+  draftRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  draftDivider: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
+  draftText: { flex: 1, minWidth: 0, gap: 2 },
   day: { gap: 8 },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 2 },
   gridRow: { flexDirection: 'row' },

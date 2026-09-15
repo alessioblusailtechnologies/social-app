@@ -1,9 +1,10 @@
 import type { ChannelId, VoiceCard } from './brand';
-import type { IdeaFormat } from './idea';
+import type { IdeaFormat, IdeaSource } from './idea';
 
 /**
- * Il contenuto di un'uscita: la bozza che l'AI prepara a partire dall'idea, con una
- * variante di testo per ogni canale e il visivo adatto al formato. Si ritocca e si approva.
+ * Il contenuto: la bozza che l'AI prepara, con una variante di testo per ogni canale e il
+ * visivo adatto al formato. Nasce da un'idea dentro un'uscita del piano, oppure direttamente
+ * da una fonte dell'utente; in quel caso entra nel piano quando viene programmato.
  */
 
 export interface ChannelVariant {
@@ -37,8 +38,15 @@ export type ContentStatus = 'draft' | 'approved';
 export interface Content {
   id: string;
   brandId: string;
-  slotId: string;
-  ideaId: string;
+  /** L'uscita del piano; nulla finché un contenuto creato direttamente non viene programmato. */
+  slotId: string | null;
+  /** L'idea di partenza; nulla per i contenuti creati direttamente. */
+  ideaId: string | null;
+  /** Quello che l'utente ha scritto o condiviso, per i contenuti creati direttamente. */
+  brief: IdeaSource | null;
+  title: string;
+  themeId: string | null;
+  channels: ChannelId[];
   format: IdeaFormat;
   variants: ChannelVariant[];
   visual: ContentVisual;

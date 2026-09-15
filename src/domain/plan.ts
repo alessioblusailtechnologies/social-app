@@ -27,6 +27,8 @@ export interface SlotDraft {
 export interface PlanSlot extends SlotDraft {
   id: string;
   brandId: string;
+  /** Titolo del contenuto, per le uscite nate da un contenuto creato senza idea. */
+  contentTitle?: string | null;
   status: SlotStatus;
   origin: SlotOrigin;
   createdAt: string;
@@ -201,16 +203,23 @@ export function placeIdea(
   const allowed = selectedChannels(brand);
   const channels = idea.channels.filter((channel) => allowed.includes(channel));
   const primary = channels[0] ?? allowed[0] ?? 'linkedin';
-  const busy = new Set(future.map((slot) => slot.date));
+  const { date, time } = nextFreeDay(future, primary, from);
+  return {
+    draft: { date, time, channels: channels.length > 0 ? channels : [primary], themeId: idea.themeId, ideaId: idea.id },
+  };
+}
+
+/** Il primo giorno senza uscite dopo `from`, tra quelli consigliati per il canale. */
+export function nextFreeDay(
+  existing: readonly SlotDraft[],
+  channel: ChannelId,
+  from: string,
+): { date: string; time: string } {
+  const busy = new Set(existing.filter((slot) => slot.date > from).map((slot) => slot.date));
+  const { days, time } = BEST_TIMES[channel];
   for (let offset = 1; offset <= 28; offset++) {
     const date = addDays(from, offset);
-    if (!busy.has(date) && BEST_TIMES[primary].days.includes(weekdayIndex(date))) {
-      return {
-        draft: { date, time: BEST_TIMES[primary].time, channels: channels.length > 0 ? channels : [primary], themeId: idea.themeId, ideaId: idea.id },
-      };
-    }
+    if (!busy.has(date) && days.includes(weekdayIndex(date))) return { date, time };
   }
-  return {
-    draft: { date: addDays(from, 1), time: BEST_TIMES[primary].time, channels: [primary], themeId: idea.themeId, ideaId: idea.id },
-  };
+  return { date: addDays(from, 1), time };
 }

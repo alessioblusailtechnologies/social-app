@@ -6,25 +6,76 @@ import type { Idea, IdeaDraft, IdeaFormat, IdeaSource, IdeaStatus } from '@/doma
 import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
 
 import { services } from './index';
-import type { SlotPatch, VoiceSample, Workspace } from './types';
+import type { DirectContentRequest, SlotPatch, VoiceSample, Workspace } from './types';
 
 const planKey = (brandId: string) => ['plan', brandId] as const;
-const contentKey = (slotId: string) => ['content', slotId] as const;
+const slotContentKey = (slotId: string) => ['content', 'slot', slotId] as const;
+const contentKey = (contentId: string) => ['content', 'id', contentId] as const;
+const draftsKey = (brandId: string) => ['content', 'drafts', brandId] as const;
 
-export function useSlotContent(slotId: string) {
-  return useQuery({ queryKey: contentKey(slotId), queryFn: () => services.contents.getForSlot(slotId) });
+type Client = ReturnType<typeof useQueryClient>;
+
+/** Un contenuto si legge per id e, se è in un'uscita, anche dall'uscita: si aggiornano entrambe le copie. */
+function cacheContent(client: Client, content: Content) {
+  client.setQueryData(contentKey(content.id), content);
+  if (content.slotId) client.setQueryData(slotContentKey(content.slotId), content);
 }
 
-/** Le operazioni sul contenuto aggiornano insieme la bozza e lo stato dell'uscita nel piano. */
+export function useSlotContent(slotId: string) {
+  return useQuery({ queryKey: slotContentKey(slotId), queryFn: () => services.contents.getForSlot(slotId) });
+}
+
+export function useContent(contentId: string) {
+  return useQuery({ queryKey: contentKey(contentId), queryFn: () => services.contents.get(contentId) });
+}
+
+export function useContentDrafts(brandId: string | undefined) {
+  return useQuery({
+    queryKey: draftsKey(brandId ?? ''),
+    queryFn: () => services.contents.listDrafts(brandId ?? ''),
+    enabled: Boolean(brandId),
+  });
+}
+
+/** Le operazioni sul contenuto aggiornano insieme la bozza, lo stato dell'uscita e le bozze da programmare. */
 function useContentWithSlot<V>(brandId: string, run: (variables: V) => Promise<{ content: Content; slot: PlanSlot }>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: run,
     onSuccess: ({ content, slot }) => {
-      client.setQueryData(contentKey(slot.id), content);
+      cacheContent(client, content);
       client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => upsertSlot(slots, slot));
+      client.invalidateQueries({ queryKey: draftsKey(brandId) });
     },
   });
+}
+
+export function useCreateContent(brandId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (request: DirectContentRequest) => services.contents.createDirect(brandId, request),
+    onSuccess: (content) => {
+      cacheContent(client, content);
+      client.invalidateQueries({ queryKey: draftsKey(brandId) });
+    },
+  });
+}
+
+export function useRegenerateContent() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contentId, format }: { contentId: string; format?: IdeaFormat }) =>
+      services.contents.regenerate(contentId, format),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+export function useScheduleContent(brandId: string) {
+  return useContentWithSlot(
+    brandId,
+    ({ contentId, date, time, publishNow }: { contentId: string; date: string; time: string; publishNow?: boolean }) =>
+      services.contents.schedule(contentId, { date, time, publishNow }),
+  );
 }
 
 export function usePrepareContent(brandId: string) {
@@ -46,7 +97,7 @@ export function useEditVariant() {
   return useMutation({
     mutationFn: ({ contentId, channel, text }: { contentId: string; channel: ChannelId; text: string }) =>
       services.contents.updateVariant(contentId, channel, text),
-    onSuccess: (content) => client.setQueryData(contentKey(content.slotId), content),
+    onSuccess: (content) => cacheContent(client, content),
   });
 }
 
@@ -55,7 +106,7 @@ export function useRewriteVariant() {
   return useMutation({
     mutationFn: ({ contentId, channel, instruction }: { contentId: string; channel: ChannelId; instruction: RewriteInstruction }) =>
       services.contents.rewrite(contentId, channel, instruction),
-    onSuccess: (content) => client.setQueryData(contentKey(content.slotId), content),
+    onSuccess: (content) => cacheContent(client, content),
   });
 }
 
@@ -113,7 +164,10 @@ export function useUpdateSlot(brandId: string) {
     onSuccess: (slot, { patch }) => {
       client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => upsertSlot(slots, slot));
       // Con un'idea diversa la bozza non vale più.
-      if (patch.ideaId !== undefined) client.invalidateQueries({ queryKey: contentKey(slot.id) });
+      if (patch.ideaId !== undefined) {
+        client.invalidateQueries({ queryKey: slotContentKey(slot.id) });
+        client.invalidateQueries({ queryKey: draftsKey(brandId) });
+      }
     },
   });
 }
@@ -124,7 +178,8 @@ export function useRemoveSlot(brandId: string) {
     mutationFn: (slotId: string) => services.plan.removeSlot(slotId),
     onSuccess: (_, slotId) => {
       client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => (slots ?? []).filter((slot) => slot.id !== slotId));
-      client.removeQueries({ queryKey: contentKey(slotId) });
+      client.removeQueries({ queryKey: slotContentKey(slotId) });
+      client.invalidateQueries({ queryKey: draftsKey(brandId) });
     },
   });
 }

@@ -12,6 +12,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.blusail.presenza",
       "adaptiveIcon": {
         "backgroundColor": "#ECEEEF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

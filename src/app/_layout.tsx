@@ -64,7 +64,13 @@ function RootNavigator() {
         <Stack.Screen name="brands" options={{ presentation: 'modal' }} />
         <Stack.Screen name="new-idea" options={{ presentation: 'modal' }} />
         <Stack.Screen name="plan-session" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="new-content" options={{ presentation: 'modal' }} />
+        <Stack.Screen
+          name="create"
+          options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }}
+        />
         <Stack.Screen name="content/[slotId]" />
+        <Stack.Screen name="draft/[contentId]" />
       </Stack.Protected>
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="design-system" />

@@ -85,14 +85,32 @@ export interface PlanService {
   removeSlot(slotId: string): Promise<void>;
 }
 
+export interface DirectContentRequest {
+  source: IdeaSource;
+  channels: ChannelId[];
+  format: IdeaFormat;
+}
+
 export interface ContentService {
+  get(contentId: string): Promise<Content | null>;
   getForSlot(slotId: string): Promise<Content | null>;
+  /** Contenuti creati direttamente e non ancora programmati. */
+  listDrafts(brandId: string): Promise<Content[]>;
   /** Prepara (o rifà) la bozza dall'idea dell'uscita, che passa a "Da approvare". */
   prepare(slotId: string, format?: IdeaFormat): Promise<{ content: Content; slot: PlanSlot }>;
+  /** Nuovo contenuto senza idea né uscita: la bozza nasce dalla fonte. */
+  createDirect(brandId: string, request: DirectContentRequest): Promise<Content>;
+  /** Rifà la bozza di un contenuto creato direttamente, con un altro taglio o formato. */
+  regenerate(contentId: string, format?: IdeaFormat): Promise<Content>;
   updateVariant(contentId: string, channel: ChannelId, text: string): Promise<Content>;
   rewrite(contentId: string, channel: ChannelId, instruction: RewriteInstruction): Promise<Content>;
-  /** L'uscita passa a "Programmata". */
+  /** Approva un contenuto che è già in un'uscita: l'uscita passa a "Programmata". */
   approve(contentId: string): Promise<{ content: Content; slot: PlanSlot }>;
+  /** Approva un contenuto creato direttamente e lo mette nel piano; con `publishNow` esce subito. */
+  schedule(
+    contentId: string,
+    when: { date: string; time: string; publishNow?: boolean },
+  ): Promise<{ content: Content; slot: PlanSlot }>;
   /** Torna in bozza: l'uscita passa di nuovo a "Da approvare". */
   reopen(contentId: string): Promise<{ content: Content; slot: PlanSlot }>;
 }

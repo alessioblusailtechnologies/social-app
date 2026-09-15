@@ -18,7 +18,7 @@ import { createId } from '@/lib/id';
 
 import type { BrandService, ChannelService, ContentService, IdeaService, PlanService, Services } from '../types';
 import { createMockAiService } from './ai';
-import { generateContent, rewriteText } from './content-generator';
+import { generateContent, generateDirectContent, rewriteText } from './content-generator';
 import {
   clearDatabase,
   contentsCollection,
@@ -97,6 +97,10 @@ function createMockBrandService(): BrandService {
             brandId: brand.id,
             slotId: slot.id,
             ideaId: idea.id,
+            brief: null,
+            title: idea.title,
+            themeId: idea.themeId,
+            channels: slot.channels,
             ...generateContent(brand, idea, slot.channels, idea.formats[0] ?? 'post', 0),
             status: approved ? 'approved' : 'draft',
             revision: 0,
@@ -279,21 +283,29 @@ function createMockPlanService(): PlanService {
           result: { slot: next, ideaChanged: changed },
         };
       });
-      if (ideaChanged) await removeContentOf(slotId);
+      if (ideaChanged) await releaseContentOf(slotId);
       return slot;
     },
 
     async removeSlot(slotId) {
       await delay(latency(250, 450));
       await slotsCollection.update((slots) => ({ items: slots.filter((slot) => slot.id !== slotId), result: null }));
-      await removeContentOf(slotId);
+      await releaseContentOf(slotId);
     },
   };
 }
 
-function removeContentOf(slotId: string) {
+/**
+ * Quando un'uscita sparisce o cambia idea: la bozza nata dall'idea non vale più e si elimina,
+ * un contenuto creato direttamente torna tra le bozze da programmare.
+ */
+function releaseContentOf(slotId: string) {
   return contentsCollection.update((contents) => ({
-    items: contents.filter((content) => content.slotId !== slotId),
+    items: contents.flatMap((content): Content[] => {
+      if (content.slotId !== slotId) return [content];
+      if (content.ideaId !== null) return [];
+      return [{ ...content, slotId: null, status: 'draft', approvedAt: null }];
+    }),
     result: null,
   }));
 }
@@ -340,6 +352,10 @@ function createMockContentService(): ContentService {
           brandId: slot.brandId,
           slotId,
           ideaId: idea.id,
+          brief: null,
+          title: idea.title,
+          themeId: idea.themeId,
+          channels: slot.channels,
           ...generateContent(brand, idea, slot.channels, format ?? previous?.format ?? idea.formats[0] ?? 'post', revision),
           status: 'draft',
           revision,
@@ -375,20 +391,107 @@ function createMockContentService(): ContentService {
       }));
     },
 
+    async get(contentId) {
+      await delay(latency(120, 250));
+      return (await contentsCollection.list()).find((content) => content.id === contentId) ?? null;
+    },
+
+    async listDrafts(brandId) {
+      await delay(latency(150, 300));
+      return (await contentsCollection.list())
+        .filter((content) => content.brandId === brandId && content.slotId === null)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    },
+
+    async createDirect(brandId, { source, channels, format }) {
+      const brand = await brandById(brandId);
+      await delay(latency(2400, 3200));
+      const id = createId('content');
+      const now = new Date().toISOString();
+      const content: Content = {
+        id,
+        brandId,
+        slotId: null,
+        ideaId: null,
+        brief: source,
+        channels,
+        ...generateDirectContent(brand, source, channels, format, 0, id),
+        status: 'draft',
+        revision: 0,
+        createdAt: now,
+        updatedAt: now,
+        approvedAt: null,
+      };
+      return contentsCollection.update((contents) => ({ items: [...contents, content], result: content }));
+    },
+
+    async regenerate(contentId, format) {
+      const current = (await contentsCollection.list()).find((content) => content.id === contentId);
+      if (!current?.brief) throw new Error('Da qui si rifanno solo i contenuti creati direttamente');
+      const brief = current.brief;
+      const brand = await brandById(current.brandId);
+      await delay(latency(2400, 3200));
+      const revision = current.revision + 1;
+      const generated = generateDirectContent(brand, brief, current.channels, format ?? current.format, revision, current.id);
+      return updateContent(contentId, (existing) => ({ ...existing, ...generated, revision, status: 'draft', approvedAt: null }));
+    },
+
     async approve(contentId) {
       await delay(latency(400, 700));
-      const content = await updateContent(contentId, (current) => ({
-        ...current,
+      const current = (await contentsCollection.list()).find((content) => content.id === contentId);
+      if (!current?.slotId) throw new Error('Il contenuto non è in un’uscita: va programmato');
+      const slotId = current.slotId;
+      const content = await updateContent(contentId, (existing) => ({
+        ...existing,
         status: 'approved',
         approvedAt: new Date().toISOString(),
       }));
-      return { content, slot: await setSlotStatus(content.slotId, 'scheduled') };
+      return { content, slot: await setSlotStatus(slotId, 'scheduled') };
+    },
+
+    async schedule(contentId, { date, time, publishNow = false }) {
+      const current = (await contentsCollection.list()).find((content) => content.id === contentId);
+      if (!current) throw new Error('Contenuto non trovato');
+      await delay(latency(400, 700));
+      const status: PlanSlot['status'] = publishNow ? 'published' : 'scheduled';
+      const slot = await slotsCollection.update((slots) => {
+        const existing = current.slotId ? slots.find((candidate) => candidate.id === current.slotId) : undefined;
+        const next: PlanSlot = existing
+          ? { ...existing, date, time, status }
+          : {
+              id: createId('slot'),
+              brandId: current.brandId,
+              date,
+              time,
+              channels: current.channels,
+              themeId: current.themeId,
+              ideaId: null,
+              contentTitle: current.title,
+              status,
+              origin: 'manual',
+              createdAt: new Date().toISOString(),
+            };
+        return {
+          items: existing ? slots.map((candidate) => (candidate.id === next.id ? next : candidate)) : [...slots, next],
+          result: next,
+        };
+      });
+      const content = await updateContent(contentId, (existing) => ({
+        ...existing,
+        slotId: slot.id,
+        status: 'approved',
+        approvedAt: new Date().toISOString(),
+      }));
+      return { content, slot };
     },
 
     async reopen(contentId) {
       await delay(latency(300, 500));
-      const content = await updateContent(contentId, (current) => ({ ...current, status: 'draft', approvedAt: null }));
-      return { content, slot: await setSlotStatus(content.slotId, 'toApprove') };
+      const current = (await contentsCollection.list()).find((content) => content.id === contentId);
+      if (!current?.slotId) throw new Error('Il contenuto non è in un’uscita');
+      const slotId = current.slotId;
+      const content = await updateContent(contentId, (existing) => ({ ...existing, status: 'draft', approvedAt: null }));
+      return { content, slot: await setSlotStatus(slotId, 'toApprove') };
     },
   };
 }

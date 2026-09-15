@@ -3,7 +3,7 @@ import { describe, expect, it } from '@jest/globals';
 import { currentVoiceCard } from '@/domain/brand';
 import { checkVoice, numbersToDigits, CHANNEL_LIMITS } from '@/domain/content';
 
-import { generateContent, rewriteText } from '../content-generator';
+import { generateContent, generateDirectContent, rewriteText } from '../content-generator';
 import { createDemoBrand, createDemoIdeas } from '../fixtures';
 
 const brand = createDemoBrand();
@@ -63,5 +63,24 @@ describe('checkVoice', () => {
 
   it('converte i numeri senza toccare il verbo essere', () => {
     expect(numbersToDigits('Tre clienti e sei pronto')).toBe('3 clienti e sei pronto');
+  });
+});
+
+describe('generateDirectContent', () => {
+  const source = { kind: 'prompt' as const, text: 'Da marzo il controllo fatture lo fa un modello di AI applicata ai processi.' };
+
+  it('scrive la bozza senza idea salvata, con titolo e tema ricavati dalla fonte', () => {
+    const direct = generateDirectContent(brand, source, ['linkedin', 'instagram'], 'carousel', 0, 'content_1');
+    expect(direct.title.length).toBeGreaterThan(10);
+    expect(direct.themeId).toBe(brand.themes[0].id);
+    expect(direct.variants.map((variant) => variant.channel)).toEqual(['linkedin', 'instagram']);
+    expect(direct.visual.slides.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('rifare la bozza cambia taglio', () => {
+    const titles = [0, 1, 2, 3].map(
+      (revision) => generateDirectContent(brand, source, ['linkedin'], 'post', revision, 'content_1').title,
+    );
+    expect(new Set(titles).size).toBeGreaterThan(1);
   });
 });

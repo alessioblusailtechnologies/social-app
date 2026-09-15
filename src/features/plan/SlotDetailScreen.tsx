@@ -60,6 +60,8 @@ export function SlotDetailScreen({ brand, slot }: { brand: Brand; slot: PlanSlot
 
   const idea = ideas.find((candidate) => candidate.id === slot.ideaId) ?? null;
   const theme = brand.themes.find((candidate) => candidate.id === slot.themeId) ?? null;
+  // Uscita nata da un contenuto creato direttamente: niente idea da scegliere o cambiare.
+  const directTitle = slot.ideaId === null ? (slot.contentTitle ?? null) : null;
   const allowed = selectedChannels(brand);
   const published = slot.status === 'published';
   const title = formatWeekdayLong(slot.date);
@@ -147,7 +149,13 @@ export function SlotDetailScreen({ brand, slot }: { brand: Brand; slot: PlanSlot
               </View>
             </>
           )}
-          {!idea && !picking && (
+          {directTitle && !picking && (
+            <>
+              <Text variant="heading">{directTitle}</Text>
+              <Text variant="caption">Contenuto creato direttamente, senza passare da un’idea.</Text>
+            </>
+          )}
+          {!idea && !directTitle && !picking && (
             <>
               <Text variant="body">Nessuna idea per questa uscita.</Text>
               <Button block onPress={() => setPicking(true)}>
@@ -260,7 +268,7 @@ export function SlotDetailScreen({ brand, slot }: { brand: Brand; slot: PlanSlot
         <Button
           size="lg"
           block
-          disabled={!idea}
+          disabled={!idea && !directTitle}
           onDisabledPress={() => toast('Scegli prima un’idea per questa uscita.')}
           onPress={() => router.push({ pathname: '/content/[slotId]', params: { slotId: slot.id } })}>
           Apri il contenuto
