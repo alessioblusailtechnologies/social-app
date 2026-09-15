@@ -1,13 +1,63 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { BrandDraft, ChannelId, Identity, SectionPatch } from '@/domain/brand';
-import type { Idea, IdeaDraft, IdeaSource, IdeaStatus } from '@/domain/idea';
+import type { Content, RewriteInstruction } from '@/domain/content';
+import type { Idea, IdeaDraft, IdeaFormat, IdeaSource, IdeaStatus } from '@/domain/idea';
 import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
 
 import { services } from './index';
 import type { SlotPatch, VoiceSample, Workspace } from './types';
 
 const planKey = (brandId: string) => ['plan', brandId] as const;
+const contentKey = (slotId: string) => ['content', slotId] as const;
+
+export function useSlotContent(slotId: string) {
+  return useQuery({ queryKey: contentKey(slotId), queryFn: () => services.contents.getForSlot(slotId) });
+}
+
+/** Le operazioni sul contenuto aggiornano insieme la bozza e lo stato dell'uscita nel piano. */
+function useContentWithSlot<V>(brandId: string, run: (variables: V) => Promise<{ content: Content; slot: PlanSlot }>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: run,
+    onSuccess: ({ content, slot }) => {
+      client.setQueryData(contentKey(slot.id), content);
+      client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => upsertSlot(slots, slot));
+    },
+  });
+}
+
+export function usePrepareContent(brandId: string) {
+  return useContentWithSlot(brandId, ({ slotId, format }: { slotId: string; format?: IdeaFormat }) =>
+    services.contents.prepare(slotId, format),
+  );
+}
+
+export function useApproveContent(brandId: string) {
+  return useContentWithSlot(brandId, (contentId: string) => services.contents.approve(contentId));
+}
+
+export function useReopenContent(brandId: string) {
+  return useContentWithSlot(brandId, (contentId: string) => services.contents.reopen(contentId));
+}
+
+export function useEditVariant() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contentId, channel, text }: { contentId: string; channel: ChannelId; text: string }) =>
+      services.contents.updateVariant(contentId, channel, text),
+    onSuccess: (content) => client.setQueryData(contentKey(content.slotId), content),
+  });
+}
+
+export function useRewriteVariant() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contentId, channel, instruction }: { contentId: string; channel: ChannelId; instruction: RewriteInstruction }) =>
+      services.contents.rewrite(contentId, channel, instruction),
+    onSuccess: (content) => client.setQueryData(contentKey(content.slotId), content),
+  });
+}
 
 const bySchedule = (a: PlanSlot, b: PlanSlot) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time);
 
@@ -60,7 +110,11 @@ export function useUpdateSlot(brandId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ slotId, patch }: { slotId: string; patch: SlotPatch }) => services.plan.updateSlot(slotId, patch),
-    onSuccess: (slot) => client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => upsertSlot(slots, slot)),
+    onSuccess: (slot, { patch }) => {
+      client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => upsertSlot(slots, slot));
+      // Con un'idea diversa la bozza non vale più.
+      if (patch.ideaId !== undefined) client.invalidateQueries({ queryKey: contentKey(slot.id) });
+    },
   });
 }
 
@@ -68,8 +122,10 @@ export function useRemoveSlot(brandId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (slotId: string) => services.plan.removeSlot(slotId),
-    onSuccess: (_, slotId) =>
-      client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => (slots ?? []).filter((slot) => slot.id !== slotId)),
+    onSuccess: (_, slotId) => {
+      client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => (slots ?? []).filter((slot) => slot.id !== slotId));
+      client.removeQueries({ queryKey: contentKey(slotId) });
+    },
   });
 }
 

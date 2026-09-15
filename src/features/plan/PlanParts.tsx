@@ -3,7 +3,6 @@ import { StyleSheet, View } from 'react-native';
 import {
   Badge,
   Dot,
-  LinkButton,
   Panel,
   PressableScale,
   StackedBar,
@@ -66,7 +65,12 @@ export function SlotCard({ slot, idea, theme, onPress, onFill }: SlotCardProps) 
         <Text variant="caption" numberOfLines={1} style={styles.flex}>
           {theme?.name ?? 'Senza tema'}
         </Text>
-        {!idea && onFill && <LinkButton label="Scegli un’idea" onPress={onFill} />}
+        {/* Solo testo: tutta la card apre già l'uscita, e un toccabile dentro un toccabile non è valido sul web. */}
+        {!idea && onFill && (
+          <Text variant="action" color={colors.textLink}>
+            Scegli un’idea
+          </Text>
+        )}
       </View>
     </PressableScale>
   );

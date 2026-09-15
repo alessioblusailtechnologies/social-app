@@ -64,7 +64,7 @@ function RootNavigator() {
         <Stack.Screen name="brands" options={{ presentation: 'modal' }} />
         <Stack.Screen name="new-idea" options={{ presentation: 'modal' }} />
         <Stack.Screen name="plan-session" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="create" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="content/[slotId]" />
       </Stack.Protected>
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="design-system" />

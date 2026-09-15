@@ -52,20 +52,22 @@ export function ChannelsEditor({ value, onChange, context }: EditorProps<Channel
               : 'Tocca per sceglierlo';
 
         return (
-          <PressableScale
-            key={id}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: state.selected }}
-            accessibilityLabel={`${name}. ${status}`}
-            onPress={() => update(id, state.selected ? { selected: false, handle: null } : { selected: true })}
-            style={[styles.card, state.selected && styles.cardSelected]}>
-            <ChannelMark channel={id} active={state.selected} />
-            <View style={styles.texts}>
-              <Text variant="strong">{name}</Text>
-              <Text variant="caption" color={connected ? colors.textTitle : colors.textBody}>
-                {status}
-              </Text>
-            </View>
+          // Selezione e collegamento affiancati, non annidati: sul web un bottone dentro un bottone non è valido.
+          <View key={id} style={[styles.card, state.selected && styles.cardSelected]}>
+            <PressableScale
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: state.selected }}
+              accessibilityLabel={`${name}. ${status}`}
+              onPress={() => update(id, state.selected ? { selected: false, handle: null } : { selected: true })}
+              style={styles.toggle}>
+              <ChannelMark channel={id} active={state.selected} />
+              <View style={styles.texts}>
+                <Text variant="strong">{name}</Text>
+                <Text variant="caption" color={connected ? colors.textTitle : colors.textBody}>
+                  {status}
+                </Text>
+              </View>
+            </PressableScale>
             {connected ? (
               <Button
                 size="sm"
@@ -81,7 +83,7 @@ export function ChannelsEditor({ value, onChange, context }: EditorProps<Channel
                 {connecting === id ? 'Collego…' : 'Collega'}
               </Button>
             )}
-          </PressableScale>
+          </View>
         );
       })}
       <Text variant="caption" style={[screenStyles.groupLabel, styles.note]}>
@@ -105,6 +107,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   cardSelected: { borderColor: colors.borderStrong },
+  toggle: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
   texts: { flex: 1, minWidth: 0, gap: 3 },
   note: { paddingTop: 4 },
 });

@@ -39,8 +39,9 @@ export function StackedBar({ segments, height = 10 }: { segments: { value: numbe
     <View style={[styles.stacked, { height }]}>
       {segments
         .filter((segment) => segment.value > 0)
-        .map((segment, i) => (
-          <View key={i} style={{ flex: segment.value, backgroundColor: segment.color }} />
+        // Destrutturato: il plugin dei worklet scambia `x.value` in uno style inline per uno shared value e avvisa.
+        .map(({ value, color }, i) => (
+          <View key={i} style={{ flex: value, backgroundColor: color }} />
         ))}
     </View>
   );

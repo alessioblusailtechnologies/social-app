@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import type { Content } from '@/domain/content';
 import type { Idea } from '@/domain/idea';
 import type { PlanSlot } from '@/domain/plan';
 
@@ -9,6 +10,7 @@ import type { Workspace } from '../types';
 const WORKSPACE_KEY = 'presenza/mock-db/v1';
 const IDEAS_KEY = 'presenza/mock-ideas/v1';
 const SLOTS_KEY = 'presenza/mock-plan/v1';
+const CONTENTS_KEY = 'presenza/mock-contents/v1';
 
 export async function readDatabase(): Promise<Workspace> {
   const raw = await AsyncStorage.getItem(WORKSPACE_KEY);
@@ -47,7 +49,8 @@ function createCollection<T>(key: string) {
 
 export const ideasCollection = createCollection<Idea>(IDEAS_KEY);
 export const slotsCollection = createCollection<PlanSlot>(SLOTS_KEY);
+export const contentsCollection = createCollection<Content>(CONTENTS_KEY);
 
 export async function clearDatabase(): Promise<void> {
-  await AsyncStorage.multiRemove([WORKSPACE_KEY, IDEAS_KEY, SLOTS_KEY]);
+  await AsyncStorage.multiRemove([WORKSPACE_KEY, IDEAS_KEY, SLOTS_KEY, CONTENTS_KEY]);
 }

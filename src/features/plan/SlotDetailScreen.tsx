@@ -262,7 +262,7 @@ export function SlotDetailScreen({ brand, slot }: { brand: Brand; slot: PlanSlot
           block
           disabled={!idea}
           onDisabledPress={() => toast('Scegli prima un’idea per questa uscita.')}
-          onPress={() => idea && router.push({ pathname: '/create', params: { ideaId: idea.id } })}>
+          onPress={() => router.push({ pathname: '/content/[slotId]', params: { slotId: slot.id } })}>
           Apri il contenuto
         </Button>
         {!published && (

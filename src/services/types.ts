@@ -12,7 +12,8 @@ import type {
   VoiceCard,
   VoiceSource,
 } from '@/domain/brand';
-import type { Idea, IdeaDraft, IdeaSource, IdeaStatus } from '@/domain/idea';
+import type { Content, RewriteInstruction } from '@/domain/content';
+import type { Idea, IdeaDraft, IdeaFormat, IdeaSource, IdeaStatus } from '@/domain/idea';
 import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
 
 export interface Workspace {
@@ -84,10 +85,23 @@ export interface PlanService {
   removeSlot(slotId: string): Promise<void>;
 }
 
+export interface ContentService {
+  getForSlot(slotId: string): Promise<Content | null>;
+  /** Prepara (o rifà) la bozza dall'idea dell'uscita, che passa a "Da approvare". */
+  prepare(slotId: string, format?: IdeaFormat): Promise<{ content: Content; slot: PlanSlot }>;
+  updateVariant(contentId: string, channel: ChannelId, text: string): Promise<Content>;
+  rewrite(contentId: string, channel: ChannelId, instruction: RewriteInstruction): Promise<Content>;
+  /** L'uscita passa a "Programmata". */
+  approve(contentId: string): Promise<{ content: Content; slot: PlanSlot }>;
+  /** Torna in bozza: l'uscita passa di nuovo a "Da approvare". */
+  reopen(contentId: string): Promise<{ content: Content; slot: PlanSlot }>;
+}
+
 export interface Services {
   brands: BrandService;
   ideas: IdeaService;
   plan: PlanService;
+  contents: ContentService;
   ai: AiService;
   channels: ChannelService;
 }
