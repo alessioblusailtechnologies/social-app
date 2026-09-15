@@ -1,0 +1,87 @@
+# Blueprint Render di Presenza: l'API (be-node) e l'app web statica.
+#
+# Render → New → Blueprint → questo repo. I segreti (sync: false) li chiede una volta alla
+# creazione: si copiano da be-node/.env. A ogni sync il Blueprint riscrive le variabili con
+# `value:`, quindi gli indirizzi si correggono qui e non nel pannello.
+# Passi e limiti in be-node/README.md, «Deploy su Render».
+services:
+  # --- API: Fastify, Supabase, Agent SDK ---------------------------------------
+  # Si costruisce dalla radice del repo: il bundle include src/domain e src/lib dell'app.
+  # Piano free per ora: si addormenta dopo 15 minuti senza richieste e ha 512 MB, stretti
+  # per il processo di Claude Code che ogni generazione AI avvia.
+  - type: web
+    name: presenza-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: master
+    # Con NODE_ENV=production npm salterebbe le dipendenze di sviluppo, e la build usa esbuild.
+    buildCommand: cd be-node && npm ci --include=dev && npm run build
+    startCommand: node be-node/dist/server.mjs
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    # Riparte solo quando cambia qualcosa che finisce nel bundle.
+    buildFilter:
+      paths:
+        - be-node/**
+        - src/domain/**
+        - src/lib/**
+        - src/services/mock/**
+        - src/services/types.ts
+        - src/design-system/tokens.ts
+        - render.yaml
+      ignoredPaths:
+        - be-node/test/**
+        - be-node/README.md
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: APP_TIME_ZONE
+        value: Europe/Rome
+      - key: AI_MODEL
+        value: claude-opus-5
+      # L'app web qui sotto. Se Render le assegna un altro sottodominio, va corretto qui.
+      - key: CORS_ORIGINS
+        value: https://presenza-app.onrender.com
+      # Il progetto Supabase di sviluppo, condiviso con Velia: schema `presenza`.
+      - key: SUPABASE_URL
+        value: https://hcxiloivukbdcfcugksg.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      # Ruolo presenza_app dal pooler in modalità sessione (porta 5432).
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+  # --- App web: export statico di Expo ------------------------------------------
+  - type: web
+    name: presenza-app
+    runtime: static
+    branch: master
+    buildCommand: npm ci && npx expo export --platform web
+    staticPublishPath: dist
+    autoDeployTrigger: commit
+    buildFilter:
+      ignoredPaths:
+        - be-node/**
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      # Finisce dentro il bundle al momento della build: se cambia, serve un nuovo deploy dell'app.
+      # Se Render assegna all'API un altro sottodominio, va corretto qui.
+      - key: EXPO_PUBLIC_API_URL
+        value: https://presenza-api.onrender.com/api
+    # L'app è una SPA: ogni percorso serve index.html e il routing lo fa Expo Router.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

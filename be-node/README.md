@@ -135,6 +135,36 @@ canale e una registrazione vera.
 Il collegamento dei canali (`ChannelService.connect`) resta simulato nell'app: nel prodotto vero è un flusso
 OAuth per canale, che non passa da qui.
 
+## Deploy su Render
+
+`render.yaml`, alla radice del repo, descrive due servizi:
+
+- `presenza-api`: questo BE, per ora sul piano free, regione Francoforte. Si costruisce dalla radice del repo
+  (`cd be-node && npm ci --include=dev && npm run build`) perché il bundle include `src/` dell'app; si avvia con
+  `node be-node/dist/server.mjs`, health check su `/api/health`. Riparte solo quando cambiano `be-node/` o i file
+  dell'app che il bundle importa.
+- `presenza-app`: l'export web di Expo come sito statico, con `EXPO_PUBLIC_API_URL` scritta nel bundle al momento
+  della build.
+
+Primo avvio:
+
+1. Render → *New* → *Blueprint* → repo `alessioblusailtechnologies/social-app`, ramo `master`.
+2. Render chiede i valori `sync: false`: `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`,
+   `DATABASE_URL` e `ANTHROPIC_API_KEY`, da copiare da `be-node/.env`.
+3. Se i nomi `presenza-api` o `presenza-app` sono già presi, Render assegna un altro sottodominio: si correggono
+   `CORS_ORIGINS` e `EXPO_PUBLIC_API_URL` in `render.yaml` (non nel pannello: la sync del Blueprint li riscriverebbe)
+   e si pusha.
+4. Controllo: `https://presenza-api.onrender.com/api/health` risponde `{"status":"ok"}`, poi una registrazione
+   dall'app.
+
+Da sapere:
+
+- il piano free si addormenta dopo 15 minuti senza richieste, e la prima risposta dopo può metterci un minuto;
+- ha 512 MB di memoria, e ogni generazione AI avvia un processo di Claude Code: due generazioni insieme possono
+  esaurirla. Per l'uso vero serve almeno il piano da 2 GB;
+- le migrazioni non girano al deploy: si applicano da locale con `npm run db:apply`, prima di pushare il codice che
+  le usa.
+
 ## Test
 
 `npm test` fa due giri. `test/unit.spec.ts` prova le funzioni pure. `test/api.spec.ts` gira contro il database e
