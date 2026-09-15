@@ -6,24 +6,25 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, PressableScale, Text, colors, layout, motion, palette, radii } from '@/design-system';
 
+// Le voci dicono cosa vuoi fare, non quale oggetto crei.
 const OPTIONS: { title: string; meta: string; icon: LucideIcon; href: Href }[] = [
   {
-    title: 'Nuova idea',
-    meta: 'Da una frase, un link o un documento: tre spunti da tenere o mettere nel piano.',
+    title: 'Scrivi un contenuto',
+    meta: 'Da una frase, un link o un documento: bozza per ogni canale, poi scegli quando esce.',
+    icon: PenLine,
+    href: '/new-content',
+  },
+  {
+    title: 'Trovami delle idee',
+    meta: 'Parti da una frase, un link o un documento: tre spunti da tenere o mettere nel piano.',
     icon: Lightbulb,
     href: '/new-idea',
   },
   {
-    title: 'Nuova pianificazione',
+    title: 'Pianifica',
     meta: 'Riempi le prossime settimane con le idee salvate, bilanciate sui temi.',
     icon: CalendarDays,
     href: '/plan-session',
-  },
-  {
-    title: 'Nuovo contenuto',
-    meta: 'Scrivi direttamente un post: bozza per ogni canale, poi scegli quando pubblicarlo.',
-    icon: PenLine,
-    href: '/new-content',
   },
 ];
 
@@ -43,7 +44,7 @@ export default function CreateSheet() {
         style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
         <View style={styles.handle} />
         <Text variant="label">Crea</Text>
-        <Text variant="title">Da dove partiamo?</Text>
+        <Text variant="title">Cosa vuoi fare?</Text>
         <View style={styles.options}>
           {OPTIONS.map(({ title, meta, icon: Icon, href }) => (
             <PressableScale

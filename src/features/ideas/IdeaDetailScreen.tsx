@@ -12,7 +12,6 @@ import {
   IconButton,
   LinkButton,
   Panel,
-  PatternGrid,
   ScreenFooter,
   Text,
   TopBar,
@@ -26,8 +25,13 @@ import { channelName } from '@/domain/catalog';
 import { FORMAT_LABELS, type Idea, type IdeaStatus } from '@/domain/idea';
 import { ChannelMark } from '@/features/brand-editors';
 import { formatWeekdayLong, formatWeekdayShort } from '@/lib/dates';
-import { seedFromString } from '@/lib/random';
-import { useAddIdeaToPlan, usePlan, useSetIdeaStatus } from '@/services/queries';
+import {
+  useAddIdeaToPlan,
+  useContentDrafts,
+  useCreateContentFromIdea,
+  usePlan,
+  useSetIdeaStatus,
+} from '@/services/queries';
 
 import { IdeaSignal } from './IdeaParts';
 
@@ -46,8 +50,12 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
   const toast = useToast();
   const setStatus = useSetIdeaStatus(brand.id);
   const { data: slots = [] } = usePlan(brand.id);
+  const { data: drafts = [] } = useContentDrafts(brand.id);
   const addToPlan = useAddIdeaToPlan(brand.id);
+  const createContent = useCreateContentFromIdea(brand.id);
   const plannedSlot = slots.find((slot) => slot.ideaId === idea.id);
+  /** Una bozza già scritta da questa idea e non ancora programmata. */
+  const draft = drafts.find((candidate) => candidate.ideaId === idea.id);
   const theme = brand.themes.find((candidate) => candidate.id === idea.themeId) ?? null;
   const badge = STATUS_BADGE[idea.status];
 
@@ -69,7 +77,7 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
         }
       />
       <ScrollView contentContainerStyle={screenStyles.content}>
-        <Card media={<PatternGrid columns={6} rows={2} seed={seedFromString(idea.id)} />} mediaHeight={88}>
+        <Card>
           <View style={styles.stack}>
             <IdeaSignal idea={idea} />
             <Text variant="title">{idea.title}</Text>
@@ -163,26 +171,52 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
             size="lg"
             block
             variant="secondary"
-            onPress={() => router.push({ pathname: '/slot/[id]', params: { id: plannedSlot.id } })}>
+            onPress={() => router.push({ pathname: '/content/[slotId]', params: { slotId: plannedSlot.id } })}>
             {`Nel piano · ${formatWeekdayShort(plannedSlot.date)} alle ${plannedSlot.time}`}
           </Button>
-        ) : (
+        ) : draft ? (
           <Button
             size="lg"
             block
-            busy={addToPlan.isPending}
-            onPress={() =>
-              addToPlan.mutate(idea.id, {
-                onSuccess: (slot) => {
-                  if (idea.status !== 'saved') setStatus.mutate({ ideaId: idea.id, status: 'saved' });
-                  toast(`Nel piano: ${formatWeekdayLong(slot.date)} alle ${slot.time}.`);
-                  router.push({ pathname: '/slot/[id]', params: { id: slot.id } });
-                },
-                onError: () => toast('Non riesco ad aggiungerla al piano. Riprova.'),
-              })
-            }>
-            {addToPlan.isPending ? 'Cerco il giorno giusto…' : 'Aggiungi al piano'}
+            onPress={() => router.push({ pathname: '/draft/[contentId]', params: { contentId: draft.id } })}>
+            Apri la bozza
           </Button>
+        ) : (
+          <>
+            <Button
+              size="lg"
+              block
+              busy={createContent.isPending}
+              disabled={addToPlan.isPending}
+              onPress={() =>
+                createContent.mutate(idea.id, {
+                  onSuccess: (content) => {
+                    if (idea.status !== 'saved') setStatus.mutate({ ideaId: idea.id, status: 'saved' });
+                    router.push({ pathname: '/draft/[contentId]', params: { contentId: content.id } });
+                  },
+                  onError: () => toast('Non riesco a preparare la bozza. Riprova.'),
+                })
+              }>
+              {createContent.isPending ? 'Sto scrivendo la bozza…' : 'Genera contenuto'}
+            </Button>
+            <Button
+              block
+              variant="secondary"
+              busy={addToPlan.isPending}
+              disabled={createContent.isPending}
+              onPress={() =>
+                addToPlan.mutate(idea.id, {
+                  onSuccess: (slot) => {
+                    if (idea.status !== 'saved') setStatus.mutate({ ideaId: idea.id, status: 'saved' });
+                    toast(`Nel piano: ${formatWeekdayLong(slot.date)} alle ${slot.time}.`);
+                    router.push({ pathname: '/content/[slotId]', params: { slotId: slot.id } });
+                  },
+                  onError: () => toast('Non riesco ad aggiungerla al piano. Riprova.'),
+                })
+              }>
+              {addToPlan.isPending ? 'Cerco il giorno giusto…' : 'Aggiungi al piano'}
+            </Button>
+          </>
         )}
         <View style={styles.secondary}>
           {idea.status === 'new' && (
@@ -196,12 +230,12 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
                 }}>
                 Scarta
               </Button>
-              <Button variant="secondary" style={styles.flex} onPress={() => change('saved', 'Idea salvata.')}>
+              <Button variant="ghost" style={styles.flex} onPress={() => change('saved', 'Idea salvata.')}>
                 Salva
               </Button>
             </>
           )}
-          {idea.status === 'saved' && !plannedSlot && (
+          {idea.status === 'saved' && !plannedSlot && !draft && (
             <Button
               variant="ghost"
               block

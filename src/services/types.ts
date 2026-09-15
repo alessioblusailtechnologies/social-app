@@ -92,6 +92,8 @@ export interface DirectContentRequest {
 }
 
 export interface ContentService {
+  /** Tutti i contenuti del brand, con o senza uscita. */
+  list(brandId: string): Promise<Content[]>;
   get(contentId: string): Promise<Content | null>;
   getForSlot(slotId: string): Promise<Content | null>;
   /** Contenuti creati direttamente e non ancora programmati. */
@@ -100,7 +102,12 @@ export interface ContentService {
   prepare(slotId: string, format?: IdeaFormat): Promise<{ content: Content; slot: PlanSlot }>;
   /** Nuovo contenuto senza idea né uscita: la bozza nasce dalla fonte. */
   createDirect(brandId: string, request: DirectContentRequest): Promise<Content>;
-  /** Rifà la bozza di un contenuto creato direttamente, con un altro taglio o formato. */
+  /** Bozza scritta subito da un'idea, senza passare dal piano: entra nel piano quando viene programmata. */
+  createFromIdea(brandId: string, ideaId: string): Promise<Content>;
+  /**
+   * Rifà la bozza di un contenuto che non viene da un'uscita, con un altro taglio o formato:
+   * dall'idea se c'è, altrimenti dalla richiesta dell'utente.
+   */
   regenerate(contentId: string, format?: IdeaFormat): Promise<Content>;
   updateVariant(contentId: string, channel: ChannelId, text: string): Promise<Content>;
   rewrite(contentId: string, channel: ChannelId, instruction: RewriteInstruction): Promise<Content>;

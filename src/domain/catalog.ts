@@ -35,12 +35,12 @@ export function kindLabel(kind: BrandKind): string {
   return KIND_OPTIONS.find((option) => option.kind === kind)?.label ?? '';
 }
 
-export const CHANNELS: { id: ChannelId; name: string; mark: string }[] = [
-  { id: 'linkedin', name: 'LinkedIn', mark: 'in' },
-  { id: 'instagram', name: 'Instagram', mark: 'ig' },
-  { id: 'facebook', name: 'Facebook', mark: 'fb' },
-  { id: 'tiktok', name: 'TikTok', mark: 'tt' },
-  { id: 'x', name: 'X', mark: 'X' },
+export const CHANNELS: { id: ChannelId; name: string }[] = [
+  { id: 'linkedin', name: 'LinkedIn' },
+  { id: 'instagram', name: 'Instagram' },
+  { id: 'facebook', name: 'Facebook' },
+  { id: 'tiktok', name: 'TikTok' },
+  { id: 'x', name: 'X' },
 ];
 
 export function channelName(id: ChannelId): string {

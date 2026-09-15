@@ -1,9 +1,12 @@
 import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
-import { Text, colors, palette, radii } from '@/design-system';
+import { Text, colors, palette } from '@/design-system';
 import type { ChannelId, Identity, Visual } from '@/domain/brand';
-import { CHANNELS } from '@/domain/catalog';
+import { channelName } from '@/domain/catalog';
+
+import { CHANNEL_ICONS } from './channel-icons';
 
 /** Logo del brand o, in sua assenza, le iniziali in navy. */
 export function BrandAvatar({
@@ -53,22 +56,19 @@ export function Swatches({ colors: swatches, size = 18 }: { colors: readonly str
   );
 }
 
-/** Monogramma del canale: pieno se il brand lo usa, a filo se no. */
+/** Il logo vero del canale: nel colore del marchio se il brand lo usa, grigio se no. */
 export function ChannelMark({ channel, active, size = 36 }: { channel: ChannelId; active: boolean; size?: number }) {
-  const mark = CHANNELS.find(({ id }) => id === channel)?.mark ?? '';
+  const icon = CHANNEL_ICONS[channel];
+  const glyph = Math.round(size * 0.78);
   return (
     <View
-      style={[
-        styles.mark,
-        { width: size, height: size, borderRadius: size / 4 },
-        active ? styles.markActive : styles.markIdle,
-      ]}>
-      <Text
-        weight="bold"
-        color={active ? palette.white : colors.textBody}
-        style={{ fontSize: size / 3, lineHeight: size / 3 + 3 }}>
-        {mark}
-      </Text>
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={channelName(channel)}
+      style={[styles.mark, { width: size, height: size }]}>
+      <Svg width={glyph} height={glyph} viewBox="0 0 24 24">
+        <Path d={icon.path} fill={active ? icon.color : palette.grey300} />
+      </Svg>
     </View>
   );
 }
@@ -77,7 +77,5 @@ const styles = StyleSheet.create({
   monogram: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.actionPrimary },
   swatches: { flexDirection: 'row', gap: 5 },
   swatch: { borderWidth: 1, borderColor: palette.grey100 },
-  mark: { alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
-  markActive: { backgroundColor: colors.actionPrimary, borderColor: colors.actionPrimary },
-  markIdle: { borderColor: colors.borderField, borderRadius: radii.sm },
+  mark: { alignItems: 'center', justifyContent: 'center' },
 });

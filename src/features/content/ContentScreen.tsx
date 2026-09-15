@@ -25,10 +25,11 @@ import { currentVoiceCard, isConnected, type Brand, type ChannelId } from '@/dom
 import { channelName } from '@/domain/catalog';
 import { CHANNEL_LIMITS, checkVoice, REWRITE_INSTRUCTIONS, type Content } from '@/domain/content';
 import { FORMAT_LABELS, type IdeaFormat, type IdeaSource } from '@/domain/idea';
-import { BEST_TIMES, nextFreeDay, SLOT_STATUS_LABELS, type PlanSlot } from '@/domain/plan';
+import { nextFreeDay, SLOT_STATUS_LABELS, type PlanSlot } from '@/domain/plan';
 import { ChannelMark } from '@/features/brand-editors';
 import { SLOT_TONES } from '@/features/plan/PlanParts';
-import { addDays, formatWeekdayLong, formatWeekdayShort, today } from '@/lib/dates';
+import { DayTimePicker, IdeaPicker, RemoveFromPlan, SlotSchedule } from '@/features/plan/SlotPanels';
+import { formatWeekdayShort, today } from '@/lib/dates';
 import {
   useApproveContent,
   useEditVariant,
@@ -44,9 +45,6 @@ import {
 import { PostPreview, ScenesPanel, VoicePanel } from './ContentParts';
 
 const FORMATS = Object.keys(FORMAT_LABELS) as IdeaFormat[];
-const TIMES = ['08:30', '12:30', '13:00', '18:30', '19:00'];
-
-const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 function describeBrief(brief: IdeaSource): string {
   if (brief.kind === 'prompt') return brief.text;
@@ -67,7 +65,11 @@ export interface ContentScreenProps {
   loading: boolean;
 }
 
-export function ContentScreen({ brand, slot, content, loading }: ContentScreenProps) {
+/**
+ * Tutto quello che riguarda un'uscita sta qui: giorno, canali e idea in testa,
+ * poi la bozza da preparare, ritoccare e approvare.
+ */
+export function ContentScreen({ brand, slot, content: loaded, loading }: ContentScreenProps) {
   const router = useRouter();
   const toast = useToast();
   const { data: ideas = [] } = useIdeas(brand.id);
@@ -84,10 +86,15 @@ export function ContentScreen({ brand, slot, content, loading }: ContentScreenPr
   const [editing, setEditing] = useState(false);
   const [draftText, setDraftText] = useState('');
   const [when, setWhen] = useState<{ date: string; time: string } | null>(null);
+  const [picking, setPicking] = useState(false);
 
-  const ideaId = content?.ideaId ?? slot?.ideaId ?? null;
+  // Cambiata l'idea, la bozza vecchia resta in cache finché non si ricarica: non va mostrata.
+  const content = loaded && slot && loaded.ideaId !== slot.ideaId ? null : loaded;
+  const ideaId = slot ? slot.ideaId : (content?.ideaId ?? null);
   const idea = ideas.find((candidate) => candidate.id === ideaId) ?? null;
   const direct = content !== null && content.ideaId === null;
+  /** Un'uscita senza idea e senza un contenuto creato direttamente. */
+  const empty = slot !== null && slot.ideaId === null && !slot.contentTitle;
   const channels = slot?.channels ?? content?.channels ?? [];
   const channel = selectedChannel ?? channels[0];
   const variant = content?.variants.find((candidate) => candidate.channel === channel) ?? content?.variants[0] ?? null;
@@ -96,6 +103,7 @@ export function ContentScreen({ brand, slot, content, loading }: ContentScreenPr
   const published = slot?.status === 'published';
   const approved = content?.status === 'approved';
   const locked = approved || published;
+  const showPicker = slot !== null && !locked && (picking || empty);
   const busy = prepare.isPending || regenerate.isPending;
   const unconnected = channels.filter((candidate) => !isConnected(brand.channels[candidate]));
   const missing = content ? channels.filter((candidate) => !content.variants.some((v) => v.channel === candidate)) : [];
@@ -114,7 +122,8 @@ export function ContentScreen({ brand, slot, content, loading }: ContentScreenPr
       },
       onError: () => toast('Non riesco a preparare la bozza. Riprova.'),
     };
-    if (direct && content) regenerate.mutate({ contentId: content.id, format: nextFormat }, options);
+    // La bozza di un'uscita si rifà dall'uscita; le altre (dirette o scritte da un'idea senza data) dal contenuto.
+    if (content && (direct || !content.slotId)) regenerate.mutate({ contentId: content.id, format: nextFormat }, options);
     else if (slot) prepare.mutate({ slotId: slot.id, format: nextFormat }, options);
   };
 
@@ -170,11 +179,6 @@ export function ContentScreen({ brand, slot, content, loading }: ContentScreenPr
     );
   };
 
-  const days = Array.from({ length: 14 }, (_, i) => addDays(today(), i + 1));
-  const times = [...new Set([when?.time ?? '', channels[0] ? BEST_TIMES[channels[0]].time : '', ...TIMES])]
-    .filter(Boolean)
-    .sort();
-
   return (
     <KeyboardAvoidingView style={screenStyles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <TopBar
@@ -195,24 +199,31 @@ export function ContentScreen({ brand, slot, content, loading }: ContentScreenPr
 
       <ScrollView contentContainerStyle={screenStyles.content} keyboardShouldPersistTaps="handled">
         <Panel gap={10}>
-          <View style={styles.row}>
-            <Text variant="strongSmall" style={styles.flex}>
-              {slot ? `${capitalize(formatWeekdayLong(slot.date))} · ${slot.time}` : 'Non ancora programmato'}
-            </Text>
-            <View style={styles.marks}>
-              {channels.map((candidate) => (
-                <ChannelMark key={candidate} channel={candidate} active size={24} />
-              ))}
+          {slot ? (
+            <SlotSchedule brand={brand} slot={slot} canMove={!published} canChangeChannels={!locked && !direct} />
+          ) : (
+            <View style={styles.row}>
+              <Text variant="strongSmall" style={styles.flex}>
+                Non ancora programmato
+              </Text>
+              <View style={styles.marks}>
+                {channels.map((candidate) => (
+                  <ChannelMark key={candidate} channel={candidate} active size={24} />
+                ))}
+              </View>
             </View>
-          </View>
-          {idea && (
+          )}
+          {idea && !showPicker && (
             <View style={styles.origin}>
               <Text variant="label">Dall’idea</Text>
               <Text variant="strong">{idea.title}</Text>
-              <LinkButton
-                label="Apri l’idea"
-                onPress={() => router.push({ pathname: '/idea/[id]', params: { id: idea.id } })}
-              />
+              <View style={styles.links}>
+                <LinkButton
+                  label="Apri l’idea"
+                  onPress={() => router.push({ pathname: '/idea/[id]', params: { id: idea.id } })}
+                />
+                {slot && !locked && <LinkButton label="Cambia idea" onPress={() => setPicking(true)} />}
+              </View>
             </View>
           )}
           {!idea && content?.brief && (
@@ -223,19 +234,26 @@ export function ContentScreen({ brand, slot, content, loading }: ContentScreenPr
               </Text>
             </View>
           )}
-          {!idea && !content && !loading && (
-            <Text variant="body">Questa uscita non ha ancora un’idea: sceglila dal piano.</Text>
-          )}
         </Panel>
 
-        {(loading || busy) && (
+        {showPicker && slot && (
+          <IdeaPicker
+            brand={brand}
+            slot={slot}
+            hasDraft={content !== null}
+            onCancel={empty ? undefined : () => setPicking(false)}
+            onDone={() => setPicking(false)}
+          />
+        )}
+
+        {(loading || busy) && !empty && (
           <Panel gap={12}>
             <Text variant="strongSmall">{busy ? `Sto scrivendo per ${channelNames}` : 'Carico la bozza'}</Text>
             <SkeletonLines widths={[96, 88, 100, 72, 60]} />
           </Panel>
         )}
 
-        {!loading && !busy && !content && idea && (
+        {!loading && !busy && !content && idea && !showPicker && (
           <Panel label="Da preparare" gap={10}>
             <Text variant="body" color={colors.textTitle}>
               Scrivo il testo per {channelNames} seguendo la tua scheda voce e preparo il visivo del formato.
@@ -358,22 +376,7 @@ export function ContentScreen({ brand, slot, content, loading }: ContentScreenPr
 
             {when && !content.slotId && !locked && (
               <Panel label="Quando esce" gap={10}>
-                <ChipGroup>
-                  {days.map((day) => (
-                    <Chip
-                      key={day}
-                      size="sm"
-                      label={formatWeekdayShort(day)}
-                      selected={day === when.date}
-                      onPress={() => setWhen({ ...when, date: day })}
-                    />
-                  ))}
-                </ChipGroup>
-                <ChipGroup>
-                  {times.map((time) => (
-                    <Chip key={time} size="sm" label={time} selected={time === when.time} onPress={() => setWhen({ ...when, time })} />
-                  ))}
-                </ChipGroup>
+                <DayTimePicker date={when.date} time={when.time} channel={channels[0]} onChange={setWhen} />
                 <Text variant="caption">
                   Ti propongo il primo giorno libero adatto a {channelName(channels[0])}. Entra nel piano come le altre uscite.
                 </Text>
@@ -390,9 +393,15 @@ export function ContentScreen({ brand, slot, content, loading }: ContentScreenPr
             )}
           </>
         )}
+
+        {slot && !published && !loading && (
+          <View style={styles.remove}>
+            <RemoveFromPlan brand={brand} slot={slot} direct={direct} onRemoved={close} />
+          </View>
+        )}
       </ScrollView>
 
-      {!published && !loading && (idea || content) && (
+      {!published && !loading && !showPicker && (idea || content) && (
         <ScreenFooter>
           {!content && (
             <Button size="lg" block busy={prepare.isPending} onPress={() => redo()}>
@@ -479,4 +488,5 @@ const styles = StyleSheet.create({
   origin: { gap: 4, borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingTop: 10 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
   links: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 18 },
+  remove: { alignItems: 'center' },
 });

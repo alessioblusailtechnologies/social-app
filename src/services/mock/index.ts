@@ -330,6 +330,11 @@ function updateContent(contentId: string, change: (content: Content) => Content)
 
 function createMockContentService(): ContentService {
   return {
+    async list(brandId) {
+      await delay(latency(150, 300));
+      return (await contentsCollection.list()).filter((content) => content.brandId === brandId);
+    },
+
     async getForSlot(slotId) {
       await delay(latency(150, 300));
       return (await contentsCollection.list()).find((content) => content.slotId === slotId) ?? null;
@@ -425,14 +430,53 @@ function createMockContentService(): ContentService {
       return contentsCollection.update((contents) => ({ items: [...contents, content], result: content }));
     },
 
+    async createFromIdea(brandId, ideaId) {
+      const brand = await brandById(brandId);
+      const idea = (await ideasCollection.list()).find((candidate) => candidate.id === ideaId);
+      if (!idea) throw new Error('Idea non trovata');
+      await delay(latency(2400, 3200));
+      const allowed = selectedChannels(brand);
+      const fitting = idea.channels.filter((channel) => allowed.includes(channel));
+      const channels: ChannelId[] = fitting.length > 0 ? fitting : allowed.length > 0 ? allowed : ['linkedin'];
+      const now = new Date().toISOString();
+      const content: Content = {
+        id: createId('content'),
+        brandId,
+        slotId: null,
+        ideaId: idea.id,
+        brief: null,
+        title: idea.title,
+        themeId: idea.themeId,
+        channels,
+        ...generateContent(brand, idea, channels, idea.formats[0] ?? 'post', 0),
+        status: 'draft',
+        revision: 0,
+        createdAt: now,
+        updatedAt: now,
+        approvedAt: null,
+      };
+      return contentsCollection.update((contents) => ({ items: [...contents, content], result: content }));
+    },
+
     async regenerate(contentId, format) {
       const current = (await contentsCollection.list()).find((content) => content.id === contentId);
-      if (!current?.brief) throw new Error('Da qui si rifanno solo i contenuti creati direttamente');
-      const brief = current.brief;
+      if (!current) throw new Error('Contenuto non trovato');
+      const idea = current.ideaId
+        ? (await ideasCollection.list()).find((candidate) => candidate.id === current.ideaId)
+        : undefined;
       const brand = await brandById(current.brandId);
-      await delay(latency(2400, 3200));
+      const nextFormat = format ?? current.format;
       const revision = current.revision + 1;
-      const generated = generateDirectContent(brand, brief, current.channels, format ?? current.format, revision, current.id);
+      let generated;
+      if (idea) {
+        await delay(latency(2400, 3200));
+        generated = generateContent(brand, idea, current.channels, nextFormat, revision);
+      } else if (current.brief) {
+        await delay(latency(2400, 3200));
+        generated = generateDirectContent(brand, current.brief, current.channels, nextFormat, revision, current.id);
+      } else {
+        throw new Error('Non so da cosa rifare la bozza');
+      }
       return updateContent(contentId, (existing) => ({ ...existing, ...generated, revision, status: 'draft', approvedAt: null }));
     },
 
@@ -465,10 +509,11 @@ function createMockContentService(): ContentService {
               time,
               channels: current.channels,
               themeId: current.themeId,
-              ideaId: null,
+              // Una bozza scritta da un'idea porta l'idea nell'uscita, così l'idea risulta nel piano.
+              ideaId: current.ideaId,
               contentTitle: current.title,
               status,
-              origin: 'manual',
+              origin: current.ideaId ? 'idea' : 'manual',
               createdAt: new Date().toISOString(),
             };
         return {

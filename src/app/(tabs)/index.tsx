@@ -1,17 +1,8 @@
-import { WorkInProgress } from '@/features/wip/WorkInProgress';
+import { HomeScreen } from '@/features/home/HomeScreen';
+import { useActiveBrand } from '@/services/queries';
 
-export default function HomeScreen() {
-  return (
-    <WorkInProgress
-      section="Home"
-      title="La tua giornata"
-      description="Cosa esce oggi, cosa aspetta la tua approvazione e cosa manca al piano della settimana."
-      upcoming={[
-        'Contenuti in coda e prossime uscite',
-        'Promemoria per approvazioni e scene da girare',
-        'Equilibrio dei temi rispetto ai pesi scelti',
-      ]}
-      seed={23}
-    />
-  );
+export default function HomeRoute() {
+  const { brand } = useActiveBrand();
+  if (!brand) return null;
+  return <HomeScreen key={brand.id} brand={brand} />;
 }

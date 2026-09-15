@@ -31,20 +31,22 @@ export interface SlotCardProps {
   onPress: () => void;
   /** Mostra l'azione "Scegli un'idea" sulle uscite vuote. */
   onFill?: () => void;
+  /** Giorno e ora al posto del solo orario, per le liste fuori dal calendario. */
+  when?: string;
 }
 
-export function SlotCard({ slot, idea, theme, onPress, onFill }: SlotCardProps) {
+export function SlotCard({ slot, idea, theme, onPress, onFill, when }: SlotCardProps) {
   // Le uscite nate da un contenuto creato direttamente non hanno idea, ma hanno il titolo del contenuto.
   const title = idea?.title ?? slot.contentTitle ?? null;
   const label = title ?? (theme ? `Serve un contenuto su «${theme.name}»` : 'Serve un contenuto');
   return (
     <PressableScale
       accessibilityRole="button"
-      accessibilityLabel={`${slot.time}, ${SLOT_STATUS_LABELS[slot.status]}. ${label}`}
+      accessibilityLabel={`${when ?? slot.time}, ${SLOT_STATUS_LABELS[slot.status]}. ${label}`}
       onPress={onPress}
       style={[styles.card, !title && styles.cardEmpty]}>
       <View style={styles.row}>
-        <Text variant="strongSmall">{slot.time}</Text>
+        <Text variant="strongSmall">{when ?? slot.time}</Text>
         <View style={styles.marks}>
           {slot.channels.map((channel) => (
             <ChannelMark key={channel} channel={channel} active size={24} />

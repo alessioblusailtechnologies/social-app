@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Minus, Plus, X } from 'lucide-react-native';
+import { Minus, Plus, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -12,7 +12,6 @@ import {
   IconButton,
   LinkButton,
   Panel,
-  ProgressSegments,
   ScreenFooter,
   ScreenTitle,
   SegmentedControl,
@@ -25,91 +24,72 @@ import {
   useToast,
 } from '@/design-system';
 import type { Brand, ChannelId } from '@/domain/brand';
-import { CHANNELS } from '@/domain/catalog';
+import { CHANNELS, channelName } from '@/domain/catalog';
 import { channelsWithIdea, rankIdeasForSlot, selectedChannels, type SlotDraft } from '@/domain/plan';
 import { ChannelMark } from '@/features/brand-editors';
 import { addDays, formatRange, formatWeekdayLong, startOfWeek, today } from '@/lib/dates';
-import { useConfirmPlan, useIdeas, usePlan, useProposePlan } from '@/services/queries';
+import { useConfirmPlan, useIdeas, usePlan, usePlanProposal } from '@/services/queries';
 
 import { BalancePanel } from './PlanParts';
-
-const STEPS = [
-  {
-    title: 'Periodo e ritmo',
-    subtitle: 'Per quanto tempo pianifichiamo e con che ritmo. I valori partono dal tuo profilo.',
-  },
-  {
-    title: 'Le uscite',
-    subtitle: 'Giorni, orari e canali, con il tema che ogni uscita dovrebbe coprire. Togli quelle che non vuoi.',
-  },
-  {
-    title: 'Le idee',
-    subtitle: 'Per ogni uscita ho scelto un’idea salvata dello stesso tema. Cambiala se non ti convince.',
-  },
-  {
-    title: 'Riepilogo',
-    subtitle: 'Controlla l’equilibrio e conferma: le uscite finiscono nel piano.',
-  },
-];
 
 type Weeks = '1' | '2' | '4';
 type Start = 'tomorrow' | 'nextWeek';
 
+interface ProposalItem {
+  draft: SlotDraft;
+  /** Il tema chiesto dallo scheletro, che resta il criterio anche quando cambi idea. */
+  target: string | null;
+}
+
+/** La pianificazione in una schermata: parte dai valori del profilo e mostra subito le uscite già riempite. */
 export function PlanSessionScreen({ brand }: { brand: Brand }) {
   const router = useRouter();
   const toast = useToast();
   const { data: slots = [] } = usePlan(brand.id);
   const { data: ideas = [] } = useIdeas(brand.id);
-  const propose = useProposePlan(brand.id);
   const confirm = useConfirmPlan(brand.id);
   const now = today();
 
-  const [step, setStep] = useState(0);
   const [start, setStart] = useState<Start>('tomorrow');
   const [weeks, setWeeks] = useState<Weeks>('2');
   const [perWeek, setPerWeek] = useState(brand.positioning.postsPerWeek);
   const [channels, setChannels] = useState<ChannelId[]>(() => selectedChannels(brand));
-  const [drafts, setDrafts] = useState<SlotDraft[]>([]);
-  /** Il tema chiesto dallo scheletro, che resta il criterio anche quando cambi idea. */
-  const [targets, setTargets] = useState<(string | null)[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const startDate = start === 'tomorrow' ? addDays(now, 1) : addDays(startOfWeek(now), 7);
   const endDate = addDays(startDate, Number(weeks) * 7 - 1);
+  const proposal = usePlanProposal(brand.id, { startDate, weeks: Number(weeks), perWeek, channels });
+
+  // Le modifiche valgono per la proposta su cui sono state fatte: cambiando periodo, ritmo o canali si riparte da quella nuova.
+  const [edited, setEdited] = useState<{ source: SlotDraft[]; items: ProposalItem[] } | null>(null);
+  const items: ProposalItem[] = !proposal.data
+    ? []
+    : edited?.source === proposal.data
+      ? edited.items
+      : proposal.data.map((draft) => ({ draft, target: draft.themeId }));
+  const setItems = (next: ProposalItem[]) => {
+    if (proposal.data) setEdited({ source: proposal.data, items: next });
+  };
+  const drafts = items.map((item) => item.draft);
   const withIdea = drafts.filter((draft) => draft.ideaId !== null).length;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/plan'));
   const ideaOf = (draft: SlotDraft) => ideas.find((idea) => idea.id === draft.ideaId) ?? null;
   const themeOf = (themeId: string | null) => brand.themes.find((theme) => theme.id === themeId) ?? null;
 
-  const runProposal = () =>
-    propose.mutate(
-      { startDate, weeks: Number(weeks), perWeek, channels },
-      {
-        onSuccess: (proposal) => {
-          setDrafts(proposal);
-          setTargets(proposal.map((draft) => draft.themeId));
-          setStep(1);
-        },
-        onError: () => toast('Non riesco a preparare le uscite. Riprova.'),
-      },
-    );
-
-  const removeDraft = (index: number) => {
-    setDrafts(drafts.filter((_, i) => i !== index));
-    setTargets(targets.filter((_, i) => i !== index));
-  };
-
   const updateDraft = (index: number, patch: Partial<SlotDraft>) =>
-    setDrafts(drafts.map((draft, i) => (i === index ? { ...draft, ...patch } : draft)));
+    setItems(items.map((item, i) => (i === index ? { ...item, draft: { ...item.draft, ...patch } } : item)));
+
+  const removeDraft = (index: number) => setItems(items.filter((_, i) => i !== index));
 
   const changeIdea = (index: number) => {
-    const draft = drafts[index];
+    const { draft, target } = items[index];
     const used = new Set(
       [...slots.map((slot) => slot.ideaId), ...drafts.filter((_, i) => i !== index).map((other) => other.ideaId)].filter(
         (id): id is string => id !== null,
       ),
     );
-    const options = rankIdeasForSlot({ ...draft, themeId: targets[index] }, ideas, used);
+    const options = rankIdeasForSlot({ ...draft, themeId: target }, ideas, used);
     if (options.length === 0) {
       toast('Non ci sono altre idee salvate libere: salvane qualcuna dalle Idee.');
       return;
@@ -121,24 +101,26 @@ export function PlanSessionScreen({ brand }: { brand: Brand }) {
     }
     updateDraft(index, {
       ideaId: next.id,
-      themeId: next.themeId ?? targets[index],
+      themeId: next.themeId ?? target,
       channels: channelsWithIdea({ ...draft, channels: [draft.channels[0]] }, next, channels),
     });
   };
 
-  const clearIdea = (index: number) =>
-    updateDraft(index, { ideaId: null, themeId: targets[index], channels: [drafts[index].channels[0]] });
+  const clearIdea = (index: number) => {
+    const { draft, target } = items[index];
+    updateDraft(index, { ideaId: null, themeId: target, channels: [draft.channels[0]] });
+  };
 
   const toggleChannel = (channel: ChannelId) => {
-    if (channels.includes(channel)) {
-      if (channels.length === 1) {
-        toast('Serve almeno un canale.');
-        return;
-      }
-      setChannels(channels.filter((entry) => entry !== channel));
-    } else {
+    if (!channels.includes(channel)) {
       setChannels([...channels, channel]);
+      return;
     }
+    if (channels.length === 1) {
+      toast('Serve almeno un canale.');
+      return;
+    }
+    setChannels(channels.filter((entry) => entry !== channel));
   };
 
   const confirmPlan = () =>
@@ -150,198 +132,170 @@ export function PlanSessionScreen({ brand }: { brand: Brand }) {
       onError: () => toast('Non sono riuscito a salvare il piano. Riprova.'),
     });
 
-  const slotHeader = (draft: SlotDraft) => (
-    <View style={styles.row}>
-      <Text variant="strongSmall" style={styles.flex}>
-        {formatWeekdayLong(draft.date)} · {draft.time}
-      </Text>
-      <View style={styles.marks}>
-        {draft.channels.map((channel) => (
-          <ChannelMark key={channel} channel={channel} active size={24} />
-        ))}
-      </View>
-    </View>
-  );
-
-  const themeLine = (themeId: string | null) => {
-    const theme = themeOf(themeId);
-    return (
-      <View style={styles.row}>
-        {theme && <Dot color={theme.color} size={8} />}
-        <Text variant="caption" numberOfLines={1} style={styles.flex}>
-          {theme?.name ?? 'Senza tema'}
-        </Text>
-      </View>
-    );
-  };
-
-  const footer = [
-    <Button
-      key="0"
-      size="lg"
-      block
-      busy={propose.isPending}
-      onPress={runProposal}>
-      {propose.isPending ? 'Sto distribuendo le uscite…' : 'Proponi le uscite'}
-    </Button>,
-    <Button
-      key="1"
-      size="lg"
-      block
-      disabled={drafts.length === 0}
-      onDisabledPress={() => toast('Non è rimasta nessuna uscita: torna indietro e cambia periodo.')}
-      onPress={() => setStep(2)}>
-      Continua
-    </Button>,
-    <Button key="2" size="lg" block onPress={() => setStep(3)}>
-      Continua
-    </Button>,
-    <Button key="3" size="lg" block variant="accent" busy={confirm.isPending} onPress={confirmPlan}>
-      {confirm.isPending ? 'Salvo il piano…' : 'Conferma il piano'}
-    </Button>,
-  ][step];
-
   return (
     <View style={screenStyles.screen}>
       <TopBar
         safeArea={Platform.OS !== 'ios'}
-        left={
-          step > 0 ? (
-            <IconButton icon={ChevronLeft} accessibilityLabel="Passo precedente" onPress={() => setStep(step - 1)} />
-          ) : undefined
-        }
-        title={`Pianifica · passo ${step + 1} di ${STEPS.length}`}
-        right={<IconButton icon={X} accessibilityLabel="Chiudi" onPress={close} />}>
-        <ProgressSegments count={STEPS.length} current={step} />
-      </TopBar>
+        title="Pianifica"
+        right={<IconButton icon={X} accessibilityLabel="Chiudi" onPress={close} />}
+      />
 
       <ScrollView contentContainerStyle={screenStyles.content}>
-        <ScreenTitle title={STEPS[step].title} subtitle={STEPS[step].subtitle} />
+        <ScreenTitle
+          title="Le prossime settimane"
+          subtitle="Distribuisco le uscite nei giorni migliori e le riempio con le tue idee salvate, rispettando i pesi dei temi."
+        />
 
-        {step === 0 && propose.isPending && (
+        <Panel gap={10}>
+          <View style={styles.row}>
+            <View style={styles.flex}>
+              <Text variant="strongSmall">{formatRange(startDate, endDate)}</Text>
+              <Text variant="caption" numberOfLines={2}>
+                {perWeek} a settimana · {channels.map(channelName).join(' · ')}
+              </Text>
+            </View>
+            <LinkButton label={settingsOpen ? 'Fatto' : 'Modifica'} onPress={() => setSettingsOpen(!settingsOpen)} />
+          </View>
+
+          {settingsOpen && (
+            <>
+              <View style={styles.section}>
+                <Text variant="label">Quando</Text>
+                <SegmentedControl
+                  accessibilityLabel="Inizio"
+                  value={start}
+                  onChange={setStart}
+                  options={[
+                    { value: 'tomorrow', label: 'Da domani' },
+                    { value: 'nextWeek', label: 'Dalla prossima settimana' },
+                  ]}
+                />
+                <SegmentedControl
+                  accessibilityLabel="Durata"
+                  value={weeks}
+                  onChange={setWeeks}
+                  options={[
+                    { value: '1', label: '1 settimana' },
+                    { value: '2', label: '2 settimane' },
+                    { value: '4', label: '4 settimane' },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.section}>
+                <Text variant="label">Ritmo</Text>
+                <View style={styles.stepper}>
+                  <IconButton
+                    icon={Minus}
+                    variant="outline"
+                    size={44}
+                    accessibilityLabel="Meno contenuti"
+                    disabled={perWeek <= 1}
+                    onPress={() => setPerWeek(Math.max(1, perWeek - 1))}
+                  />
+                  <View style={styles.stepperValue}>
+                    <Text variant="heading" align="center">
+                      {perWeek} a settimana
+                    </Text>
+                    <Text variant="caption" align="center">
+                      {perWeek * Number(weeks)} contenuti in tutto · dal profilo: {brand.positioning.postsPerWeek}
+                    </Text>
+                  </View>
+                  <IconButton
+                    icon={Plus}
+                    variant="outline"
+                    size={44}
+                    accessibilityLabel="Più contenuti"
+                    disabled={perWeek >= 7}
+                    onPress={() => setPerWeek(Math.min(7, perWeek + 1))}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <Text variant="label">Canali</Text>
+                <ChipGroup>
+                  {CHANNELS.filter(({ id }) => brand.channels[id].selected).map(({ id, name }) => (
+                    <Chip key={id} size="sm" label={name} selected={channels.includes(id)} onPress={() => toggleChannel(id)} />
+                  ))}
+                </ChipGroup>
+                <Text variant="caption">
+                  Ogni contenuto esce su un canale e, se il formato è adatto, anche sugli altri. Cambiando queste scelte rifaccio
+                  la proposta.
+                </Text>
+              </View>
+            </>
+          )}
+        </Panel>
+
+        {proposal.isPending ? (
           <Panel gap={12} style={styles.bigPanel}>
             <Text variant="strongSmall">Sto distribuendo le uscite nei giorni migliori</Text>
             <SkeletonLines widths={[90, 72, 100, 64]} />
           </Panel>
-        )}
-
-        {step === 0 && !propose.isPending && (
+        ) : proposal.isError ? (
+          <Panel gap={10}>
+            <Text variant="body" color={colors.textTitle}>
+              Non riesco a preparare le uscite.
+            </Text>
+            <Button variant="secondary" onPress={() => proposal.refetch()}>
+              Riprova
+            </Button>
+          </Panel>
+        ) : (
           <>
-            <Panel label="Quando" gap={10}>
-              <SegmentedControl
-                accessibilityLabel="Inizio"
-                value={start}
-                onChange={setStart}
-                options={[
-                  { value: 'tomorrow', label: 'Da domani' },
-                  { value: 'nextWeek', label: 'Dalla prossima settimana' },
-                ]}
-              />
-              <SegmentedControl
-                accessibilityLabel="Durata"
-                value={weeks}
-                onChange={setWeeks}
-                options={[
-                  { value: '1', label: '1 settimana' },
-                  { value: '2', label: '2 settimane' },
-                  { value: '4', label: '4 settimane' },
-                ]}
-              />
-              <Text variant="caption">{formatRange(startDate, endDate)}</Text>
-            </Panel>
+            <BalancePanel
+              themes={brand.themes}
+              slots={drafts}
+              label={`${drafts.length} uscite · ${withIdea} con un’idea`}
+            />
 
-            <Panel label="Ritmo">
-              <View style={styles.stepper}>
-                <IconButton
-                  icon={Minus}
-                  variant="outline"
-                  size={44}
-                  accessibilityLabel="Meno contenuti"
-                  disabled={perWeek <= 1}
-                  onPress={() => setPerWeek(Math.max(1, perWeek - 1))}
-                />
-                <View style={styles.stepperValue}>
-                  <Text variant="title" align="center">
-                    {perWeek} a settimana
-                  </Text>
-                  <Text variant="caption" align="center">
-                    {perWeek * Number(weeks)} contenuti in tutto · dal profilo: {brand.positioning.postsPerWeek}
-                  </Text>
-                </View>
-                <IconButton
-                  icon={Plus}
-                  variant="outline"
-                  size={44}
-                  accessibilityLabel="Più contenuti"
-                  disabled={perWeek >= 7}
-                  onPress={() => setPerWeek(Math.min(7, perWeek + 1))}
-                />
-              </View>
-            </Panel>
-
-            <Panel label="Canali">
-              <ChipGroup>
-                {CHANNELS.filter(({ id }) => brand.channels[id].selected).map(({ id, name }) => (
-                  <Chip key={id} label={name} selected={channels.includes(id)} onPress={() => toggleChannel(id)} />
-                ))}
-              </ChipGroup>
-              <Text variant="caption">Ogni contenuto esce su un canale e, se il formato è adatto, anche sugli altri.</Text>
-            </Panel>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <BalancePanel themes={brand.themes} slots={drafts} label={`${drafts.length} uscite proposte`} />
-            {drafts.length === 0 && (
-              <Text variant="body">Tutti i giorni del periodo hanno già un’uscita. Torna indietro e scegli un altro periodo.</Text>
+            {items.length === 0 && (
+              <Text variant="body" style={screenStyles.groupLabel}>
+                Tutti i giorni del periodo hanno già un’uscita. Scegli un altro periodo.
+              </Text>
             )}
-            {drafts.map((draft, index) => (
-              <Panel key={`${draft.date}-${index}`} gap={8}>
-                <View style={styles.row}>
-                  <View style={styles.flex}>{slotHeader(draft)}</View>
-                  <IconButton
-                    icon={X}
-                    variant="ghost"
-                    size={32}
-                    iconSize={16}
-                    accessibilityLabel={`Togli l’uscita di ${formatWeekdayLong(draft.date)}`}
-                    onPress={() => removeDraft(index)}
-                  />
-                </View>
-                {themeLine(targets[index] ?? null)}
-              </Panel>
-            ))}
-            <Text variant="caption" style={screenStyles.groupLabel}>
-              Giorni e orari seguono le abitudini di ogni canale. I giorni che avevano già un’uscita li ho lasciati stare.
-            </Text>
-          </>
-        )}
 
-        {step === 2 && (
-          <>
-            <Text variant="caption" style={screenStyles.groupLabel}>
-              {withIdea} uscite su {drafts.length} hanno un’idea. Le altre restano da riempire: potrai farlo dal piano.
-            </Text>
-            {drafts.map((draft, index) => {
+            {items.map(({ draft, target }, index) => {
               const idea = ideaOf(draft);
-              const target = themeOf(targets[index] ?? null);
+              const theme = themeOf(draft.themeId);
+              const targetTheme = themeOf(target);
               return (
-                <Panel key={`${draft.date}-${index}`} gap={10} style={!idea && styles.emptyPanel}>
-                  {slotHeader(draft)}
+                <Panel key={`${draft.date}-${index}`} gap={8} style={!idea && styles.emptyPanel}>
+                  <View style={styles.row}>
+                    <Text variant="strongSmall" style={styles.flex}>
+                      {formatWeekdayLong(draft.date)} · {draft.time}
+                    </Text>
+                    <View style={styles.marks}>
+                      {draft.channels.map((channel) => (
+                        <ChannelMark key={channel} channel={channel} active size={24} />
+                      ))}
+                    </View>
+                    <IconButton
+                      icon={X}
+                      variant="ghost"
+                      size={32}
+                      iconSize={16}
+                      accessibilityLabel={`Togli l’uscita di ${formatWeekdayLong(draft.date)}`}
+                      onPress={() => removeDraft(index)}
+                    />
+                  </View>
                   {idea ? (
-                    <>
-                      <Text variant="strong">{idea.title}</Text>
-                      {themeLine(draft.themeId)}
-                      {draft.themeId !== targets[index] && target && (
-                        <Badge tone="yellow" size="sm">{`Al posto di «${target.name}»`}</Badge>
-                      )}
-                    </>
+                    <Text variant="strong">{idea.title}</Text>
                   ) : (
                     <Text variant="body">
-                      {target ? `Nessuna idea salvata su «${target.name}».` : 'Nessuna idea salvata adatta.'}
+                      {targetTheme ? `Nessuna idea salvata su «${targetTheme.name}».` : 'Nessuna idea salvata adatta.'}
                     </Text>
                   )}
+                  <View style={styles.row}>
+                    {theme && <Dot color={theme.color} size={8} />}
+                    <Text variant="caption" numberOfLines={1} style={styles.flex}>
+                      {theme?.name ?? 'Senza tema'}
+                    </Text>
+                    {draft.themeId !== target && targetTheme && (
+                      <Badge tone="yellow" size="sm">{`Al posto di «${targetTheme.name}»`}</Badge>
+                    )}
+                  </View>
                   <View style={styles.actions}>
                     <LinkButton label={idea ? 'Cambia idea' : 'Scegline una'} onPress={() => changeIdea(index)} />
                     {idea && <LinkButton label="Lascia da riempire" tone="muted" onPress={() => clearIdea(index)} />}
@@ -349,39 +303,35 @@ export function PlanSessionScreen({ brand }: { brand: Brand }) {
                 </Panel>
               );
             })}
-          </>
-        )}
 
-        {step === 3 && (
-          <>
-            <BalancePanel themes={brand.themes} slots={drafts} label="Equilibrio del periodo" />
-            <Panel gap={0} style={styles.bigPanel}>
-              {drafts.map((draft, index) => {
-                const idea = ideaOf(draft);
-                return (
-                  <View key={`${draft.date}-${index}`} style={[styles.summaryRow, index > 0 && styles.divider]}>
-                    <Dot color={themeOf(draft.themeId)?.color ?? colors.borderField} size={8} />
-                    <View style={styles.flex}>
-                      <Text variant="caption">
-                        {formatWeekdayLong(draft.date)} · {draft.time}
-                      </Text>
-                      <Text variant="strongSmall" numberOfLines={2} color={idea ? colors.textTitle : colors.textBody}>
-                        {idea?.title ?? 'Da riempire'}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </Panel>
-            <Text variant="caption" style={screenStyles.groupLabel}>
-              {drafts.length} uscite dal {formatRange(drafts[0]?.date ?? startDate, drafts[drafts.length - 1]?.date ?? endDate)} ·{' '}
-              {withIdea} con un’idea · {drafts.length - withIdea} da riempire
-            </Text>
+            {items.length > 0 && (
+              <Text variant="caption" style={screenStyles.groupLabel}>
+                Giorni e orari seguono le abitudini di ogni canale; i giorni che avevano già un’uscita li ho lasciati stare. Le
+                uscite senza idea restano da riempire dal piano.
+              </Text>
+            )}
           </>
         )}
       </ScrollView>
 
-      <ScreenFooter>{footer}</ScreenFooter>
+      <ScreenFooter>
+        <Button
+          size="lg"
+          block
+          variant="accent"
+          disabled={items.length === 0}
+          busy={confirm.isPending}
+          onDisabledPress={() =>
+            toast(proposal.isPending ? 'Aspetta che le uscite siano pronte.' : 'Non c’è nessuna uscita da aggiungere.')
+          }
+          onPress={confirmPlan}>
+          {confirm.isPending
+            ? 'Salvo il piano…'
+            : items.length > 0
+              ? `Aggiungi ${items.length} ${items.length === 1 ? 'uscita' : 'uscite'} al piano`
+              : 'Aggiungi al piano'}
+        </Button>
+      </ScreenFooter>
     </View>
   );
 }
@@ -390,11 +340,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0, gap: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   marks: { flexDirection: 'row', gap: 4 },
+  section: { gap: 10, borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingTop: 12 },
   bigPanel: { borderRadius: radii.card },
   emptyPanel: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.borderField, backgroundColor: 'transparent' },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stepperValue: { flex: 1, alignItems: 'center', gap: 2 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 18 },
-  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
-  divider: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
 });

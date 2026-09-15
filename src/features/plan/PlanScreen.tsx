@@ -11,7 +11,6 @@ import {
   IconButton,
   LinkButton,
   Panel,
-  PatternGrid,
   SegmentedControl,
   SkeletonLines,
   Text,
@@ -24,6 +23,7 @@ import {
 } from '@/design-system';
 import type { Brand } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
+import type { Content } from '@/domain/content';
 import { FORMAT_LABELS } from '@/domain/idea';
 import type { PlanSlot } from '@/domain/plan';
 import {
@@ -31,6 +31,7 @@ import {
   addMonths,
   formatMonth,
   formatRange,
+  formatWeekdayLong,
   formatWeekdayShort,
   startOfMonth,
   startOfWeek,
@@ -41,9 +42,24 @@ import { useContentDrafts, useIdeas, usePlan } from '@/services/queries';
 
 import { BalancePanel, SlotCard } from './PlanParts';
 
-type PlanView = 'week' | 'month';
+type PlanView = 'day' | 'week' | 'month';
 
 const WEEKDAY_INITIALS = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
+
+const NAVIGATION: Record<PlanView, { previous: string; next: string; back: string }> = {
+  day: { previous: 'Giorno precedente', next: 'Giorno successivo', back: 'Torna a oggi' },
+  week: { previous: 'Settimana precedente', next: 'Settimana successiva', back: 'Torna a questa settimana' },
+  month: { previous: 'Mese precedente', next: 'Mese successivo', back: 'Torna a questo mese' },
+};
+
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+function relativeDay(day: string, now: string): string | null {
+  if (day === now) return 'Oggi';
+  if (day === addDays(now, 1)) return 'Domani';
+  if (day === addDays(now, -1)) return 'Ieri';
+  return null;
+}
 
 export function PlanScreen({ brand }: { brand: Brand }) {
   const router = useRouter();
@@ -52,26 +68,60 @@ export function PlanScreen({ brand }: { brand: Brand }) {
   const { data: drafts = [] } = useContentDrafts(brand.id);
   const now = today();
   const [view, setView] = useState<PlanView>('week');
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(now));
-  const [month, setMonth] = useState(() => startOfMonth(now));
+  // Un solo giorno di riferimento: la vista giornaliera mostra lui, le altre la sua settimana o il suo mese.
+  const [anchor, setAnchor] = useState(now);
 
   const slots = planQuery.data ?? [];
   const ideaOf = (slot: PlanSlot) => ideas.find((idea) => idea.id === slot.ideaId) ?? null;
   const themeOf = (slot: PlanSlot) => brand.themes.find((theme) => theme.id === slot.themeId) ?? null;
-  const openSlot = (slot: PlanSlot) => router.push({ pathname: '/slot/[id]', params: { id: slot.id } });
+  const openSlot = (slot: PlanSlot) => router.push({ pathname: '/content/[slotId]', params: { slotId: slot.id } });
+  const openDraft = (draft: Content) => router.push({ pathname: '/draft/[contentId]', params: { contentId: draft.id } });
 
+  const weekStart = startOfWeek(anchor);
   const weekEnd = addDays(weekStart, 6);
+  const month = startOfMonth(anchor);
+  const daySlots = slots.filter((slot) => slot.date === anchor);
   const weekSlots = slots.filter((slot) => slot.date >= weekStart && slot.date <= weekEnd);
-  const isCurrentWeek = weekStart === startOfWeek(now);
+  const monthSlots = slots.filter((slot) => slot.date.startsWith(month.slice(0, 7)));
   const filled = weekSlots.filter((slot) => slot.ideaId !== null || Boolean(slot.contentTitle)).length;
   const target = Math.max(brand.positioning.postsPerWeek, weekSlots.length);
 
-  const monthSlots = slots.filter((slot) => slot.date.startsWith(month.slice(0, 7)));
+  const current = { day: anchor === now, week: weekStart === startOfWeek(now), month: month === startOfMonth(now) }[view];
+  const heading = {
+    day: capitalize(formatWeekdayLong(anchor)),
+    week: formatRange(weekStart, weekEnd),
+    month: formatMonth(month),
+  }[view];
+  const caption = {
+    day: relativeDay(anchor, now),
+    week: current ? 'Questa settimana' : null,
+    month: current ? 'Questo mese' : null,
+  }[view];
 
-  const openWeekOf = (day: string) => {
-    setWeekStart(startOfWeek(day));
-    setView('week');
+  const step = (direction: 1 | -1) =>
+    setAnchor(
+      view === 'day'
+        ? addDays(anchor, direction)
+        : view === 'week'
+          ? addDays(anchor, 7 * direction)
+          : addMonths(anchor, direction),
+    );
+
+  const openDay = (day: string) => {
+    setAnchor(day);
+    setView('day');
   };
+
+  const renderSlot = (slot: PlanSlot) => (
+    <SlotCard
+      key={slot.id}
+      slot={slot}
+      idea={ideaOf(slot)}
+      theme={themeOf(slot)}
+      onPress={() => openSlot(slot)}
+      onFill={() => openSlot(slot)}
+    />
+  );
 
   return (
     <View style={screenStyles.screen}>
@@ -90,31 +140,24 @@ export function PlanScreen({ brand }: { brand: Brand }) {
           value={view}
           onChange={setView}
           options={[
+            { value: 'day', label: 'Giorno' },
             { value: 'week', label: 'Settimana' },
             { value: 'month', label: 'Mese' },
           ]}
         />
         <View style={styles.navigator}>
-          <IconButton
-            icon={ChevronLeft}
-            accessibilityLabel={view === 'week' ? 'Settimana precedente' : 'Mese precedente'}
-            onPress={() => (view === 'week' ? setWeekStart(addDays(weekStart, -7)) : setMonth(addMonths(month, -1)))}
-          />
+          <IconButton icon={ChevronLeft} accessibilityLabel={NAVIGATION[view].previous} onPress={() => step(-1)} />
           <View style={styles.navigatorLabel}>
             <Text variant="strong" align="center">
-              {view === 'week' ? formatRange(weekStart, weekEnd) : formatMonth(month)}
+              {heading}
             </Text>
-            {view === 'week' && isCurrentWeek && (
+            {caption && (
               <Text variant="caption" align="center">
-                Questa settimana
+                {caption}
               </Text>
             )}
           </View>
-          <IconButton
-            icon={ChevronRight}
-            accessibilityLabel={view === 'week' ? 'Settimana successiva' : 'Mese successivo'}
-            onPress={() => (view === 'week' ? setWeekStart(addDays(weekStart, 7)) : setMonth(addMonths(month, 1)))}
-          />
+          <IconButton icon={ChevronRight} accessibilityLabel={NAVIGATION[view].next} onPress={() => step(1)} />
         </View>
       </View>
 
@@ -123,34 +166,30 @@ export function PlanScreen({ brand }: { brand: Brand }) {
           <Panel gap={12}>
             <SkeletonLines widths={[70, 100, 84]} />
           </Panel>
+        ) : view === 'day' ? (
+          <>
+            <DraftsPanel drafts={drafts} onOpen={openDraft} />
+            {daySlots.length === 0 ? (
+              <Card>
+                <View style={styles.empty}>
+                  <Text variant="heading">{anchor === now ? 'Oggi non esce niente' : 'Nessuna uscita in questo giorno'}</Text>
+                  <Text variant="body">Guarda un altro giorno, oppure pianifica le prossime settimane con le tue idee salvate.</Text>
+                  <Button block variant="secondary" onPress={() => router.push('/plan-session')}>
+                    Pianifica
+                  </Button>
+                </View>
+              </Card>
+            ) : (
+              daySlots.map(renderSlot)
+            )}
+          </>
         ) : view === 'week' ? (
           <>
-            {drafts.length > 0 && (
-              <Panel label="Bozze da programmare" gap={0}>
-                {drafts.map((draft, i) => (
-                  <Pressable
-                    key={draft.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Bozza: ${draft.title}`}
-                    onPress={() => router.push({ pathname: '/draft/[contentId]', params: { contentId: draft.id } })}
-                    style={[styles.draftRow, i > 0 && styles.draftDivider]}>
-                    <View style={styles.draftText}>
-                      <Text variant="strongSmall" numberOfLines={2}>
-                        {draft.title}
-                      </Text>
-                      <Text variant="caption">
-                        {draft.channels.map(channelName).join(' · ')} · {FORMAT_LABELS[draft.format]}
-                      </Text>
-                    </View>
-                    <ChevronRight size={16} color={palette.grey300} />
-                  </Pressable>
-                ))}
-              </Panel>
-            )}
+            <DraftsPanel drafts={drafts} onOpen={openDraft} />
             <BalancePanel themes={brand.themes} slots={weekSlots} label={`${filled} di ${target} uscite con un contenuto`} />
 
             {weekSlots.length === 0 ? (
-              <Card media={<PatternGrid columns={6} rows={2} seed={61} />} mediaHeight={88}>
+              <Card>
                 <View style={styles.empty}>
                   <Text variant="heading">Settimana libera</Text>
                   <Text variant="body">
@@ -164,8 +203,8 @@ export function PlanScreen({ brand }: { brand: Brand }) {
               </Card>
             ) : (
               Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).map((day) => {
-                const daySlots = weekSlots.filter((slot) => slot.date === day);
-                if (daySlots.length === 0 && day !== now) return null;
+                const slotsOfDay = weekSlots.filter((slot) => slot.date === day);
+                if (slotsOfDay.length === 0 && day !== now) return null;
                 return (
                   <View key={day} style={styles.day}>
                     <View style={styles.dayHeader}>
@@ -178,27 +217,14 @@ export function PlanScreen({ brand }: { brand: Brand }) {
                         </Badge>
                       )}
                     </View>
-                    {daySlots.length === 0 ? (
+                    {slotsOfDay.length === 0 ? (
                       <Text variant="caption">Nessuna uscita oggi.</Text>
                     ) : (
-                      daySlots.map((slot) => (
-                        <SlotCard
-                          key={slot.id}
-                          slot={slot}
-                          idea={ideaOf(slot)}
-                          theme={themeOf(slot)}
-                          onPress={() => openSlot(slot)}
-                          onFill={() => openSlot(slot)}
-                        />
-                      ))
+                      slotsOfDay.map(renderSlot)
                     )}
                   </View>
                 );
               })
-            )}
-
-            {!isCurrentWeek && (
-              <LinkButton label="Torna a questa settimana" onPress={() => setWeekStart(startOfWeek(now))} />
             )}
           </>
         ) : (
@@ -218,13 +244,13 @@ export function PlanScreen({ brand }: { brand: Brand }) {
                 {Array.from({ length: 31 }, (_, i) => addDays(month, i))
                   .filter((day) => day.startsWith(month.slice(0, 7)))
                   .map((day) => {
-                    const daySlots = monthSlots.filter((slot) => slot.date === day);
+                    const slotsOfDay = monthSlots.filter((slot) => slot.date === day);
                     return (
                       <Pressable
                         key={day}
                         accessibilityRole="button"
-                        accessibilityLabel={`${formatWeekdayShort(day)}, ${daySlots.length} uscite`}
-                        onPress={() => openWeekOf(day)}
+                        accessibilityLabel={`${formatWeekdayShort(day)}, ${slotsOfDay.length} uscite`}
+                        onPress={() => openDay(day)}
                         style={styles.cell}>
                         <View style={[styles.dayNumber, day === now && styles.today]}>
                           <Text variant="strongSmall" color={day === now ? palette.white : colors.textTitle}>
@@ -232,7 +258,7 @@ export function PlanScreen({ brand }: { brand: Brand }) {
                           </Text>
                         </View>
                         <View style={styles.dots}>
-                          {daySlots.slice(0, 3).map((slot) => (
+                          {slotsOfDay.slice(0, 3).map((slot) => (
                             <Dot key={slot.id} size={6} color={themeOf(slot)?.color ?? palette.grey300} />
                           ))}
                         </View>
@@ -243,12 +269,41 @@ export function PlanScreen({ brand }: { brand: Brand }) {
             </Panel>
             <BalancePanel themes={brand.themes} slots={monthSlots} label={`${monthSlots.length} uscite nel mese`} />
             <Text variant="caption" style={screenStyles.groupLabel}>
-              Tocca un giorno per aprire la sua settimana.
+              Tocca un giorno per vederne le uscite.
             </Text>
           </>
         )}
+
+        {!planQuery.isPending && !current && <LinkButton label={NAVIGATION[view].back} onPress={() => setAnchor(now)} />}
       </ScrollView>
     </View>
+  );
+}
+
+/** I contenuti creati direttamente e non ancora programmati: stanno in cima, qualunque giorno guardi. */
+function DraftsPanel({ drafts, onOpen }: { drafts: Content[]; onOpen: (draft: Content) => void }) {
+  if (drafts.length === 0) return null;
+  return (
+    <Panel label="Bozze da programmare" gap={0}>
+      {drafts.map((draft, i) => (
+        <Pressable
+          key={draft.id}
+          accessibilityRole="button"
+          accessibilityLabel={`Bozza: ${draft.title}`}
+          onPress={() => onOpen(draft)}
+          style={[styles.draftRow, i > 0 && styles.draftDivider]}>
+          <View style={styles.draftText}>
+            <Text variant="strongSmall" numberOfLines={2}>
+              {draft.title}
+            </Text>
+            <Text variant="caption">
+              {draft.channels.map(channelName).join(' · ')} · {FORMAT_LABELS[draft.format]}
+            </Text>
+          </View>
+          <ChevronRight size={16} color={palette.grey300} />
+        </Pressable>
+      ))}
+    </Panel>
   );
 }
 

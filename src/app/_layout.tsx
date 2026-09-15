@@ -60,7 +60,6 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="brand/[section]" />
         <Stack.Screen name="idea/[id]" />
-        <Stack.Screen name="slot/[id]" />
         <Stack.Screen name="brands" options={{ presentation: 'modal' }} />
         <Stack.Screen name="new-idea" options={{ presentation: 'modal' }} />
         <Stack.Screen name="plan-session" options={{ presentation: 'modal' }} />

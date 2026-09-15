@@ -12,13 +12,26 @@ const planKey = (brandId: string) => ['plan', brandId] as const;
 const slotContentKey = (slotId: string) => ['content', 'slot', slotId] as const;
 const contentKey = (contentId: string) => ['content', 'id', contentId] as const;
 const draftsKey = (brandId: string) => ['content', 'drafts', brandId] as const;
+const brandContentsKey = (brandId: string) => ['content', 'brand', brandId] as const;
 
 type Client = ReturnType<typeof useQueryClient>;
 
-/** Un contenuto si legge per id e, se è in un'uscita, anche dall'uscita: si aggiornano entrambe le copie. */
+/**
+ * Un contenuto si legge per id e, se è in un'uscita, anche dall'uscita: si aggiornano entrambe le copie.
+ * L'elenco del brand, che usa la Home, si ricarica.
+ */
 function cacheContent(client: Client, content: Content) {
   client.setQueryData(contentKey(content.id), content);
   if (content.slotId) client.setQueryData(slotContentKey(content.slotId), content);
+  client.invalidateQueries({ queryKey: brandContentsKey(content.brandId) });
+}
+
+export function useContents(brandId: string | undefined) {
+  return useQuery({
+    queryKey: brandContentsKey(brandId ?? ''),
+    queryFn: () => services.contents.list(brandId ?? ''),
+    enabled: Boolean(brandId),
+  });
 }
 
 export function useSlotContent(slotId: string) {
@@ -54,6 +67,17 @@ export function useCreateContent(brandId: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (request: DirectContentRequest) => services.contents.createDirect(brandId, request),
+    onSuccess: (content) => {
+      cacheContent(client, content);
+      client.invalidateQueries({ queryKey: draftsKey(brandId) });
+    },
+  });
+}
+
+export function useCreateContentFromIdea(brandId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (ideaId: string) => services.contents.createFromIdea(brandId, ideaId),
     onSuccess: (content) => {
       cacheContent(client, content);
       client.invalidateQueries({ queryKey: draftsKey(brandId) });
@@ -128,8 +152,13 @@ export function usePlan(brandId: string | undefined) {
   });
 }
 
-export function useProposePlan(brandId: string) {
-  return useMutation({ mutationFn: (request: PlanRequest) => services.plan.propose(brandId, request) });
+/** La proposta della pianificazione: si rifà a ogni cambio di periodo, ritmo o canali e sparisce chiudendo la schermata. */
+export function usePlanProposal(brandId: string, request: PlanRequest) {
+  return useQuery({
+    queryKey: ['planProposal', brandId, request] as const,
+    queryFn: () => services.plan.propose(brandId, request),
+    gcTime: 0,
+  });
 }
 
 export function useConfirmPlan(brandId: string) {
@@ -167,6 +196,7 @@ export function useUpdateSlot(brandId: string) {
       if (patch.ideaId !== undefined) {
         client.invalidateQueries({ queryKey: slotContentKey(slot.id) });
         client.invalidateQueries({ queryKey: draftsKey(brandId) });
+        client.invalidateQueries({ queryKey: brandContentsKey(brandId) });
       }
     },
   });
@@ -180,6 +210,7 @@ export function useRemoveSlot(brandId: string) {
       client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => (slots ?? []).filter((slot) => slot.id !== slotId));
       client.removeQueries({ queryKey: slotContentKey(slotId) });
       client.invalidateQueries({ queryKey: draftsKey(brandId) });
+      client.invalidateQueries({ queryKey: brandContentsKey(brandId) });
     },
   });
 }

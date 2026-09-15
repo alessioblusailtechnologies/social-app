@@ -51,7 +51,7 @@ export function AppTabBar({ state, descriptors, navigation, insets }: BottomTabB
       <View style={styles.center}>
         <PressableScale
           accessibilityRole="button"
-          accessibilityLabel="Crea: nuova idea, pianificazione o contenuto"
+          accessibilityLabel="Crea: scrivi un contenuto, trova idee o pianifica"
           onPress={() => router.push('/create')}
           style={styles.plus}>
           <Plus size={24} color={palette.white} strokeWidth={2.5} />

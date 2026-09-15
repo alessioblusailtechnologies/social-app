@@ -10,7 +10,6 @@ import {
   Dot,
   LinkButton,
   Panel,
-  PatternGrid,
   SegmentedControl,
   SkeletonLines,
   Text,
@@ -214,7 +213,7 @@ function EmptyState({
   secondary: EmptyAction;
 }) {
   return (
-    <Card media={<PatternGrid columns={6} rows={2} seed={31} />} mediaHeight={96}>
+    <Card>
       <View style={styles.empty}>
         <Text variant="heading">{title}</Text>
         <Text variant="body">{body}</Text>

@@ -10,7 +10,6 @@ import {
   Button,
   Card,
   Panel,
-  PatternGrid,
   PressableScale,
   StatusDot,
   Text,
@@ -25,7 +24,6 @@ import { kindLabel } from '@/domain/catalog';
 import { completeness, SECTION_KEYS, sectionCopy, sectionHint } from '@/domain/sections';
 import { BrandAvatar } from '@/features/brand-editors';
 import { useOnboardingStore } from '@/features/onboarding/store';
-import { seedFromString } from '@/lib/random';
 import { useResetDemo } from '@/services/queries';
 
 import { SectionPreview } from './SectionPreview';
@@ -59,7 +57,7 @@ export function ProfileScreen({ brand, brandCount }: { brand: Brand; brandCount:
         </Button>
       </View>
 
-      <Card media={<PatternGrid columns={6} rows={2} seed={seedFromString(brand.id)} />} mediaHeight={88}>
+      <Card>
         <View style={styles.hero}>
           <View style={styles.heroRow}>
             <BrandAvatar brand={brand} size={56} />

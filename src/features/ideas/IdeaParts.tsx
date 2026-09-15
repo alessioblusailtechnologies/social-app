@@ -1,18 +1,8 @@
 import { StyleSheet, View } from 'react-native';
 
-import {
-  Badge,
-  Dot,
-  PatternGrid,
-  PressableScale,
-  Text,
-  colors,
-  radii,
-  type BadgeTone,
-} from '@/design-system';
+import { Badge, Dot, PressableScale, Text, colors, radii, type BadgeTone } from '@/design-system';
 import type { Theme } from '@/domain/brand';
 import { FORMAT_LABELS, SIGNAL_LABELS, type Idea, type IdeaDraft, type IdeaSignalKind } from '@/domain/idea';
-import { seedFromString } from '@/lib/random';
 
 export const SIGNAL_TONES: Record<IdeaSignalKind, BadgeTone> = {
   theme: 'neutral',
@@ -58,9 +48,6 @@ export function IdeaFooter({ idea, theme }: { idea: IdeaDraft; theme: Theme | nu
 export function IdeaCardContent({ idea, theme }: { idea: Idea; theme: Theme | null }) {
   return (
     <View style={styles.card}>
-      <View style={styles.media}>
-        <PatternGrid columns={6} rows={2} seed={seedFromString(idea.id)} />
-      </View>
       <View style={styles.body}>
         <IdeaSignal idea={idea} />
         <Text variant="heading" numberOfLines={4}>
@@ -105,8 +92,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.card,
     backgroundColor: colors.surfaceCard,
   },
-  media: { height: 72, overflow: 'hidden' },
-  body: { flex: 1, paddingTop: 18, paddingHorizontal: 16, paddingBottom: 16, gap: 12 },
+  body: { flex: 1, paddingTop: 20, paddingHorizontal: 16, paddingBottom: 16, gap: 12 },
   angle: { lineHeight: 19 },
   why: { gap: 4, borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingTop: 10 },
   spacer: { flex: 1 },
