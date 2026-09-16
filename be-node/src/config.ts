@@ -47,6 +47,8 @@ const envSchema = z.object({
   ),
   /** Il segreto condiviso con be-render, se lo chiede. */
   RENDER_TOKEN: optionalString,
+  /** Quanto aspettare un PNG: sul piano gratuito be-render si addormenta e il primo scatto dopo una pausa è lento. */
+  RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   /** Il bucket privato di Supabase Storage con foto, scontorni e PNG. */
   MEDIA_BUCKET: z.string().min(1).default('presenza-media'),
   /** In locale; in produzione la porta la assegna la piattaforma in `PORT` (vedi server.ts). */

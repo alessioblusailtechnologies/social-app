@@ -208,8 +208,8 @@ be-render ─ Remotion + Chromium sempre acceso, senza stato: props del template
 
 ### Fase 6 · Deploy
 
-- [x] `be-render/Dockerfile` e servizio privato `presenza-render` in `render.yaml`, con indirizzo e token presi
-      dal servizio
+- [x] `be-render/Dockerfile` e servizio `presenza-render` in `render.yaml`: per ora web service gratuito, chiamato
+      dall'indirizzo pubblico con il token generato da Render
 - [x] `render.yaml`, `.env.example` e README
 - [ ] primo deploy: dipende dal piano a pagamento e dalla licenza Remotion (vedi «Decisioni aperte»)
 
@@ -229,7 +229,8 @@ be-render ─ Remotion + Chromium sempre acceso, senza stato: props del template
    Alternativa senza licenza per le sole immagini: Satori o una schermata con Playwright.
 2. **`FAL_KEY`** per lo scontorno. Senza, i template con soggetto scontornato non si creano e la proposta li evita.
 3. **`GEMINI_API_KEY`**: in locale presa da assieme; su Render va inserita dal pannello.
-4. **Piano Render** per `be-render`: Chromium vuole almeno 2 GB, quindi un piano a pagamento.
+4. **Piano Render** per `be-render`: per ora web service gratuito (512 MB, si addormenta dopo 15 minuti, chiamato
+   dall'indirizzo pubblico con il token). Per l'uso vero il piano standard da 2 GB, 25 $ al mese.
 
 ## Rischi e limiti
 

@@ -194,9 +194,12 @@ OAuth per canale, che non passa da qui.
   (`cd be-node && npm ci --include=dev && npm run build`) perché il bundle include `src/` dell'app; si avvia con
   `node be-node/dist/server.mjs`, health check su `/api/health`. Riparte solo quando cambiano `be-node/` o i file
   dell'app che il bundle importa.
-- `presenza-render`: il servizio privato che compone i PNG delle card (`be-render/`), in Docker dalla radice del
-  repo, piano standard da 2 GB (a pagamento). L'API ne prende indirizzo interno (`RENDER_URL`) e segreto
-  (`RENDER_TOKEN`, generato da Render) direttamente dal Blueprint. Vedi `be-render/README.md`.
+- `presenza-render`: il servizio che compone i PNG delle card (`be-render/`), in Docker dalla radice del repo. Per
+  ora è un web service gratuito: 512 MB, un solo scatto alla volta, si addormenta dopo 15 minuti. I servizi gratuiti
+  non ricevono dalla rete privata, quindi l'API lo chiama dall'indirizzo pubblico (`RENDER_URL`, scritto in
+  `render.yaml`: se Render assegna un altro sottodominio va corretto lì) con il segreto `RENDER_TOKEN`, che Render
+  genera e passa all'API. Se un PNG non arriva il visivo resta pronto, senza «Scarica le immagini». Per l'uso vero
+  serve il piano standard da 2 GB. Vedi `be-render/README.md`.
 - `presenza-app`: l'export web di Expo come sito statico, con `EXPO_PUBLIC_API_URL` scritta nel bundle al momento
   della build.
 

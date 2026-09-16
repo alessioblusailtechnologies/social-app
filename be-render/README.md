@@ -40,7 +40,8 @@ tranne le orizzontali (`1.91:1`) che escono a 1200 × 628. Con `RENDER_TOKEN` im
 | `PORT` o `RENDER_PORT` | `3020` | |
 | `RENDER_TOKEN` | nessuno | lo stesso impostato nell'API |
 | `RENDER_SERVE_URL` | costruito all'avvio | il sito già costruito con `npm run bundle-site` (`build/site`) |
-| `RENDER_CONCURRENCY` | `2` | scatti in parallelo sullo stesso browser |
+| `RENDER_CONCURRENCY` | `2` (`1` con `RENDER_LOW_MEMORY`) | scatti in parallelo sullo stesso browser |
+| `RENDER_LOW_MEMORY` | spento | con `1`: un solo processo di Chromium e uno scatto alla volta, per i 512 MB del piano gratuito |
 
 ## Produzione
 

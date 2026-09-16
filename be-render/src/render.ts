@@ -43,10 +43,15 @@ export interface CardRenderer {
   close(): Promise<void>;
 }
 
-/** Su Linux Chromium in più processi regge meglio gli scatti in parallelo (consigliato da Remotion). */
-const launch = () => openBrowser('chrome', { chromiumOptions: { enableMultiProcessOnLinux: true } });
+export interface RendererOptions {
+  serveUrl: string;
+  concurrency?: number;
+  /** Chromium in più processi regge meglio gli scatti in parallelo su Linux (consigliato da Remotion), ma usa più memoria. */
+  multiProcess?: boolean;
+}
 
-export async function createRenderer({ serveUrl, concurrency = 2 }: { serveUrl: string; concurrency?: number }): Promise<CardRenderer> {
+export async function createRenderer({ serveUrl, concurrency = 2, multiProcess = true }: RendererOptions): Promise<CardRenderer> {
+  const launch = () => openBrowser('chrome', { chromiumOptions: { enableMultiProcessOnLinux: multiProcess } });
   await ensureBrowser();
   let browser: HeadlessBrowser = await launch();
 

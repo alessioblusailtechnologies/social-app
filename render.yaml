@@ -73,32 +73,34 @@ services:
         sync: false
       - key: FAL_KEY
         sync: false
-      # Il servizio privato che compone i PNG (presenza-render, qui sotto): indirizzo interno e segreto
-      # condiviso arrivano da lui, niente da copiare.
+      # Il servizio che compone i PNG (presenza-render, qui sotto). È un web service gratuito, e i servizi
+      # gratuiti non ricevono dalla rete privata: l'API lo chiama dall'indirizzo pubblico, protetto dal
+      # token, che arriva da lui. Se Render assegna un altro sottodominio, va corretto qui.
       - key: RENDER_URL
-        fromService:
-          type: pserv
-          name: presenza-render
-          property: hostport
+        value: https://presenza-render.onrender.com
       - key: RENDER_TOKEN
         fromService:
-          type: pserv
+          type: web
           name: presenza-render
           envVarKey: RENDER_TOKEN
+      # Il piano gratuito si addormenta: il primo PNG dopo una pausa aspetta che il servizio riparta.
+      - key: RENDER_TIMEOUT_MS
+        value: "180000"
 
   # --- Render delle card: Remotion + Chromium (be-render) ----------------------
-  # Servizio privato: lo chiama solo l'API, dentro la rete di Render. Docker dalla radice del repo,
-  # perché il sito Remotion include src/templates e src/domain dell'app. Chromium vuole almeno
-  # 2 GB, quindi il piano standard, A PAGAMENTO: prima del sync va deciso (docs/piano-visivi.md,
-  # «Decisioni aperte»), insieme alla licenza di Remotion.
-  - type: pserv
+  # Docker dalla radice del repo, perché il sito Remotion include src/templates e src/domain dell'app.
+  # Per ora sul piano gratuito: 512 MB, stretti per Chromium (quindi un solo processo e uno scatto alla
+  # volta), e si addormenta dopo 15 minuti. Se un PNG non arriva il visivo resta pronto lo stesso.
+  # Per l'uso vero: piano standard da 2 GB e licenza Remotion (docs/piano-visivi.md, «Decisioni aperte»).
+  - type: web
     name: presenza-render
     runtime: docker
-    plan: standard
+    plan: free
     region: frankfurt
     branch: master
     dockerfilePath: ./be-render/Dockerfile
     dockerContext: .
+    healthCheckPath: /health
     autoDeployTrigger: commit
     buildFilter:
       paths:
@@ -111,10 +113,10 @@ services:
         - be-render/README.md
         - be-render/tools/**
     envVars:
-      - key: PORT
-        value: "3020"
       - key: RENDER_TOKEN
         generateValue: true
+      - key: RENDER_LOW_MEMORY
+        value: "1"
 
   # --- App web: export statico di Expo ------------------------------------------
   - type: web

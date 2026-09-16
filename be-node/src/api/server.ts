@@ -20,7 +20,7 @@ const aiTarget = modelTarget(settings.AI_MODEL, {
   deepseek: { key: settings.DEEPSEEK_API_KEY, baseUrl: settings.DEEPSEEK_BASE_URL },
 });
 const storeUsage = (usage: AiUsage) => recordUsage(pool, usage);
-const renderer = httpRenderer({ baseUrl: settings.RENDER_URL, token: settings.RENDER_TOKEN });
+const renderer = httpRenderer({ baseUrl: settings.RENDER_URL, token: settings.RENDER_TOKEN, timeoutMs: settings.RENDER_TIMEOUT_MS });
 
 const app = buildApp({
   logger: { level: settings.LOG_LEVEL },

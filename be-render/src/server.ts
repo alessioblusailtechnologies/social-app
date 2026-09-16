@@ -18,7 +18,13 @@ const log = (level: 'info' | 'warn' | 'error', message: string, extra: Record<st
 // in locale si costruisce all'avvio.
 const started = Date.now();
 const serveUrl = process.env.RENDER_SERVE_URL || (await (await import('./site')).bundleSite());
-const renderer = await createRenderer({ serveUrl, concurrency: Number(process.env.RENDER_CONCURRENCY) || 2 });
+// Sul piano gratuito (512 MB) un solo processo di Chromium e uno scatto alla volta.
+const lowMemory = process.env.RENDER_LOW_MEMORY === '1';
+const renderer = await createRenderer({
+  serveUrl,
+  concurrency: Number(process.env.RENDER_CONCURRENCY) || (lowMemory ? 1 : 2),
+  multiProcess: !lowMemory,
+});
 log('info', 'render pronto', { serveUrl, ms: Date.now() - started });
 
 function send(response: ServerResponse, status: number, body: unknown) {
