@@ -1,4 +1,4 @@
-# Blueprint Render di Presenza: l'API (be-node) e l'app web statica.
+# Blueprint Render di Presenza: l'API (be-node), il render delle card (be-render) e l'app web statica.
 #
 # Render → New → Blueprint → questo repo. I segreti (sync: false) li chiede una volta alla
 # creazione: si copiano da be-node/.env. A ogni sync il Blueprint riscrive le variabili con
@@ -66,6 +66,55 @@ services:
       # su quello già creato va aggiunta dal pannello del servizio.
       - key: DEEPSEEK_API_KEY
         sync: false
+      # Visivi (docs/piano-visivi.md): foto con Gemini, scontorno con fal. Le chiavi si inseriscono dal pannello.
+      - key: IMAGE_MODEL
+        value: gemini-3.1-flash-image
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FAL_KEY
+        sync: false
+      # Il servizio privato che compone i PNG (presenza-render, qui sotto): indirizzo interno e segreto
+      # condiviso arrivano da lui, niente da copiare.
+      - key: RENDER_URL
+        fromService:
+          type: pserv
+          name: presenza-render
+          property: hostport
+      - key: RENDER_TOKEN
+        fromService:
+          type: pserv
+          name: presenza-render
+          envVarKey: RENDER_TOKEN
+
+  # --- Render delle card: Remotion + Chromium (be-render) ----------------------
+  # Servizio privato: lo chiama solo l'API, dentro la rete di Render. Docker dalla radice del repo,
+  # perché il sito Remotion include src/templates e src/domain dell'app. Chromium vuole almeno
+  # 2 GB, quindi il piano standard, A PAGAMENTO: prima del sync va deciso (docs/piano-visivi.md,
+  # «Decisioni aperte»), insieme alla licenza di Remotion.
+  - type: pserv
+    name: presenza-render
+    runtime: docker
+    plan: standard
+    region: frankfurt
+    branch: master
+    dockerfilePath: ./be-render/Dockerfile
+    dockerContext: .
+    autoDeployTrigger: commit
+    buildFilter:
+      paths:
+        - be-render/**
+        - src/templates/**
+        - src/domain/**
+        - src/lib/**
+        - src/design-system/tokens.ts
+      ignoredPaths:
+        - be-render/README.md
+        - be-render/tools/**
+    envVars:
+      - key: PORT
+        value: "3020"
+      - key: RENDER_TOKEN
+        generateValue: true
 
   # --- App web: export statico di Expo ------------------------------------------
   - type: web
@@ -78,6 +127,7 @@ services:
     buildFilter:
       ignoredPaths:
         - be-node/**
+        - be-render/**
     envVars:
       - key: NODE_VERSION
         value: "24"

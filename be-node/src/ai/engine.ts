@@ -16,7 +16,8 @@ import { costAtTariff, type ModelTarget, type TokenCount } from './providers';
  * servizi e test non devono sapere chi risponde: nei test c'è un motore finto.
  */
 
-export type AiTask = 'website' | 'themes' | 'voice' | 'ideas' | 'source-ideas' | 'content' | 'rewrite';
+/** Anche `image` e `cutout`, che non passano dall'Agent SDK ma finiscono negli stessi consumi. */
+export type AiTask = 'website' | 'themes' | 'voice' | 'ideas' | 'source-ideas' | 'content' | 'rewrite' | 'image' | 'cutout';
 export type WebTool = 'WebFetch' | 'WebSearch';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 

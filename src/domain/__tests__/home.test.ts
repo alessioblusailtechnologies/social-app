@@ -31,7 +31,7 @@ const content = (overrides: Partial<Content>): Content => ({
   channels: ['linkedin'],
   format: 'post',
   variants: [],
-  visual: { headline: '', slides: [], scenes: [] },
+  visual: { headline: '', slides: [], scenes: [], design: null },
   status: 'draft',
   revision: 0,
   createdAt: TODAY,
@@ -68,7 +68,7 @@ describe('homeTasks', () => {
       slot({ id: 'post', date: '2026-09-18', status: 'scheduled', ideaId: 'idea' }),
     ];
     const contents = [
-      content({ id: 'c1', slotId: 'video', format: 'video', visual: { headline: '', slides: [], scenes }, status: 'approved' }),
+      content({ id: 'c1', slotId: 'video', format: 'video', visual: { headline: '', slides: [], scenes, design: null }, status: 'approved' }),
       content({ id: 'c2', slotId: 'post', status: 'approved' }),
     ];
     const tasks = homeTasks(slots, contents, TODAY);

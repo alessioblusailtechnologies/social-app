@@ -1,5 +1,6 @@
 import type { Brand, BrandDraft, SectionPatch } from '@/domain/brand';
 import type { Idea } from '@/domain/idea';
+import { needsImages } from '@/domain/visual';
 import { toDay } from '@/lib/dates';
 import { generateContent } from '@/services/mock/content-generator';
 import { createDemoBrand, createDemoIdeas, createDemoPlan } from '@/services/mock/fixtures';
@@ -85,6 +86,8 @@ export function loadDemoBrand(deps: Deps, identity: Identity): Promise<Brand> {
       // Le uscite già avanti hanno la loro bozza: in approvazione, oppure approvata.
       if (!idea || slot.status === 'toPrepare' || slot.status === 'empty') continue;
       const approved = slot.status !== 'toApprove';
+      const generated = generateContent(brand, idea, slot.channels, idea.formats[0] ?? 'post', 0);
+      const { design } = generated.visual;
       await insertContent(db, accountId, brand.id, {
         slotId: saved.id,
         ideaId: idea.id,
@@ -92,7 +95,12 @@ export function loadDemoBrand(deps: Deps, identity: Identity): Promise<Brand> {
         title: idea.title,
         themeId: idea.themeId,
         channels: slot.channels,
-        ...generateContent(brand, idea, slot.channels, idea.formats[0] ?? 'post', 0),
+        ...generated,
+        // Le uscite già approvate hanno il loro visivo: una card senza foto è pronta subito, come nel mock.
+        visual: {
+          ...generated.visual,
+          design: approved && design && !needsImages(design) ? { ...design, status: 'ready' } : design,
+        },
         status: approved ? 'approved' : 'draft',
         revision: 0,
         approvedAt: approved ? now.toISOString() : null,

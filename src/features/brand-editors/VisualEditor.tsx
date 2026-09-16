@@ -21,7 +21,9 @@ import {
   useToast,
 } from '@/design-system';
 import type { Palette, Visual } from '@/domain/brand';
-import { IMAGE_STYLES, PALETTE_PRESETS, PALETTE_SLOT_LABELS } from '@/domain/catalog';
+import { IMAGE_STYLES, PALETTE_PRESETS, PALETTE_SLOT_LABELS, TYPOGRAPHY_OPTIONS } from '@/domain/catalog';
+import { brandKit, clip, emptyCardText, typographyOption, type VisualPage } from '@/domain/visual';
+import { CardView } from '@/features/visual/CardView';
 
 import { Swatches } from './BrandVisuals';
 import type { EditorProps } from './types';
@@ -33,6 +35,16 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
   const toast = useToast();
   const set = (patch: Partial<Visual>) => onChange({ ...value, ...patch });
   const custom = value.palette.origin === 'custom';
+
+  const type = typographyOption(value.typography);
+  const sample: VisualPage = {
+    templateId: 'statement',
+    text: {
+      ...emptyCardText(),
+      kicker: 'Anteprima',
+      headline: clip(context.draft.identity.pitch || 'Così appaiono le card dei tuoi post', 80),
+    },
+  };
 
   const sitePalette = context.insights?.palette ?? (value.palette.origin === 'site' ? value.palette : null);
   const options: Palette[] = [...(sitePalette ? [sitePalette] : []), ...PALETTE_PRESETS];
@@ -130,6 +142,28 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
           </PressableScale>
         </View>
         {custom && <CustomPalette palette={value.palette} onChange={(next) => set({ palette: next })} />}
+      </Panel>
+
+      <Panel label="Caratteri" gap={12}>
+        <ChipGroup>
+          {TYPOGRAPHY_OPTIONS.map((option) => (
+            <Chip key={option.id} label={option.name} selected={type.id === option.id} onPress={() => set({ typography: option.id })} />
+          ))}
+        </ChipGroup>
+        <Text variant="caption">
+          {type.heading.family} per i titoli, {type.body.family} per i testi. Li uso in tutte le card, con la palette qui sopra.
+        </Text>
+        <CardView
+          kit={brandKit({ identity: context.draft.identity, visual: value })}
+          page={sample}
+          pageIndex={0}
+          pageCount={1}
+          photoUrl={null}
+          cutoutUrl={null}
+          aspect="4:5"
+          width={180}
+          style={styles.sample}
+        />
       </Panel>
 
       <Panel label="Stile delle immagini">
@@ -242,4 +276,5 @@ const styles = StyleSheet.create({
   slotSwatch: { width: 28, height: 28, borderRadius: 8, borderWidth: 1, borderColor: palette.grey100 },
   slotLabel: { width: 72 },
   signatureRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4 },
+  sample: { alignSelf: 'center' },
 });

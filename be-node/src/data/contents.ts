@@ -4,6 +4,7 @@ import type { IdeaFormat, IdeaSource } from '@/domain/idea';
 
 import { ApiError } from '../contract/errors';
 import type { Queryable } from '../db/pool';
+import { unsignedVisual } from '../visual/files';
 
 interface ContentRow {
   id: string;
@@ -39,7 +40,8 @@ export function toContent(row: ContentRow): Content {
     channels: row.channels,
     format: row.format,
     variants: row.variants,
-    visual: row.visual,
+    // Le bozze nate prima dei visivi non hanno `design`.
+    visual: { ...row.visual, design: row.visual.design ?? null },
     status: row.status,
     revision: row.revision,
     approvedAt: row.approved_at?.toISOString() ?? null,
@@ -101,7 +103,7 @@ export async function insertContent(db: Queryable, accountId: string, brandId: s
       fields.channels,
       fields.format,
       JSON.stringify(fields.variants),
-      JSON.stringify(fields.visual),
+      JSON.stringify(unsignedVisual(fields.visual)),
       fields.status,
       fields.revision,
       fields.approvedAt,
@@ -128,7 +130,7 @@ export async function saveContent(db: Queryable, content: Content): Promise<Cont
       content.channels,
       content.format,
       JSON.stringify(content.variants),
-      JSON.stringify(content.visual),
+      JSON.stringify(unsignedVisual(content.visual)),
       content.status,
       content.revision,
       content.approvedAt,
@@ -136,6 +138,27 @@ export async function saveContent(db: Queryable, content: Content): Promise<Cont
   );
   if (!rows[0]) throw ApiError.notFound('Contenuto non trovato.');
   return toContent(rows[0]);
+}
+
+/** Le ultime foto generate per il brand, escluso un contenuto: fanno da riferimento di stile alle nuove. */
+export async function recentBrandPhotoPaths(
+  db: Queryable,
+  brandId: string,
+  excludeContentId: string,
+  limit: number,
+): Promise<string[]> {
+  const { rows } = await db.query<{ path: string }>(
+    `select visual #>> '{design,image,photo,path}' as path
+       from presenza.contents
+      where brand_id = $1
+        and id <> $2
+        and visual #>> '{design,image,source}' = 'generated'
+        and visual #>> '{design,image,photo,path}' is not null
+      order by updated_at desc
+      limit $3`,
+    [brandId, excludeContentId, limit],
+  );
+  return rows.map((row) => row.path);
 }
 
 /**

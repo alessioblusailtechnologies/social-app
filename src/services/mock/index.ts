@@ -12,6 +12,20 @@ import {
   type SlotDraft,
   type SlotOrigin,
 } from '@/domain/plan';
+import {
+  brandKit,
+  channelsWaitingForVisual,
+  creationSteps,
+  editDesign,
+  fallbackDesign,
+  needsImages,
+  redoDesign,
+  refreshDesign,
+  withoutPhoto,
+  withUploadedPhoto,
+  type VisualDesign,
+  type VisualStep,
+} from '@/domain/visual';
 import { toDay, today } from '@/lib/dates';
 import { delay, latency } from '@/lib/delay';
 import { createId } from '@/lib/id';
@@ -29,6 +43,7 @@ import {
 } from './database';
 import { createDemoBrand, createDemoIdeas, createDemoPlan } from './fixtures';
 import { draftsFromSource, generateIdeaDrafts } from './idea-generator';
+import { sampleCutout, samplePhoto } from './sample-images';
 
 async function brandById(brandId: string): Promise<Brand> {
   const brand = (await readDatabase()).brands.find((candidate) => candidate.id === brandId);
@@ -91,6 +106,8 @@ function createMockBrandService(): BrandService {
         const idea = allIdeas.find((candidate) => candidate.id === slot.ideaId);
         if (!idea || slot.status === 'toPrepare' || slot.status === 'empty') return [];
         const approved = slot.status !== 'toApprove';
+        const generated = generateContent(brand, idea, slot.channels, idea.formats[0] ?? 'post', 0);
+        const { design } = generated.visual;
         return [
           {
             id: createId('content'),
@@ -101,7 +118,12 @@ function createMockBrandService(): BrandService {
             title: idea.title,
             themeId: idea.themeId,
             channels: slot.channels,
-            ...generateContent(brand, idea, slot.channels, idea.formats[0] ?? 'post', 0),
+            ...generated,
+            // Le uscite già approvate hanno il loro visivo: una card senza foto è pronta subito.
+            visual: {
+              ...generated.visual,
+              design: approved && design && !needsImages(design) ? { ...design, status: 'ready' } : design,
+            },
             status: approved ? 'approved' : 'draft',
             revision: 0,
             createdAt: now,
@@ -328,6 +350,71 @@ function updateContent(contentId: string, change: (content: Content) => Content)
   });
 }
 
+/** La bozza rifatta porta la sua proposta di visivo; un visivo già creato resta e aspetta «Aggiorna il visivo». */
+function withRedoneDesign<T extends { visual: Content['visual'] }>(previous: Content | null | undefined, generated: T): T {
+  return { ...generated, visual: { ...generated.visual, design: redoDesign(previous?.visual.design, generated.visual.design) } };
+}
+
+function requireDesign(content: Content): VisualDesign {
+  if (!content.visual.design) throw new Error('Il contenuto non ha un visivo');
+  return content.visual.design;
+}
+
+function updateDesign(contentId: string, change: (design: VisualDesign, content: Content) => VisualDesign): Promise<Content> {
+  return updateContent(contentId, (content) => ({
+    ...content,
+    visual: { ...content.visual, design: change(requireDesign(content), content) },
+  }));
+}
+
+/** Nel mock ogni passo della creazione dura un po', come col modello vero. */
+const STEP_MS: Record<VisualStep, number> = { image: 2600, cutout: 1500, render: 900 };
+const running = new Set<string>();
+
+async function startCreation(contentId: string): Promise<Content> {
+  const content = await updateDesign(contentId, (design) =>
+    design.status === 'creating' ? design : { ...design, status: 'creating', step: creationSteps(design)[0], error: null },
+  );
+  void runCreation(contentId);
+  return content;
+}
+
+/** La creazione avanza a passi dentro il contenuto; l'app lo rilegge e vede a che punto è. */
+async function runCreation(contentId: string): Promise<void> {
+  if (running.has(contentId)) return;
+  running.add(contentId);
+  try {
+    for (;;) {
+      const content = (await contentsCollection.list()).find((candidate) => candidate.id === contentId);
+      const step = content?.visual.design?.status === 'creating' ? content.visual.design.step : null;
+      if (!content || !step) return;
+      await delay(STEP_MS[step]);
+      const kit = brandKit(await brandById(content.brandId));
+      await updateDesign(contentId, (design) => {
+        if (design.status !== 'creating' || design.step !== step) return design;
+        let next = design;
+        if (step === 'image') next = { ...design, image: { ...design.image, photo: { path: null, url: samplePhoto(kit, `${contentId}|${Date.now()}`) } } };
+        if (step === 'cutout') next = { ...design, image: { ...design.image, cutout: { path: null, url: sampleCutout() } } };
+        if (step === 'render') return { ...next, status: 'ready', step: null };
+        return { ...next, step: creationSteps(next)[0] };
+      });
+    }
+  } finally {
+    running.delete(contentId);
+  }
+}
+
+/** Una creazione interrotta da un ricaricamento riparte alla prima lettura. */
+function resumeCreation(content: Content | undefined): Content | null {
+  if (content?.visual.design?.status === 'creating') void runCreation(content.id);
+  return content ?? null;
+}
+
+function assertVisualReady(content: Content) {
+  const waiting = channelsWaitingForVisual(content.format, content.channels, content.visual.design);
+  if (waiting.length > 0) throw new Error('Crea prima il visivo: senza immagine questi canali non pubblicano');
+}
+
 function createMockContentService(): ContentService {
   return {
     async list(brandId) {
@@ -337,7 +424,44 @@ function createMockContentService(): ContentService {
 
     async getForSlot(slotId) {
       await delay(latency(150, 300));
-      return (await contentsCollection.list()).find((content) => content.slotId === slotId) ?? null;
+      return resumeCreation((await contentsCollection.list()).find((content) => content.slotId === slotId));
+    },
+
+    async editVisual(contentId, edit) {
+      await delay(latency(120, 250));
+      return updateDesign(contentId, (design) => editDesign(design, edit));
+    },
+
+    async proposeVisual(contentId) {
+      await delay(latency(200, 400));
+      return updateContent(contentId, (content) => ({
+        ...content,
+        visual: {
+          ...content.visual,
+          design: content.visual.design ?? fallbackDesign(content.format, content.visual.headline || content.title, content.visual.slides),
+        },
+      }));
+    },
+
+    async createVisual(contentId) {
+      await delay(latency(200, 400));
+      return startCreation(contentId);
+    },
+
+    async regenerateImage(contentId) {
+      await delay(latency(200, 400));
+      await updateDesign(contentId, (design) => withoutPhoto(design));
+      return startCreation(contentId);
+    },
+
+    async uploadPhoto(contentId, dataUri) {
+      await delay(latency(400, 700));
+      return updateDesign(contentId, (design) => withUploadedPhoto(design, { path: null, url: dataUri }));
+    },
+
+    async refreshVisual(contentId) {
+      await delay(latency(200, 400));
+      return updateDesign(contentId, (design) => refreshDesign(design));
     },
 
     async prepare(slotId, format) {
@@ -361,7 +485,10 @@ function createMockContentService(): ContentService {
           title: idea.title,
           themeId: idea.themeId,
           channels: slot.channels,
-          ...generateContent(brand, idea, slot.channels, format ?? previous?.format ?? idea.formats[0] ?? 'post', revision),
+          ...withRedoneDesign(
+            previous,
+            generateContent(brand, idea, slot.channels, format ?? previous?.format ?? idea.formats[0] ?? 'post', revision),
+          ),
           status: 'draft',
           revision,
           createdAt: previous?.createdAt ?? now,
@@ -398,7 +525,7 @@ function createMockContentService(): ContentService {
 
     async get(contentId) {
       await delay(latency(120, 250));
-      return (await contentsCollection.list()).find((content) => content.id === contentId) ?? null;
+      return resumeCreation((await contentsCollection.list()).find((content) => content.id === contentId));
     },
 
     async listDrafts(brandId) {
@@ -477,13 +604,20 @@ function createMockContentService(): ContentService {
       } else {
         throw new Error('Non so da cosa rifare la bozza');
       }
-      return updateContent(contentId, (existing) => ({ ...existing, ...generated, revision, status: 'draft', approvedAt: null }));
+      return updateContent(contentId, (existing) => ({
+        ...existing,
+        ...withRedoneDesign(existing, generated),
+        revision,
+        status: 'draft',
+        approvedAt: null,
+      }));
     },
 
     async approve(contentId) {
       await delay(latency(400, 700));
       const current = (await contentsCollection.list()).find((content) => content.id === contentId);
       if (!current?.slotId) throw new Error('Il contenuto non è in un’uscita: va programmato');
+      assertVisualReady(current);
       const slotId = current.slotId;
       const content = await updateContent(contentId, (existing) => ({
         ...existing,
@@ -496,6 +630,7 @@ function createMockContentService(): ContentService {
     async schedule(contentId, { date, time, publishNow = false }) {
       const current = (await contentsCollection.list()).find((content) => content.id === contentId);
       if (!current) throw new Error('Contenuto non trovato');
+      assertVisualReady(current);
       await delay(latency(400, 700));
       const status: PlanSlot['status'] = publishNow ? 'published' : 'scheduled';
       const slot = await slotsCollection.update((slots) => {

@@ -5,9 +5,11 @@ import type { z } from 'zod';
 
 import type { BrandDraft } from '@/domain/brand';
 import { createEmptyDraft } from '@/domain/catalog';
+import type { Content } from '@/domain/content';
 import { createThemes } from '@/domain/themes';
 
 import type { AiEngine, AiRequest } from '../src/ai/engine';
+import type { MediaDeps } from '../src/media';
 import { buildApp } from '../src/api/app';
 import { supabaseVerifier } from '../src/api/plugins/auth';
 import { config } from '../src/config';
@@ -63,6 +65,12 @@ const FAKE_OUTPUTS: Record<string, unknown> = {
     })),
     slides: [{ title: 'Uno', body: 'Primo punto' }],
     scenes: [],
+    visual: {
+      kind: 'infographic',
+      templateId: 'statement',
+      card: { kicker: 'Il pane', headline: 'Il pane che non ha fretta', body: '', value: '', items: [], author: '' },
+      imageDescription: 'Pagnotte appena sfornate sul bancone di legno, luce del mattino',
+    },
   },
   rewrite: { text: 'Testo più corto.' },
 };
@@ -72,6 +80,48 @@ const fakeAi: AiEngine & { tasks: string[] } = {
   run<S extends z.ZodType>(request: AiRequest<S>): Promise<z.output<S>> {
     this.tasks.push(request.task);
     return Promise.resolve(request.schema.parse(FAKE_OUTPUTS[request.task]));
+  },
+};
+
+/** Un PNG di un pixel: basta a Storage, scontorno e render finti. */
+const PNG = Uint8Array.from(
+  Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'),
+);
+
+/** Storage in memoria, foto, scontorno e composizione finti: si contano le chiamate. */
+const files = new Map<string, Uint8Array>();
+const mediaCalls = { images: 0, cutout: 0, render: 0 };
+const fakeMedia: MediaDeps = {
+  storage: {
+    upload: (path, bytes) => {
+      files.set(path, bytes);
+      return Promise.resolve();
+    },
+    download: (path) => {
+      const bytes = files.get(path);
+      return bytes ? Promise.resolve({ bytes, contentType: 'image/png' }) : Promise.reject(new Error('file mancante'));
+    },
+    sign: (paths) => Promise.resolve(new Map(paths.filter((path) => files.has(path)).map((path) => [path, `https://firmato.test/${path}`]))),
+  },
+  images: {
+    available: true,
+    generate: () => {
+      mediaCalls.images += 1;
+      return Promise.resolve({ bytes: PNG, mimeType: 'image/png' });
+    },
+  },
+  cutout: {
+    available: true,
+    cut: () => {
+      mediaCalls.cutout += 1;
+      return Promise.resolve({ bytes: PNG, mimeType: 'image/png' });
+    },
+  },
+  renderer: {
+    render: () => {
+      mediaCalls.render += 1;
+      return Promise.resolve(PNG);
+    },
   },
 };
 
@@ -99,6 +149,7 @@ describe.skipIf(!enabled)('API contro il database', () => {
       verifyToken: supabaseVerifier(settings),
       auth: supabaseAuthGateway(settings),
       ai: () => fakeAi,
+      media: () => fakeMedia,
     });
     await app.ready();
   });
@@ -240,6 +291,10 @@ describe.skipIf(!enabled)('API contro il database', () => {
       200,
     );
     expect(rewritten.variants.find(Boolean)?.text).toBeDefined();
+    // La bozza propone una card; crearla è un lavoro in coda, che qui si esegue a mano.
+    const creating = json<Content>(await call(tokenA, 'POST', `/api/contents/${contentId}/visual/create`), 200);
+    expect(creating.visual.design?.status).toBe('creating');
+    await app.visualRunner.runPending();
     expect(json<{ slot: { status: string } }>(await call(tokenA, 'POST', `/api/contents/${contentId}/approve`), 200).slot.status).toBe('scheduled');
     expect(json<{ slot: { status: string } }>(await call(tokenA, 'POST', `/api/contents/${contentId}/reopen`), 200).slot.status).toBe('toApprove');
     expect((await call(tokenB, 'GET', `/api/contents/${contentId}`)).statusCode).toBe(404);
@@ -259,6 +314,9 @@ describe.skipIf(!enabled)('API contro il database', () => {
     );
     expect(direct.title).toBe('Il pane che non ha fretta');
     expect(json<unknown[]>(await call(tokenA, 'GET', `/api/brands/${brandId}/contents/drafts`), 200)).toHaveLength(1);
+    // Instagram non pubblica senza immagine: prima il visivo.
+    json(await call(tokenA, 'POST', `/api/contents/${direct.id}/visual/create`), 200);
+    await app.visualRunner.runPending();
     const scheduled = json<{ content: { slotId: string; status: string }; slot: { id: string; status: string; contentTitle: string } }>(
       await call(tokenA, 'POST', `/api/contents/${direct.id}/schedule`, { date: '2030-01-10', time: '18:30', publishNow: true }),
       200,
@@ -273,6 +331,66 @@ describe.skipIf(!enabled)('API contro il database', () => {
     expect(back).toMatchObject({ slotId: null, status: 'draft' });
 
     expect(fakeAi.tasks).toEqual(['ideas', 'content', 'content', 'rewrite', 'content']);
+  });
+
+  it('il visivo: modifiche senza AI, creazione in coda, foto caricata e indirizzi firmati', async () => {
+    const content = json<Content>(
+      await call(tokenA, 'POST', `/api/brands/${brandId}/contents`, {
+        source: { kind: 'prompt', text: 'Il forno di notte' },
+        channels: ['linkedin', 'instagram'],
+        format: 'post',
+      }),
+      201,
+    );
+    const url = `/api/contents/${content.id}`;
+    const proposed = content.visual.design!;
+    expect(proposed).toMatchObject({ status: 'proposed', kind: 'infographic' });
+    expect(proposed.pages[0].templateId).toBe('statement');
+
+    // Instagram non pubblica senza immagine.
+    const when = { date: '2030-02-01', time: '09:00' };
+    expect(json<{ code: string }>(await call(tokenA, 'POST', `${url}/schedule`, when), 409).code).toBe('VISUAL_MISSING');
+
+    // Mista con soggetto scontornato: cambia senza AI.
+    const edit = {
+      kind: 'mixed',
+      pages: [{ templateId: 'cutout-statement', text: proposed.pages[0].text }],
+      description: 'Una pagnotta intera',
+      source: 'generated',
+      reopen: false,
+    };
+    const edited = json<Content>(await call(tokenA, 'PUT', `${url}/visual`, edit), 200);
+    expect(edited.visual.design).toMatchObject({ status: 'proposed', kind: 'mixed' });
+    expect(edited.visual.design?.pages[0].templateId).toBe('cutout-statement');
+
+    const creating = json<Content>(await call(tokenA, 'POST', `${url}/visual/create`), 200);
+    expect(creating.visual.design).toMatchObject({ status: 'creating', step: 'image' });
+    expect(json<{ code: string }>(await call(tokenA, 'PUT', `${url}/visual`, edit), 409).code).toBe('VISUAL_BUSY');
+    expect((await call(tokenB, 'POST', `${url}/visual/create`)).statusCode).toBe(404);
+
+    const before = { ...mediaCalls };
+    expect(await app.visualRunner.runPending()).toBe(1);
+    expect(mediaCalls).toEqual({ images: before.images + 1, cutout: before.cutout + 1, render: before.render + 1 });
+
+    const ready = json<Content>(await call(tokenA, 'GET', url), 200).visual.design!;
+    expect(ready.status).toBe('ready');
+    expect(ready.image.photo?.url).toMatch(/^https:\/\/firmato\.test\//);
+    expect(ready.image.cutout?.url).toMatch(/^https:\/\/firmato\.test\//);
+    // LinkedIn e Instagram vogliono tutti e due il 4:5: un PNG solo.
+    expect(ready.renders).toHaveLength(1);
+    expect(ready.renders[0].file.url).toMatch(/^https:\/\/firmato\.test\//);
+
+    // Una foto dell'utente al posto di quella generata: lo scontorno si rifà creando.
+    const dataUri = `data:image/png;base64,${Buffer.from(PNG).toString('base64')}`;
+    const uploaded = json<Content>(await call(tokenA, 'POST', `${url}/visual/photo`, { dataUri }), 200).visual.design!;
+    expect(uploaded).toMatchObject({ status: 'proposed', image: { source: 'upload', cutout: null } });
+    expect((await call(tokenA, 'POST', `${url}/visual/photo`, { dataUri: 'data:text/plain;base64,aGVsbG8=' })).statusCode).toBe(400);
+
+    json(await call(tokenA, 'POST', `${url}/visual/create`), 200);
+    await app.visualRunner.runPending();
+    expect(mediaCalls.images).toBe(before.images + 1);
+    const scheduled = json<{ content: { status: string } }>(await call(tokenA, 'POST', `${url}/schedule`, when), 200);
+    expect(scheduled.content.status).toBe('approved');
   });
 
   it('carica e azzera il profilo di esempio', async () => {

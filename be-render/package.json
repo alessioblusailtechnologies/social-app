@@ -1,0 +1,32 @@
+{
+  "name": "presenza-render",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Presenza: le card del brand in PNG, con Remotion. Vedi README.md e docs/piano-visivi.md",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "esbuild src/server.ts src/bundle-site.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outdir=dist --out-extension:.js=.mjs",
+    "bundle-site": "node dist/bundle-site.mjs",
+    "start": "node dist/server.mjs",
+    "try": "tsx tools/try-render.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.525",
+    "@remotion/renderer": "4.0.525",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.525"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "@types/react": "~19.2.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.3"
+  }
+}

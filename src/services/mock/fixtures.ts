@@ -272,6 +272,7 @@ export function createDemoBrand(): Brand {
       logoUri: null,
       palette: PALETTE_PRESETS[0],
       imageStyle: 'flat-geometric',
+      typography: 'space-grotesk',
       signature: true,
     },
     references: {

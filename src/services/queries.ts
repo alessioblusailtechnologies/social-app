@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { BrandDraft, ChannelId, Identity, SectionPatch } from '@/domain/brand';
 import type { Content, RewriteInstruction } from '@/domain/content';
+import { editDesign, type VisualEdit } from '@/domain/visual';
 import type { Idea, IdeaDraft, IdeaFormat, IdeaSource, IdeaStatus } from '@/domain/idea';
 import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
 
@@ -35,12 +36,23 @@ export function useContents(brandId: string | undefined) {
   });
 }
 
+/** Mentre il visivo si crea, il contenuto si rilegge: lo stato dei passi sta lì. */
+const whileCreating = (content: Content | null | undefined) => (content?.visual.design?.status === 'creating' ? 1500 : false);
+
 export function useSlotContent(slotId: string) {
-  return useQuery({ queryKey: slotContentKey(slotId), queryFn: () => services.contents.getForSlot(slotId) });
+  return useQuery({
+    queryKey: slotContentKey(slotId),
+    queryFn: () => services.contents.getForSlot(slotId),
+    refetchInterval: (query) => whileCreating(query.state.data),
+  });
 }
 
 export function useContent(contentId: string) {
-  return useQuery({ queryKey: contentKey(contentId), queryFn: () => services.contents.get(contentId) });
+  return useQuery({
+    queryKey: contentKey(contentId),
+    queryFn: () => services.contents.get(contentId),
+    refetchInterval: (query) => whileCreating(query.state.data),
+  });
 }
 
 export function useContentDrafts(brandId: string | undefined) {
@@ -131,6 +143,61 @@ export function useRewriteVariant() {
   return useMutation({
     mutationFn: ({ contentId, channel, instruction }: { contentId: string; channel: ChannelId; instruction: RewriteInstruction }) =>
       services.contents.rewrite(contentId, channel, instruction),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+/** Cambiare layout o tipo deve sembrare istantaneo: la card cambia prima della risposta. */
+export function useEditVisual() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ content, edit }: { content: Content; edit: VisualEdit }) => services.contents.editVisual(content.id, edit),
+    onMutate: ({ content, edit }) => {
+      const design = content.visual.design;
+      if (!design || design.status === 'creating') return;
+      cacheContent(client, { ...content, visual: { ...content.visual, design: editDesign(design, edit) } });
+    },
+    onSuccess: (content) => cacheContent(client, content),
+    onError: (_error, { content }) => cacheContent(client, content),
+  });
+}
+
+export function useProposeVisual() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (contentId: string) => services.contents.proposeVisual(contentId),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+export function useCreateVisual() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (contentId: string) => services.contents.createVisual(contentId),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+export function useRegenerateImage() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (contentId: string) => services.contents.regenerateImage(contentId),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+export function useUploadPhoto() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contentId, dataUri }: { contentId: string; dataUri: string }) => services.contents.uploadPhoto(contentId, dataUri),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+export function useRefreshVisual() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (contentId: string) => services.contents.refreshVisual(contentId),
     onSuccess: (content) => cacheContent(client, content),
   });
 }

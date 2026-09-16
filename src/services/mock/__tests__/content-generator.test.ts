@@ -31,6 +31,16 @@ describe('generateContent', () => {
     expect(scenes.some((scene) => scene.source === 'generated')).toBe(true);
   });
 
+  it('propone il visivo con la bozza: una card per il post, una per slide, nessuna per il video', () => {
+    const post = generateContent(brand, idea, ['linkedin'], 'post', 0).visual.design;
+    expect(post?.status).toBe('proposed');
+    expect(post?.pages).toHaveLength(1);
+    expect(post?.pages[0].text.headline.length).toBeGreaterThan(0);
+    const carousel = generateContent(brand, idea, ['instagram'], 'carousel', 0).visual;
+    expect(carousel.design?.pages).toHaveLength(carousel.slides.length);
+    expect(generateContent(brand, idea, ['tiktok'], 'video', 0).visual.design).toBeNull();
+  });
+
   it('una nuova revisione cambia almeno una frase', () => {
     const texts = [0, 1, 2, 3].map(
       (revision) => generateContent(brand, idea, ['linkedin'], 'post', revision).variants[0].text,

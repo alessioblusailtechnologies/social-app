@@ -83,6 +83,12 @@ export function createHttpServices(api: ApiClient): Services {
     approve: (contentId) => api.post<ContentWithSlot>(route`/contents/${contentId}/approve`),
     schedule: (contentId, when) => api.post<ContentWithSlot>(route`/contents/${contentId}/schedule`, when),
     reopen: (contentId) => api.post<ContentWithSlot>(route`/contents/${contentId}/reopen`),
+    editVisual: (contentId, edit) => api.put<Content>(route`/contents/${contentId}/visual`, edit),
+    proposeVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/propose`),
+    createVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/create`),
+    regenerateImage: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/image`),
+    uploadPhoto: (contentId, dataUri) => api.post<Content>(route`/contents/${contentId}/visual/photo`, { dataUri }),
+    refreshVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/refresh`),
   };
 
   // Il collegamento dei canali resta simulato: nel prodotto vero è un flusso OAuth per canale.

@@ -34,6 +34,21 @@ const envSchema = z.object({
   AI_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium'),
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(240_000),
   AI_MAX_BUDGET_USD: z.coerce.number().positive().default(1),
+  /** Le foto dei visivi (Gemini, Nano Banana). Senza, crearle risponde 503; le card senza foto funzionano. */
+  GEMINI_API_KEY: optionalString,
+  /** Nano Banana 2 di base; `gemini-3-pro-image` per il Pro. */
+  IMAGE_MODEL: z.string().min(1).default('gemini-3.1-flash-image'),
+  /** Lo scontorno (fal, BiRefNet). Senza, i layout con soggetto scontornato non si creano. */
+  FAL_KEY: optionalString,
+  /** Il servizio che compone i PNG delle card (be-render). Su Render arriva come `host:porta` del servizio privato. */
+  RENDER_URL: z.preprocess(
+    (value) => (value === '' ? undefined : typeof value === 'string' && !/^https?:\/\//.test(value) ? `http://${value}` : value),
+    z.url().default('http://localhost:3020'),
+  ),
+  /** Il segreto condiviso con be-render, se lo chiede. */
+  RENDER_TOKEN: optionalString,
+  /** Il bucket privato di Supabase Storage con foto, scontorni e PNG. */
+  MEDIA_BUCKET: z.string().min(1).default('presenza-media'),
   /** In locale; in produzione la porta la assegna la piattaforma in `PORT` (vedi server.ts). */
   API_PORT: z.coerce.number().int().default(3010),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),

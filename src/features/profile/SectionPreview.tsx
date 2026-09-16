@@ -14,7 +14,7 @@ import {
   type StatusTone,
 } from '@/design-system';
 import { currentVoiceCard, isConnected, type Brand, type SectionKey } from '@/domain/brand';
-import { CHANNELS, imageStyleLabel } from '@/domain/catalog';
+import { CHANNELS, imageStyleLabel, typographyName } from '@/domain/catalog';
 import { identityLine, sectionCopy, sectionSummary } from '@/domain/sections';
 import { BrandAvatar, ChannelMark, Swatches } from '@/features/brand-editors';
 import { formatDay } from '@/lib/dates';
@@ -124,14 +124,14 @@ function PreviewBody({ sectionKey, brand }: { sectionKey: SectionKey; brand: Bra
     }
 
     case 'visual': {
-      const { logoUri, palette, imageStyle } = brand.visual;
+      const { logoUri, palette, imageStyle, typography } = brand.visual;
       return (
         <View style={styles.row}>
           {logoUri ? <BrandAvatar brand={brand} size={40} /> : null}
           <View style={[styles.flex, styles.stack]}>
             <Swatches colors={palette.colors} size={16} />
             <Text variant="caption">
-              {palette.name} · {imageStyleLabel(imageStyle).toLowerCase()}
+              {palette.name} · caratteri {typographyName(typography).toLowerCase()} · {imageStyleLabel(imageStyle).toLowerCase()}
               {logoUri ? '' : ' · nessun logo'}
             </Text>
           </View>

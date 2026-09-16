@@ -1,22 +1,14 @@
-import { ImageIcon, Play } from 'lucide-react-native';
+import { ImagePlus, Play } from 'lucide-react-native';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import {
-  Badge,
-  Panel,
-  ShapeTile,
-  StatusDot,
-  Text,
-  colors,
-  palette,
-  radii,
-  type ShapeKind,
-} from '@/design-system';
+import { Badge, Panel, StatusDot, Text, colors, palette, radii } from '@/design-system';
 import type { Brand, ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
 import type { ChannelVariant, ContentVisual, VideoScene, VoiceCheck } from '@/domain/content';
 import type { IdeaFormat } from '@/domain/idea';
+import { ASPECT_SIZES, VISUAL_STEP_LABELS, aspectFor, brandKit, type Aspect, type VisualStep } from '@/domain/visual';
 import { BrandAvatar } from '@/features/brand-editors';
+import { CardView } from '@/features/visual/CardView';
 
 /** Testo navy o bianco, a seconda di quanto è chiaro il fondo del brand. */
 function readableOn(hex: string): string {
@@ -24,72 +16,54 @@ function readableOn(hex: string): string {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55 ? palette.navy700 : palette.white;
 }
 
-const COVER_SHAPES: ShapeKind[] = ['quarter', 'circle', 'leaf', 'half'];
+const CAROUSEL_CARD_WIDTH = 220;
 
-/** Le anteprime usano l'identità visiva del brand, non quella dell'app. */
-function Cover({ brand, headline, height }: { brand: Brand; headline: string; height: number }) {
-  const [primary, secondary, accent, ground] = brand.visual.palette.colors;
-  const foreground = readableOn(primary);
-  const style = brand.visual.imageStyle;
+const ratioOf = (aspect: Aspect) => ASPECT_SIZES[aspect].width / ASPECT_SIZES[aspect].height;
+
+/** Il posto della card finché non c'è: da creare, oppure in creazione. */
+function VisualPlaceholder({ aspect, carousel, step }: { aspect: Aspect; carousel: boolean; step: VisualStep | 'todo' }) {
+  const creating = step !== 'todo';
   return (
-    <View style={[styles.cover, { backgroundColor: primary, height }]}>
-      <Text variant="heading" color={foreground} numberOfLines={4}>
-        {headline}
-      </Text>
-      {style === 'flat-geometric' && (
-        <View style={styles.tiles}>
-          {[secondary, accent, ground, secondary]
-            .filter((color) => color.toUpperCase() !== primary.toUpperCase())
-            .map((color, i) => (
-              <ShapeTile key={i} kind={COVER_SHAPES[i % COVER_SHAPES.length]} color={color} ground={primary} size={36} rotation={i % 2 ? 90 : 0} />
-            ))}
-        </View>
-      )}
-      {(style === 'desaturated-photo' || style === 'natural-photo') && (
-        <View style={styles.photo}>
-          <ImageIcon size={18} color={palette.navy700} />
-          <Text variant="caption" color={palette.navy700}>
-            Foto {style === 'desaturated-photo' ? 'desaturata' : 'naturale'} generata
+    <View
+      style={[
+        styles.placeholder,
+        creating ? styles.placeholderBusy : styles.placeholderEmpty,
+        { aspectRatio: ratioOf(aspect) },
+        carousel ? { width: CAROUSEL_CARD_WIDTH } : aspect === '9:16' && styles.tall,
+      ]}>
+      {creating ? (
+        <>
+          <StatusDot tone="partial" size={12} />
+          <Text variant="strongSmall">Sto creando il visivo</Text>
+          <Text variant="caption">{VISUAL_STEP_LABELS[step]}…</Text>
+        </>
+      ) : (
+        <>
+          <ImagePlus size={20} color={palette.grey500} />
+          <Text variant="strongSmall">Visivo da creare</Text>
+          <Text variant="caption" align="center">
+            La proposta è nel pannello Visivo
           </Text>
-        </View>
-      )}
-      {brand.visual.signature && brand.visual.logoUri && (
-        <View style={styles.signature}>
-          <BrandAvatar brand={brand} size={20} />
-        </View>
+        </>
       )}
     </View>
   );
 }
 
-export function VisualPreview({ brand, format, visual }: { brand: Brand; format: IdeaFormat; visual: ContentVisual }) {
-  const [primary, , , ground] = brand.visual.palette.colors;
-
-  if (format === 'carousel') {
-    return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-        {visual.slides.map((slide, i) => {
-          const background = i % 2 === 0 ? primary : ground;
-          const foreground = readableOn(background);
-          return (
-            <View key={i} style={[styles.slide, { backgroundColor: background }]}>
-              <Text variant="caption" color={foreground}>
-                {i + 1}/{visual.slides.length}
-              </Text>
-              <Text variant="heading" color={foreground} numberOfLines={3}>
-                {slide.title}
-              </Text>
-              <Text variant="body" color={foreground} numberOfLines={5} style={styles.slideBody}>
-                {slide.body}
-              </Text>
-            </View>
-          );
-        })}
-      </ScrollView>
-    );
-  }
-
+/** Le anteprime usano l'identità visiva del brand, non quella dell'app. */
+export function VisualPreview({
+  brand,
+  format,
+  visual,
+  channel,
+}: {
+  brand: Brand;
+  format: IdeaFormat;
+  visual: ContentVisual;
+  channel: ChannelId;
+}) {
   if (format === 'video') {
+    const [primary] = brand.visual.palette.colors;
     return (
       <View style={[styles.video, { backgroundColor: primary }]}>
         <Text variant="strong" color={readableOn(primary)} numberOfLines={4}>
@@ -105,7 +79,34 @@ export function VisualPreview({ brand, format, visual }: { brand: Brand; format:
     );
   }
 
-  return <Cover brand={brand} headline={visual.headline} height={format === 'article' ? 150 : 200} />;
+  const { design } = visual;
+  const aspect = aspectFor(channel, format);
+  const carousel = (design?.pages.length ?? visual.slides.length) > 1;
+
+  if (!design || design.status !== 'ready') {
+    const step = design?.status === 'creating' && design.step ? design.step : 'todo';
+    return <VisualPlaceholder aspect={aspect} carousel={carousel} step={step} />;
+  }
+
+  const kit = brandKit(brand);
+  const card = {
+    kit,
+    aspect,
+    pageCount: design.pages.length,
+    photoUrl: design.image.photo?.url ?? null,
+    cutoutUrl: design.image.cutout?.url ?? null,
+  };
+
+  if (design.pages.length > 1) {
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+        {design.pages.map((page, i) => (
+          <CardView key={i} {...card} page={page} pageIndex={i} width={CAROUSEL_CARD_WIDTH} />
+        ))}
+      </ScrollView>
+    );
+  }
+  return <CardView {...card} page={design.pages[0]} pageIndex={0} style={aspect === '9:16' ? styles.tall : undefined} />;
 }
 
 /** Il post come apparirà sul canale: intestazione, testo, hashtag e visivo. */
@@ -123,7 +124,7 @@ export function PostPreview({
   when: string;
 }) {
   const mediaFirst: ChannelId[] = ['instagram', 'tiktok'];
-  const media = <VisualPreview brand={brand} format={format} visual={visual} />;
+  const media = <VisualPreview brand={brand} format={format} visual={visual} channel={variant.channel} />;
   return (
     <View style={styles.post}>
       <View style={styles.postHeader}>
@@ -206,22 +207,11 @@ const styles = StyleSheet.create({
   },
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   postText: { lineHeight: 20 },
-  cover: { borderRadius: radii.lg, padding: 16, justifyContent: 'space-between', overflow: 'hidden' },
-  tiles: { flexDirection: 'row', gap: 0 },
-  photo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-  },
-  signature: { position: 'absolute', right: 10, bottom: 10 },
+  placeholder: { borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center', gap: 6, padding: 16 },
+  placeholderEmpty: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.borderField },
+  placeholderBusy: { backgroundColor: colors.surfaceSunken },
+  tall: { width: '62%', alignSelf: 'center' },
   carousel: { gap: 8 },
-  slide: { width: 220, height: 220, borderRadius: radii.lg, padding: 16, gap: 8 },
-  slideBody: { lineHeight: 18 },
   video: {
     alignSelf: 'center',
     width: 170,

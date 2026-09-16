@@ -1,5 +1,6 @@
-import type { Brand, ChannelId } from '@/domain/brand';
+import type { Brand, ChannelId, ImageStyle } from '@/domain/brand';
 import { currentVoiceCard } from '@/domain/brand';
+import { proposeDesign, type VisualKind, type VisualProposal } from '@/domain/visual';
 import {
   CHANNEL_LIMITS,
   numbersToDigits,
@@ -120,6 +121,36 @@ export interface GeneratedContent {
   visual: ContentVisual;
 }
 
+const KIND_BY_STYLE: Record<ImageStyle, VisualKind> = {
+  'flat-geometric': 'infographic',
+  'text-only': 'infographic',
+  'natural-photo': 'photo',
+  'desaturated-photo': 'mixed',
+};
+
+const VALUE_PATTERN = /\b\d+(?:[.,]\d+)?\s?(?:%|ore|giorni|minuti|settimane|mesi|anni|euro|€)/i;
+
+/** La proposta di visivo: il tipo dallo stile del brand, i testi della card dall'idea, la foto descritta a parole. */
+function visualProposal(brand: Brand, idea: Idea, angle: string[], clean: (text: string) => string): VisualProposal {
+  const theme = brand.themes.find((candidate) => candidate.id === idea.themeId);
+  return {
+    kind: KIND_BY_STYLE[brand.visual.imageStyle],
+    templateId: null,
+    text: {
+      kicker: theme?.name ?? idea.angleLabel,
+      headline: clean(shortHook(idea.title)),
+      body: clean(angle[0] ?? ''),
+      value: VALUE_PATTERN.exec(clean(`${idea.title} ${idea.angle}`))?.[0] ?? '',
+      items: angle.length >= 3 ? angle.slice(0, 4).map((sentence) => ({ title: '', body: clean(sentence).replace(/\.$/, '') })) : [],
+      author: '',
+    },
+    imageDescription:
+      brand.identity.kind === 'person'
+        ? 'Una scrivania ordinata con un portatile aperto, un taccuino e una tazza, luce naturale da una finestra laterale'
+        : 'Mani al lavoro su un banco ordinato, inquadratura ravvicinata, luce naturale morbida',
+  };
+}
+
 export function generateContent(
   brand: Brand,
   idea: Idea,
@@ -202,7 +233,8 @@ export function generateContent(
         ].map((scene) => ({ ...scene, description: clean(scene.description) }))
       : [];
 
-  return { format, variants, visual: { headline: clean(shortHook(idea.title)), slides, scenes } };
+  const design = proposeDesign(visualProposal(brand, idea, angle, clean), format, slides);
+  return { format, variants, visual: { headline: clean(shortHook(idea.title)), slides, scenes, design } };
 }
 
 /**

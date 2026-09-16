@@ -1,15 +1,26 @@
 import { z } from 'zod';
 
-import type { Brand, ChannelId } from '@/domain/brand';
-import { channelName } from '@/domain/catalog';
+import type { Brand, ChannelId, ImageStyle } from '@/domain/brand';
+import { channelName, imageStyleLabel } from '@/domain/catalog';
 import {
   CHANNEL_LIMITS,
+  type CarouselSlide,
   type ChannelVariant,
   type Content,
   type ContentVisual,
   type RewriteInstruction,
 } from '@/domain/content';
 import type { Idea, IdeaFormat, IdeaSource } from '@/domain/idea';
+import {
+  CARD_LIMITS,
+  SINGLE_TEMPLATES,
+  VISUAL_KINDS,
+  VISUAL_KIND_LABELS,
+  fallbackDesign,
+  proposeDesign,
+  type TemplateId,
+  type VisualDesign,
+} from '@/domain/visual';
 
 import { ApiError } from '../contract/errors';
 import { channelIdSchema } from '../contract/schemas';
@@ -54,6 +65,25 @@ const SYSTEM = [
   '- niente virgolette attorno al testo e nessun commento tuo fuori dal contenuto.',
 ].join('\n');
 
+const SINGLE_TEMPLATE_IDS = SINGLE_TEMPLATES.map((spec) => spec.id) as [TemplateId, ...TemplateId[]];
+
+/** La proposta di card che accompagna la bozza: testi per ruolo, il template e cosa si vede nella foto. */
+const proposalSchema = z.object({
+  kind: z.enum(['infographic', 'photo', 'mixed']),
+  templateId: z.enum(SINGLE_TEMPLATE_IDS),
+  card: z.object({
+    kicker: z.string(),
+    headline: z.string(),
+    body: z.string(),
+    value: z.string(),
+    items: z.array(z.object({ title: z.string(), body: z.string() })),
+    author: z.string(),
+  }),
+  imageDescription: z.string(),
+});
+
+export type ProposalOutput = z.infer<typeof proposalSchema>;
+
 const writtenSchema = z.object({
   title: z.string().describe('Il titolo del contenuto in una frase.'),
   themeId: z.string().nullable().describe('L’id del tema del brand a cui si lega, o null.'),
@@ -68,7 +98,63 @@ const writtenSchema = z.object({
       source: z.enum(['generated', 'shoot']),
     }),
   ),
+  visual: proposalSchema.nullable().describe('La proposta di card del post; null per un video.'),
 });
+
+const KIND_FOR_STYLE: Record<ImageStyle, string> = {
+  'text-only': '"infographic", perché il brand non usa foto',
+  'flat-geometric': '"infographic", con le forme geometriche del brand',
+  'natural-photo': '"photo" o "mixed", con foto naturali',
+  'desaturated-photo': '"mixed" o "photo", con foto desaturate',
+};
+
+/** Il catalogo dei template per l'AI, generato dal dominio così prompt e app non divergono. */
+function describeVisualGuide(brand: Brand, format: IdeaFormat): string {
+  if (format === 'video') return '## Visivo\nPer un video visual è null.';
+  const catalog = VISUAL_KINDS.map((kind) =>
+    [
+      `${VISUAL_KIND_LABELS[kind]}, kind "${kind}":`,
+      ...SINGLE_TEMPLATES.filter((spec) => spec.kind === kind).map((spec) => {
+        const items =
+          spec.items && spec.items.min > 0
+            ? `; da ${spec.items.min} a ${spec.items.max} punti${spec.items.titled ? ', ognuno con title e body' : ''}`
+            : '';
+        return `- "${spec.id}" (${spec.name}): ${spec.hint}. Testi richiesti: ${spec.requires.join(', ') || 'nessuno'}${items}.`;
+      }),
+    ].join('\n'),
+  );
+  return [
+    '## Visivo: la card del post',
+    'In visual proponi la card che accompagna il testo. Non disegni niente: scegli un template del brand e ne scrivi i testi, brevi, pensati per la card e non copiati dalla prima riga del post.',
+    ...catalog,
+    `Limiti in caratteri: kicker ${CARD_LIMITS.kicker}, headline ${CARD_LIMITS.headline}, body ${CARD_LIMITS.body}, value ${CARD_LIMITS.value}, author ${CARD_LIMITS.author}; nei punti title ${CARD_LIMITS.itemTitle} e body ${CARD_LIMITS.itemBody}; al massimo ${CARD_LIMITS.items} punti.`,
+    'Regole del visivo:',
+    `- lo stile immagini del brand è «${imageStyleLabel(brand.visual.imageStyle)}»: kind ${KIND_FOR_STYLE[brand.visual.imageStyle]};`,
+    '- value solo con un numero vero, dato dal brand o già nel testo, oppure tra parentesi quadre da completare, per esempio [3 ore]; altrimenti stringa vuota;',
+    '- author solo per una citazione vera, con il nome di chi la dice; altrimenti stringa vuota e niente template "quote";',
+    '- kicker è un’etichetta di due o tre parole, per esempio il tema; i testi che il template non usa restano stringhe vuote;',
+    '- imageDescription dice cosa si vede nella foto, in concreto: soggetto, luogo, inquadratura, luce. Niente scritte né loghi. Per un personal brand niente volti: oggetti, mani, ambienti. Scrivila anche per l’infografica: serve se l’utente passa a Foto o Mista;',
+    format === 'carousel' ? '- nel carosello la card è la copertina: le altre slide sono quelle di slides.' : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** La proposta dell'AI diventa un visivo da creare; senza proposta, una card fatta con i testi della bozza. */
+export function proposalFromOutput(
+  output: ProposalOutput | null,
+  format: IdeaFormat,
+  headline: string,
+  slides: readonly CarouselSlide[],
+): VisualDesign | null {
+  if (format === 'video') return null;
+  if (!output) return fallbackDesign(format, headline, slides);
+  return proposeDesign(
+    { kind: output.kind, templateId: output.templateId, text: output.card, imageDescription: output.imageDescription },
+    format,
+    slides,
+  );
+}
 
 export type ContentBasis = { kind: 'idea'; idea: Idea } | { kind: 'source'; source: IdeaSource };
 
@@ -144,6 +230,7 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
         '## Canali, in quest’ordine: una variante per ciascuno',
         ...channels.map((channel) => `- "${channel}" (${channelName(channel)}): ${CHANNEL_GUIDE[channel]}`),
       ].join('\n'),
+      describeVisualGuide(brand, format),
       revision > 0 && previous
         ? [
             `## Versione precedente, da non ripetere`,
@@ -177,27 +264,27 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
         ? result.themeId
         : null;
 
+  const headline = result.headline.trim();
+  const slides =
+    format === 'carousel'
+      ? result.slides.slice(0, 10).map((slide) => ({ title: slide.title.trim(), body: slide.body.trim() }))
+      : [];
+  const scenes =
+    format === 'video'
+      ? result.scenes.slice(0, 10).map((scene) => ({
+          title: scene.title.trim(),
+          description: scene.description.trim(),
+          seconds: Math.min(60, Math.max(1, scene.seconds)),
+          source: scene.source,
+        }))
+      : [];
+
   return {
     title,
     themeId,
     format,
     variants,
-    visual: {
-      headline: result.headline.trim(),
-      slides:
-        format === 'carousel'
-          ? result.slides.slice(0, 10).map((slide) => ({ title: slide.title.trim(), body: slide.body.trim() }))
-          : [],
-      scenes:
-        format === 'video'
-          ? result.scenes.slice(0, 10).map((scene) => ({
-              title: scene.title.trim(),
-              description: scene.description.trim(),
-              seconds: Math.min(60, Math.max(1, scene.seconds)),
-              source: scene.source,
-            }))
-          : [],
-    },
+    visual: { headline, slides, scenes, design: proposalFromOutput(result.visual, format, headline || title, slides) },
   };
 }
 

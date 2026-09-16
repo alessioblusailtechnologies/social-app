@@ -71,10 +71,14 @@ export interface Palette {
   origin: 'preset' | 'site' | 'custom';
 }
 
+/** La coppia di caratteri delle card: titoli e testo, da Google Fonts. */
+export type TypographyId = 'inter' | 'archivo' | 'space-grotesk' | 'manrope' | 'fraunces' | 'dm-serif' | 'playfair' | 'ibm-plex';
+
 export interface Visual {
   logoUri: string | null;
   palette: Palette;
   imageStyle: ImageStyle;
+  typography: TypographyId;
   /** Logo piccolo in basso a destra sulle immagini generate. */
   signature: boolean;
 }

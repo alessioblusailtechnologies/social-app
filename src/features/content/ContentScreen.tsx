@@ -26,9 +26,11 @@ import { channelName } from '@/domain/catalog';
 import { CHANNEL_LIMITS, checkVoice, REWRITE_INSTRUCTIONS, type Content } from '@/domain/content';
 import { FORMAT_LABELS, type IdeaFormat, type IdeaSource } from '@/domain/idea';
 import { nextFreeDay, SLOT_STATUS_LABELS, type PlanSlot } from '@/domain/plan';
+import { channelsWaitingForVisual } from '@/domain/visual';
 import { ChannelMark } from '@/features/brand-editors';
 import { SLOT_TONES } from '@/features/plan/PlanParts';
 import { DayTimePicker, IdeaPicker, RemoveFromPlan, SlotSchedule } from '@/features/plan/SlotPanels';
+import { VisualPanel } from '@/features/visual/VisualPanel';
 import { formatWeekdayShort, today } from '@/lib/dates';
 import {
   useApproveContent,
@@ -111,6 +113,22 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
   const check = checkVoice(text, currentVoiceCard(brand.voice), variant ? CHANNEL_LIMITS[variant.channel] : undefined);
   const channelNames = channels.map(channelName).join(' e ');
   const slotWhen = slot ? `${formatWeekdayShort(slot.date)} alle ${slot.time}` : '';
+  const design = content?.visual.design ?? null;
+  // Instagram e TikTok non pubblicano senza immagine; gli altri canali possono uscire solo testo.
+  const waiting = content ? channelsWaitingForVisual(content.format, channels, design) : [];
+  const creatingVisual = design?.status === 'creating';
+  const withoutImage = content !== null && content.format !== 'video' && design?.status !== 'ready' && waiting.length === 0;
+  const approvalBlocked = editing || busy || creatingVisual || waiting.length > 0;
+  const explainBlocked = () =>
+    toast(
+      editing
+        ? 'Salva prima il testo.'
+        : busy
+          ? 'Aspetta che la bozza sia pronta.'
+          : creatingVisual
+            ? 'Aspetta che il visivo sia pronto.'
+            : `${waiting.map(channelName).join(' e ')} non pubblica senza immagine: crea prima il visivo.`,
+    );
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/plan'));
 
@@ -353,6 +371,8 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
               </Panel>
             )}
 
+            <VisualPanel brand={brand} content={content} locked={locked} />
+
             <VoicePanel check={check} />
 
             {content.format === 'video' && <ScenesPanel scenes={content.visual.scenes} />}
@@ -411,15 +431,20 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
 
           {content && !approved && content.slotId && (
             <>
+              {withoutImage && (
+                <Text variant="caption" align="center">
+                  Esce senza immagine: il visivo non è ancora creato.
+                </Text>
+              )}
               <Button
                 size="lg"
                 block
                 variant="accent"
-                disabled={editing || busy}
+                disabled={approvalBlocked}
                 busy={approve.isPending}
-                onDisabledPress={() => toast(editing ? 'Salva prima il testo.' : 'Aspetta che la bozza sia pronta.')}
+                onDisabledPress={explainBlocked}
                 onPress={approveInSlot}>
-                {approve.isPending ? 'Programmo…' : 'Approva e programma'}
+                {approve.isPending ? 'Programmo…' : waiting.length > 0 ? 'Crea prima il visivo' : 'Approva e programma'}
               </Button>
               <Button variant="ghost" block busy={busy} onPress={() => redo()}>
                 Rifai la bozza
@@ -429,14 +454,19 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
 
           {content && !approved && !content.slotId && !when && (
             <>
+              {withoutImage && (
+                <Text variant="caption" align="center">
+                  Esce senza immagine: il visivo non è ancora creato.
+                </Text>
+              )}
               <Button
                 size="lg"
                 block
                 variant="accent"
-                disabled={editing || busy}
-                onDisabledPress={() => toast(editing ? 'Salva prima il testo.' : 'Aspetta che la bozza sia pronta.')}
+                disabled={approvalBlocked}
+                onDisabledPress={explainBlocked}
                 onPress={openScheduling}>
-                Approva e scegli quando
+                {waiting.length > 0 ? 'Crea prima il visivo' : 'Approva e scegli quando'}
               </Button>
               <Button variant="ghost" block busy={busy} onPress={() => redo()}>
                 Rifai la bozza

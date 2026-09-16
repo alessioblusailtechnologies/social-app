@@ -1,5 +1,6 @@
 import type { ChannelId, VoiceCard } from './brand';
 import type { IdeaFormat, IdeaSource } from './idea';
+import type { VisualDesign } from './visual';
 
 /**
  * Il contenuto: la bozza che l'AI prepara, con una variante di testo per ogni canale e il
@@ -31,6 +32,11 @@ export interface ContentVisual {
   headline: string;
   slides: CarouselSlide[];
   scenes: VideoScene[];
+  /**
+   * Le card del post: proposta con la bozza, create quando l'utente lo chiede. Nulla per i video e
+   * per le bozze nate prima dei visivi (vedi `fallbackDesign`).
+   */
+  design: VisualDesign | null;
 }
 
 export type ContentStatus = 'draft' | 'approved';

@@ -1,7 +1,9 @@
 import type { ChannelId } from '@/domain/brand';
+import { channelName } from '@/domain/catalog';
 import type { Content, RewriteInstruction } from '@/domain/content';
 import type { IdeaFormat } from '@/domain/idea';
 import { selectedChannels, type PlanSlot } from '@/domain/plan';
+import { channelsWaitingForVisual, redoDesign } from '@/domain/visual';
 import type { DirectContentRequest } from '@/services/types';
 
 import { rewriteVariant, writeContent } from '../ai/content';
@@ -29,6 +31,17 @@ import { aiMeta, inTransaction, type Deps } from './deps';
 export type WithSlot = { content: Content; slot: PlanSlot };
 
 const AI_FAILED = () => new ApiError(502, 'AI_FAILED', 'Non sono riuscito a completare la generazione. Riprova.');
+
+/** Instagram e TikTok non pubblicano senza immagine: senza visivo pronto non si approva. */
+function assertVisualReady(content: Content): void {
+  const waiting = channelsWaitingForVisual(content.format, content.channels, content.visual.design);
+  if (waiting.length > 0) {
+    throw ApiError.conflict(
+      'VISUAL_MISSING',
+      `Crea prima il visivo: ${waiting.map(channelName).join(' e ')} non pubblica senza immagine.`,
+    );
+  }
+}
 
 export function listBrandContents(deps: Deps, identity: Identity, brandId: string): Promise<Content[]> {
   return inTransaction(deps, identity, async (db) => {
@@ -85,6 +98,7 @@ export async function prepareContent(deps: Deps, identity: Identity, slotId: str
     if (current.ideaId !== idea.id) {
       throw ApiError.conflict('SLOT_CHANGED', 'L’uscita è cambiata mentre preparavo la bozza: riprova.');
     }
+    const existing = await findContentForSlot(db, slotId);
     const fields: ContentFields = {
       slotId,
       ideaId: idea.id,
@@ -94,12 +108,12 @@ export async function prepareContent(deps: Deps, identity: Identity, slotId: str
       channels: slot.channels,
       format: written.format,
       variants: written.variants,
-      visual: written.visual,
+      // Un visivo già creato resta e aspetta «Aggiorna il visivo».
+      visual: { ...written.visual, design: redoDesign(existing?.visual.design, written.visual.design) },
       status: 'draft',
       revision,
       approvedAt: null,
     };
-    const existing = await findContentForSlot(db, slotId);
     const content = existing
       ? await saveContent(db, { ...existing, ...fields })
       : await insertContent(db, identity.accountId, brand.id, fields);
@@ -210,7 +224,7 @@ export async function regenerateContent(deps: Deps, identity: Identity, contentI
       ...(idea ? {} : { title: written.title, themeId: written.themeId }),
       format: written.format,
       variants: written.variants,
-      visual: written.visual,
+      visual: { ...written.visual, design: redoDesign(current.visual.design, written.visual.design) },
       revision,
       status: 'draft',
       approvedAt: null,
@@ -259,6 +273,7 @@ export function approveContent(deps: Deps, identity: Identity, contentId: string
     const now = deps.now();
     const current = await requireContent(db, contentId);
     if (!current.slotId) throw ApiError.invalid('Il contenuto non è in un’uscita: va programmato.');
+    assertVisualReady(current);
     const slot = await requireSlot(db, current.slotId, now);
     const content = await saveContent(db, { ...current, status: 'approved', approvedAt: now.toISOString() });
     return { content, slot: await saveSlot(db, { ...slot, status: 'scheduled' }, now) };
@@ -275,6 +290,7 @@ export function scheduleContent(
   return inTransaction(deps, identity, async (db) => {
     const now = deps.now();
     const current = await requireContent(db, contentId);
+    assertVisualReady(current);
     const status: PlanSlot['status'] = when.publishNow ? 'published' : 'scheduled';
     const existing = current.slotId ? await findSlot(db, current.slotId, now) : null;
     const slot = existing

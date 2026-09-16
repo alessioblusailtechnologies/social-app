@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import { createEmptyDraft } from '@/domain/catalog';
 import type { Brand } from '@/domain/brand';
+import type { Content } from '@/domain/content';
 import { createThemes } from '@/domain/themes';
 
 import { cleanLabels, describeBrand } from '../src/ai/brand-context';
-import { cleanHashtags } from '../src/ai/content';
+import { cleanHashtags, proposalFromOutput } from '../src/ai/content';
+import { photoPrompt } from '../src/ai/image-prompt';
+import type { MediaStorage } from '../src/media/storage';
+import { parsePhotoDataUri } from '../src/services/visual';
+import { signContents, unsignedVisual } from '../src/visual/files';
 import { fitChannels } from '../src/ai/ideas';
 import { costAtTariff, modelTarget } from '../src/ai/providers';
 import { colorsFromHtml, countColors } from '../src/ai/site-colors';
@@ -102,6 +107,80 @@ describe('uscite', () => {
     expect(toSlot(row, new Date(2026, 8, 15, 8, 59)).status).toBe('scheduled');
     expect(toSlot(row, new Date(2026, 8, 15, 9, 1)).status).toBe('published');
     expect(toSlot({ ...row, status: 'toApprove' }, new Date(2026, 8, 16)).status).toBe('toApprove');
+  });
+});
+
+describe('visivi', () => {
+  const card = { kicker: 'Il pane', headline: 'Ore di lievitazione', body: '', value: '', items: [], author: '' };
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+  it('il prompt della foto porta descrizione, stile e palette; niente testo, e per un personal brand niente volti', () => {
+    const company = brand();
+    const photo = photoPrompt({ description: 'Pagnotte sul bancone', role: 'photo', aspectRatio: '4:5', brand: company, references: 0 });
+    expect(photo).toContain('Pagnotte sul bancone');
+    expect(photo).toContain(company.visual.palette.colors[0]);
+    expect(photo).toContain('No text, no letters');
+    expect(photo).not.toContain('attached');
+
+    const person = { ...company, identity: { ...company.identity, kind: 'person' as const } };
+    const cutout = photoPrompt({ description: 'Una tazza', role: 'cutout', aspectRatio: '9:16', brand: person, references: 2 });
+    expect(cutout).toContain('one single subject');
+    expect(cutout).toContain('No faces at all');
+    expect(cutout).toContain('head completely outside the frame');
+    expect(cutout).toContain('The 2 attached images');
+  });
+
+  it('la proposta dell’AI diventa un visivo da creare, con una pagina per slide nel carosello', () => {
+    // Senza numero il «Dato» non regge: resta la «Frase».
+    const post = proposalFromOutput({ kind: 'infographic', templateId: 'stat', card, imageDescription: 'Pane' }, 'post', 'Titolo', []);
+    expect(post).toMatchObject({ status: 'proposed', kind: 'infographic' });
+    expect(post?.pages[0].templateId).toBe('statement');
+
+    const slides = [
+      { title: 'A', body: 'a' },
+      { title: 'B', body: 'b' },
+      { title: 'C', body: 'c' },
+    ];
+    const carousel = proposalFromOutput({ kind: 'photo', templateId: 'photo-cover', card, imageDescription: 'Pane' }, 'carousel', 'Titolo', slides);
+    expect(carousel?.pages.map((page) => page.templateId)).toEqual(['photo-cover', 'point', 'closing']);
+    expect(carousel?.image.description).toBe('Pane');
+
+    expect(proposalFromOutput(null, 'post', 'Titolo', [])?.pages[0].text.headline).toBe('Titolo');
+    expect(proposalFromOutput(null, 'video', 'Titolo', [])).toBeNull();
+  });
+
+  it('accetta solo foto vere, fino a 3 MB', () => {
+    expect(parsePhotoDataUri(`data:image/png;base64,${PNG}`).mimeType).toBe('image/png');
+    expect(() => parsePhotoDataUri(`data:image/jpeg;base64,${PNG}`)).toThrow('non è una foto valida');
+    expect(() => parsePhotoDataUri('data:image/svg+xml;base64,PHN2Zz4=')).toThrow('PNG, un JPEG o un WebP');
+    expect(() => parsePhotoDataUri(`data:image/png;base64,${Buffer.alloc(3 * 1024 * 1024 + 1).toString('base64')}`)).toThrow('3 MB');
+  });
+
+  it('nel database gli indirizzi restano vuoti, in risposta si firmano tutti in una chiamata', async () => {
+    const design = {
+      ...proposalFromOutput(null, 'post', 'Titolo', [])!,
+      status: 'ready' as const,
+      image: { description: '', source: 'generated' as const, photo: { path: 'a/b/foto.png', url: 'https://scaduto' }, cutout: null },
+      renders: [{ page: 0, aspect: '4:5' as const, file: { path: 'a/b/card.png', url: 'https://scaduto' } }],
+    };
+    const visual = { headline: '', slides: [], scenes: [], design };
+    expect(unsignedVisual(visual).design?.image.photo?.url).toBe('');
+    expect(unsignedVisual({ ...visual, design: undefined as never }).design).toBeNull();
+
+    let calls = 0;
+    const storage: MediaStorage = {
+      upload: () => Promise.resolve(),
+      download: () => Promise.reject(new Error('non serve')),
+      sign: (paths) => {
+        calls += 1;
+        return Promise.resolve(new Map(paths.map((path) => [path, `https://firmato/${path}`])));
+      },
+    };
+    const content = { id: 'c1', visual } as unknown as Content;
+    const [first, second] = await signContents(storage, [content, { ...content, id: 'c2' }]);
+    expect(calls).toBe(1);
+    expect(first.visual.design?.renders[0].file.url).toBe('https://firmato/a/b/card.png');
+    expect(second.visual.design?.image.photo?.url).toBe('https://firmato/a/b/foto.png');
   });
 });
 

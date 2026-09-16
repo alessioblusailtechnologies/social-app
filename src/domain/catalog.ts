@@ -8,6 +8,7 @@ import type {
   ImageStyle,
   Palette,
   SignalSource,
+  TypographyId,
 } from './brand';
 
 export const KIND_OPTIONS: { kind: BrandKind; title: string; meta: string; label: string }[] = [
@@ -123,6 +124,47 @@ export function imageStyleLabel(id: ImageStyle): string {
   return IMAGE_STYLES.find((style) => style.id === id)?.label ?? '';
 }
 
+export interface FontFace {
+  family: string;
+  weight: number;
+}
+
+/** Coppie di Google Fonts (licenza OFL) per le card: il testo usa sempre anche il peso 600. */
+export const TYPOGRAPHY_OPTIONS: { id: TypographyId; name: string; heading: FontFace; body: FontFace }[] = [
+  { id: 'inter', name: 'Moderno', heading: { family: 'Inter Tight', weight: 700 }, body: { family: 'Inter', weight: 400 } },
+  { id: 'archivo', name: 'Deciso', heading: { family: 'Archivo', weight: 800 }, body: { family: 'Archivo', weight: 400 } },
+  {
+    id: 'space-grotesk',
+    name: 'Tecnico',
+    heading: { family: 'Space Grotesk', weight: 700 },
+    body: { family: 'Inter', weight: 400 },
+  },
+  { id: 'manrope', name: 'Morbido', heading: { family: 'Manrope', weight: 800 }, body: { family: 'Manrope', weight: 400 } },
+  { id: 'fraunces', name: 'Editoriale', heading: { family: 'Fraunces', weight: 700 }, body: { family: 'Inter', weight: 400 } },
+  {
+    id: 'dm-serif',
+    name: 'Elegante',
+    heading: { family: 'DM Serif Display', weight: 400 },
+    body: { family: 'DM Sans', weight: 400 },
+  },
+  {
+    id: 'playfair',
+    name: 'Classico',
+    heading: { family: 'Playfair Display', weight: 700 },
+    body: { family: 'Source Sans 3', weight: 400 },
+  },
+  {
+    id: 'ibm-plex',
+    name: 'Istituzionale',
+    heading: { family: 'IBM Plex Sans', weight: 700 },
+    body: { family: 'IBM Plex Sans', weight: 400 },
+  },
+];
+
+export function typographyName(id: TypographyId | undefined): string {
+  return (TYPOGRAPHY_OPTIONS.find((option) => option.id === id) ?? TYPOGRAPHY_OPTIONS[0]).name;
+}
+
 const DEFAULT_SOURCES: Record<BrandKind, SignalSource[]> = {
   person: [
     { label: 'Stampa economica', enabled: true },
@@ -167,6 +209,7 @@ export function createEmptyDraft(kind: BrandKind): BrandDraft {
       logoUri: null,
       palette: PALETTE_PRESETS[0],
       imageStyle: 'flat-geometric',
+      typography: 'inter',
       signature: true,
     },
     references: { profiles: [], sources: DEFAULT_SOURCES[kind].map((s) => ({ ...s })), milestones: [] },

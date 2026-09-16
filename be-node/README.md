@@ -57,6 +57,34 @@ tempo, e il costo in `ai_usage` si calcola dai token al listino di punta di Deep
 Le rotte AI rispondono quando la sessione finisce: da qualche secondo per un ritocco a un paio di minuti per
 idee con ricerca sul web.
 
+## Visivi
+
+Le card dei post; il piano completo è in `docs/piano-visivi.md`. La bozza propone il visivo insieme al testo (tipo,
+template, testi della card, descrizione della foto): niente si genera finché l'utente non preme «Crea il visivo».
+
+- **Modifiche senza AI** (tipo, layout, testi della card, descrizione): seguono le regole di `src/domain/visual.ts`,
+  le stesse del mock. Durante la creazione rispondono 409 `VISUAL_BUSY`, su un contenuto approvato 409
+  `CONTENT_APPROVED`. Se la card resta pronta ma i PNG non valgono più, un lavoro `render` li rifà.
+- **Creazione in coda**: `…/visual/create` mette il design in `creating` e un lavoro in `presenza.visual_jobs` nella
+  stessa transazione. La coda gira nel processo dell'API (`src/visual/runner.ts`, due lavori insieme, presi con
+  `for update skip locked`) e fa i passi che mancano: foto con Gemini, scontorno con fal, un PNG per pagina e formato
+  con be-render. Dopo ogni passo salva il contenuto, così l'app, che lo rilegge, vede `design.step`. Un errore porta
+  il design a `failed` con il messaggio in `design.error`. All'avvio i lavori rimasti a metà da più di 10 minuti
+  tornano in coda; quelli chiusi da una settimana si cancellano.
+- **Foto**: il prompt (`src/ai/image-prompt.ts`) unisce la descrizione allo stile del Brand DNA e manda le ultime 3
+  foto generate dal brand come riferimento di luce e resa. Mai testo nella foto; per un personal brand niente volti.
+- **Storage**: bucket privato `presenza-media`, percorsi `account/brand/uuid.ext`, un file nuovo per ogni versione.
+  Nel database resta il percorso con `url` vuoto; ogni risposta con contenuti firma tutti gli indirizzi in una sola
+  chiamata, validi 24 ore.
+- **Approvazione**: con Instagram o TikTok tra i canali e il visivo non pronto, `approve` e `schedule` rispondono 409
+  `VISUAL_MISSING`.
+
+Variabili: `GEMINI_API_KEY` e `IMAGE_MODEL` (di base `gemini-3.1-flash-image`, Nano Banana 2; il Pro è
+`gemini-3-pro-image`), `FAL_KEY`, `RENDER_URL` e `RENDER_TOKEN` per be-render, `MEDIA_BUCKET`. Senza la chiave che un
+passo richiede, crearlo risponde 503 prima di mettere in coda; le card senza foto funzionano lo stesso. I consumi
+finiscono in `ai_usage` con task `image` e `cutout`, al listino indicativo: circa 0,067 $ a foto con Nano Banana 2,
+0,134 $ col Pro, fal a tempo di calcolo.
+
 ## Contratto
 
 Tutto JSON. Gli errori sono `{ "code": "NOT_FOUND", "message": "…" }`, con lo stato HTTP. I tipi sono quelli di
@@ -138,6 +166,23 @@ canale e una registrazione vera.
 | POST | `/api/contents/:contentId/schedule` | `{ date, time, publishNow? }` | `{ content, slot }` |
 | POST | `/api/contents/:contentId/reopen` | | `{ content, slot }` |
 
+`approve` e `schedule` rispondono 409 `VISUAL_MISSING` quando un canale che non pubblica senza immagine aspetta il
+visivo.
+
+### Visivo
+
+| Metodo | Percorso | Corpo | Risposta |
+|---|---|---|---|
+| PUT | `/api/contents/:contentId/visual` | `VisualEdit` | `Content` |
+| POST | `/api/contents/:contentId/visual/propose` | | `Content` (proposta senza AI per le bozze nate prima) |
+| POST | `/api/contents/:contentId/visual/create` | | `Content` (`creating`, lavoro in coda) |
+| POST | `/api/contents/:contentId/visual/image` | | `Content` (rifà solo la foto) |
+| POST | `/api/contents/:contentId/visual/photo` | `{ dataUri }` | `Content` (PNG, JPEG o WebP fino a 3 MB) |
+| POST | `/api/contents/:contentId/visual/refresh` | | `Content` (testi della bozza rifatta nella card) |
+
+`VisualEdit = { kind, pages: [{ templateId, text }], description, source, reopen }`. Codici d'errore: `VISUAL_BUSY`
+(409), `CONTENT_APPROVED` (409), `IMAGES_UNAVAILABLE` e `CUTOUT_UNAVAILABLE` (503).
+
 Il collegamento dei canali (`ChannelService.connect`) resta simulato nell'app: nel prodotto vero è un flusso
 OAuth per canale, che non passa da qui.
 
@@ -149,6 +194,9 @@ OAuth per canale, che non passa da qui.
   (`cd be-node && npm ci --include=dev && npm run build`) perché il bundle include `src/` dell'app; si avvia con
   `node be-node/dist/server.mjs`, health check su `/api/health`. Riparte solo quando cambiano `be-node/` o i file
   dell'app che il bundle importa.
+- `presenza-render`: il servizio privato che compone i PNG delle card (`be-render/`), in Docker dalla radice del
+  repo, piano standard da 2 GB (a pagamento). L'API ne prende indirizzo interno (`RENDER_URL`) e segreto
+  (`RENDER_TOKEN`, generato da Render) direttamente dal Blueprint. Vedi `be-render/README.md`.
 - `presenza-app`: l'export web di Expo come sito statico, con `EXPO_PUBLIC_API_URL` scritta nel bundle al momento
   della build.
 
@@ -156,7 +204,8 @@ Primo avvio:
 
 1. Render → *New* → *Blueprint* → repo `alessioblusailtechnologies/social-app`, ramo `master`.
 2. Render chiede i valori `sync: false`: `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`,
-   `DATABASE_URL`, `ANTHROPIC_API_KEY` e `DEEPSEEK_API_KEY`, da copiare da `be-node/.env`. Su un Blueprint già
+   `DATABASE_URL`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY` e `FAL_KEY`,
+   da copiare da `be-node/.env`. Su un Blueprint già
    creato Render non chiede i `sync: false` aggiunti dopo: si inseriscono dal pannello del servizio.
 3. Se i nomi `presenza-api` o `presenza-app` sono già presi, Render assegna un altro sottodominio: si correggono
    `CORS_ORIGINS` e `EXPO_PUBLIC_API_URL` in `render.yaml` (non nel pannello: la sync del Blueprint li riscriverebbe)
@@ -190,5 +239,9 @@ controlla che un account non veda le righe dell'altro e alla fine cancella le du
   lo sviluppo, non per la produzione.
 - **Tempi**: le rotte AI rispondono a generazione finita. Dietro un proxy con timeout di 100 secondi, come
   Cloudflare, le idee con ricerca sul web vanno spostate su un job con polling.
+- **File dei visivi**: le versioni vecchie di foto e PNG restano nel bucket; manca la pulizia dei file non più usati.
+- **Logo nei PNG**: passa a be-render solo se è un indirizzo https o un data URI; un percorso del telefono resta fuori
+  finché il logo non va su Storage. Cambiare palette o caratteri del brand non ricompone le card già create.
+- **Profilo di esempio**: le card delle uscite approvate risultano pronte ma senza PNG.
 - **DeepSeek**: i server sono in Cina. Con un modello `deepseek-*` l'indirizzo del sito, il profilo del brand e i
   testi escono dall'UE: per clienti veri va deciso, o si torna a un Claude.

@@ -3,8 +3,10 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type pg from 'pg';
 
 import type { AiEngine } from '../ai/engine';
+import { unavailableMedia, type MediaDeps } from '../media';
 import type { AuthGateway } from '../services/auth';
 import type { Deps } from '../services/deps';
+import { createVisualRunner, type VisualRunner } from '../visual/runner';
 import { registerAuth, type AccountExists, type VerifyToken } from './plugins/auth';
 import { registerErrorHandler } from './plugins/errors';
 import { registerAiRoutes } from './routes/ai';
@@ -12,7 +14,15 @@ import { registerAuthRoutes } from './routes/auth';
 import { registerContentRoutes } from './routes/contents';
 import { registerIdeaRoutes } from './routes/ideas';
 import { registerPlanRoutes } from './routes/plan';
+import { registerVisualRoutes } from './routes/visual';
 import { registerWorkspaceRoutes } from './routes/workspace';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** La coda dei visivi: `server.ts` la avvia, i test eseguono i lavori con `runPending()`. */
+    visualRunner: VisualRunner;
+  }
+}
 
 export interface AppOptions {
   logger?: boolean | object;
@@ -21,6 +31,8 @@ export interface AppOptions {
   auth: AuthGateway;
   /** Il motore AI, costruito col logger dell'app. */
   ai: (log: FastifyBaseLogger) => AiEngine;
+  /** Storage, foto, scontorno e composizione dei visivi; senza, crearli risponde 503. */
+  media?: (log: FastifyBaseLogger) => MediaDeps;
   /** Origini del FE ammesse, separate da virgola. */
   corsOrigins?: string | undefined;
   now?: () => Date;
@@ -59,13 +71,28 @@ export function buildApp(options: AppOptions): FastifyInstance {
 
   app.get('/api/health', () => ({ status: 'ok' }));
 
-  const deps: Deps = { pool: options.pool, ai: options.ai(app.log), now: options.now ?? (() => new Date()) };
+  const media = options.media?.(app.log) ?? unavailableMedia;
+  // La coda si costruisce qui ma non parte: la avvia server.ts, e nei test i lavori si eseguono a mano.
+  const visualRunner = createVisualRunner({ pool: options.pool, media, log: app.log });
+  app.decorate('visualRunner', visualRunner);
+  app.addHook('onClose', async () => {
+    visualRunner.stop();
+  });
+
+  const deps: Deps = {
+    pool: options.pool,
+    ai: options.ai(app.log),
+    now: options.now ?? (() => new Date()),
+    media,
+    visualJobs: visualRunner,
+  };
   registerAuthRoutes(app, deps, options.auth);
   registerWorkspaceRoutes(app, deps);
   registerAiRoutes(app, deps);
   registerIdeaRoutes(app, deps);
   registerPlanRoutes(app, deps);
   registerContentRoutes(app, deps);
+  registerVisualRoutes(app, deps);
 
   return app;
 }

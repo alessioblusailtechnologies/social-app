@@ -15,6 +15,7 @@ import type {
 import type { Content, RewriteInstruction } from '@/domain/content';
 import type { Idea, IdeaDraft, IdeaFormat, IdeaSource, IdeaStatus } from '@/domain/idea';
 import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
+import type { VisualEdit } from '@/domain/visual';
 
 export interface Workspace {
   brands: Brand[];
@@ -120,6 +121,18 @@ export interface ContentService {
   ): Promise<{ content: Content; slot: PlanSlot }>;
   /** Torna in bozza: l'uscita passa di nuovo a "Da approvare". */
   reopen(contentId: string): Promise<{ content: Content; slot: PlanSlot }>;
+  /** Modifiche al visivo senza AI: tipo, layout, testi della card, descrizione della foto. */
+  editVisual(contentId: string, edit: VisualEdit): Promise<Content>;
+  /** Per le bozze nate prima dei visivi: una proposta fatta dai testi della bozza, senza AI. */
+  proposeVisual(contentId: string): Promise<Content>;
+  /** Crea il visivo proposto (foto se serve, scontorno, composizione). Risponde subito, a creazione avviata. */
+  createVisual(contentId: string): Promise<Content>;
+  /** Rifà solo la foto con la stessa descrizione, tenendo layout e testi. */
+  regenerateImage(contentId: string): Promise<Content>;
+  /** Una foto dell'utente, come data URI, al posto di quella generata. */
+  uploadPhoto(contentId: string, dataUri: string): Promise<Content>;
+  /** Mette nella card i testi della bozza rifatta. */
+  refreshVisual(contentId: string): Promise<Content>;
 }
 
 export interface Services {

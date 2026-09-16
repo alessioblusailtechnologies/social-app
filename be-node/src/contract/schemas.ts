@@ -15,6 +15,7 @@ import type {
 import { REWRITE_INSTRUCTIONS } from '@/domain/content';
 import type { IdeaDraft, IdeaSource } from '@/domain/idea';
 import type { PlanRequest, SlotDraft } from '@/domain/plan';
+import { TEMPLATE_IDS, type VisualEdit } from '@/domain/visual';
 
 /**
  * I corpi delle richieste, validati all'ingresso. Ogni schema dichiara il tipo del dominio
@@ -95,6 +96,10 @@ const visualSchema = z.object({
     origin: z.enum(['preset', 'site', 'custom']),
   }),
   imageStyle: z.enum(['flat-geometric', 'desaturated-photo', 'natural-photo', 'text-only']),
+  // I brand salvati prima dei caratteri non lo mandano: prendono la coppia di base.
+  typography: z
+    .enum(['inter', 'archivo', 'space-grotesk', 'manrope', 'fraunces', 'dm-serif', 'playfair', 'ibm-plex'])
+    .default('inter'),
   signature: z.boolean(),
 }) satisfies z.ZodType<Visual>;
 
@@ -214,6 +219,31 @@ export const directContentSchema = z.object({
 export const variantTextSchema = z.object({ text: text(10_000) });
 export const rewriteSchema = z.object({ instruction: z.enum(REWRITE_INSTRUCTIONS) });
 export const scheduleSchema = z.object({ date: day, time: hourMinute, publishNow: z.boolean().optional() });
+
+// ---------------------------------------------------------------------------
+// Visivi
+// ---------------------------------------------------------------------------
+
+const cardTextSchema = z.object({
+  kicker: text(200),
+  headline: text(400),
+  body: text(1000),
+  value: text(60),
+  items: z.array(z.object({ title: text(200), body: text(400) })).max(10),
+  author: text(200),
+});
+
+/** Le modifiche senza AI. I testi li taglia il dominio: qui si ferma solo quello che è fuori misura. */
+export const visualEditSchema = z.object({
+  kind: z.enum(['infographic', 'photo', 'mixed']),
+  pages: z.array(z.object({ templateId: z.enum(TEMPLATE_IDS), text: cardTextSchema })).max(20),
+  description: text(2000),
+  source: z.enum(['generated', 'upload']),
+  reopen: z.boolean().default(false),
+}) satisfies z.ZodType<VisualEdit>;
+
+/** La foto dell'utente come data URI: il controllo di tipo e misura lo fa il servizio. */
+export const photoUploadSchema = z.object({ dataUri: z.string().min(1).max(5_000_000) });
 
 // ---------------------------------------------------------------------------
 // Sessione

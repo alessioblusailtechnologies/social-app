@@ -2,12 +2,17 @@ import type pg from 'pg';
 
 import type { AiEngine, AiMeta } from '../ai/engine';
 import { withIdentity, type Identity } from '../db/identity';
+import type { MediaDeps } from '../media';
+import type { VisualJobs } from '../visual/runner';
 
-/** Quello che i servizi usano: database, AI e orologio, iniettati così i test li sostituiscono. */
+/** Quello che i servizi usano: database, AI, file dei visivi e orologio, iniettati così i test li sostituiscono. */
 export interface Deps {
   pool: pg.Pool;
   ai: AiEngine;
   now: () => Date;
+  media: MediaDeps;
+  /** La coda dei visivi, da svegliare dopo aver messo in coda un lavoro. */
+  visualJobs: VisualJobs;
 }
 
 /**

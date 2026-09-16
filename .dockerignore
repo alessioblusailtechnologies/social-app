@@ -1,0 +1,11 @@
+# Contesto delle immagini Docker costruite dalla radice (oggi solo be-render/Dockerfile).
+**/node_modules
+**/dist
+.git
+.expo
+design
+be-render/build
+be-render/out
+be-node/.env
+be-render/.env
+.env*
