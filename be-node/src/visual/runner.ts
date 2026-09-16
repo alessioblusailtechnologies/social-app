@@ -18,16 +18,16 @@ import { photoPrompt } from '../ai/image-prompt';
 import { ApiError } from '../contract/errors';
 import { requireBrand } from '../data/brands';
 import { findContent, recentBrandPhotoPaths, saveContent } from '../data/contents';
-import { claimVisualJob, finishVisualJob, recoverVisualJobs, type VisualJob } from '../data/visual-jobs';
+import { claimVisualJob, enqueueVisualJob, finishVisualJob, recoverVisualJobs, type VisualJob } from '../data/visual-jobs';
 import { withIdentity, type Identity } from '../db/identity';
 import type { MediaDeps } from '../media';
 import type { MediaBytes } from '../media/images';
 import { mediaPath } from './files';
 
 /**
- * La coda dei visivi, nel processo dell'API. Un lavoro `create` fa i passi che mancano (foto, scontorno,
- * composizione) e dopo ognuno salva il contenuto: l'app, che lo rilegge, vede a che punto è. Un lavoro `render`
- * rifà solo i PNG di una card già pronta. Le letture e le scritture del contenuto passano dall'identità
+ * La coda dei visivi, nel processo dell'API. Un lavoro `create` fa i passi che mancano (foto, scontorno) e dopo
+ * ognuno salva il contenuto: l'app, che lo rilegge, vede a che punto è. Poi la card è pronta e mette in coda un
+ * lavoro `render`, che fa i PNG da scaricare: se be-render non risponde il visivo resta pronto, senza PNG. Le letture e le scritture del contenuto passano dall'identità
  * dell'account del lavoro, quindi dalla RLS; la coda la tocca il ruolo proprietario.
  */
 
@@ -212,12 +212,18 @@ export function createVisualRunner({ pool, media, log, concurrency = 2, pollMs =
         const cutout = await cutPhoto(identity, loaded);
         await update(identity, job.contentId, whileCreating((design) => ({ ...design, image: { ...design.image, cutout } })));
       } else {
-        const renders = await renderAll(identity, loaded);
-        await update(
+        // Con foto e scontorno la card è pronta: l'app la disegna dal vivo con gli stessi template. I PNG da scaricare
+        // li fa un lavoro a parte, così un servizio di render spento o lento non blocca il visivo.
+        const ready = await update(
           identity,
           job.contentId,
-          whileCreating((design) => ({ ...design, renders, status: 'ready', step: null, error: null })),
+          whileCreating((design) => ({ ...design, renders: [], status: 'ready', step: null, error: null })),
         );
+        if (ready) {
+          await withIdentity(pool, identity, (db) =>
+            enqueueVisualJob(db, { contentId: job.contentId, accountId: identity.accountId, brandId: job.brandId, kind: 'render' }),
+          );
+        }
         return;
       }
     }

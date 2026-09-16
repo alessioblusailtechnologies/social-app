@@ -143,7 +143,8 @@ be-render ─ Remotion + Chromium sempre acceso, senza stato: props del template
 - **`be-render/`**: pacchetto a parte con Remotion, per non mettere Chromium nel processo dell'API. Una
   composizione `Still` monta gli stessi template; attende font e immagini prima dello scatto.
 - **Coda**: una riga per lavoro, presa con `for update skip locked`; al riavvio i lavori rimasti a metà tornano in
-  coda. Lo stato visibile all'app sta nel contenuto (`design.status`, `design.step`), che l'app rilegge ogni due
+  coda. Il visivo è pronto quando ha foto e scontorno che gli servono; i PNG li fa un lavoro `render` separato, così
+  senza `be-render` la card si usa lo stesso e manca solo «Scarica le immagini». Lo stato visibile all'app sta nel contenuto (`design.status`, `design.step`), che l'app rilegge ogni due
   secondi mentre crea.
 - **Storage**: bucket privato `presenza-media`, percorsi `account/brand/uuid.png`; il contenuto salva i
   percorsi e l'API li firma quando lo restituisce.

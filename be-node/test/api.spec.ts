@@ -91,6 +91,8 @@ const PNG = Uint8Array.from(
 /** Storage in memoria, foto, scontorno e composizione finti: si contano le chiamate. */
 const files = new Map<string, Uint8Array>();
 const mediaCalls = { images: 0, cutout: 0, render: 0 };
+/** Acceso, be-render finto risponde col PNG; spento, fallisce come un servizio che non c'è. */
+const renderer = { down: false };
 const fakeMedia: MediaDeps = {
   storage: {
     upload: (path, bytes) => {
@@ -120,7 +122,7 @@ const fakeMedia: MediaDeps = {
   renderer: {
     render: () => {
       mediaCalls.render += 1;
-      return Promise.resolve(PNG);
+      return renderer.down ? Promise.reject(new Error('be-render non risponde')) : Promise.resolve(PNG);
     },
   },
 };
@@ -369,7 +371,8 @@ describe.skipIf(!enabled)('API contro il database', () => {
     expect((await call(tokenB, 'POST', `${url}/visual/create`)).statusCode).toBe(404);
 
     const before = { ...mediaCalls };
-    expect(await app.visualRunner.runPending()).toBe(1);
+    // Due lavori: la creazione (foto e scontorno) e poi i PNG da scaricare.
+    expect(await app.visualRunner.runPending()).toBe(2);
     expect(mediaCalls).toEqual({ images: before.images + 1, cutout: before.cutout + 1, render: before.render + 1 });
 
     const ready = json<Content>(await call(tokenA, 'GET', url), 200).visual.design!;
@@ -386,9 +389,14 @@ describe.skipIf(!enabled)('API contro il database', () => {
     expect(uploaded).toMatchObject({ status: 'proposed', image: { source: 'upload', cutout: null } });
     expect((await call(tokenA, 'POST', `${url}/visual/photo`, { dataUri: 'data:text/plain;base64,aGVsbG8=' })).statusCode).toBe(400);
 
+    // Senza be-render il visivo è pronto lo stesso: l'app disegna la card, mancano solo i PNG da scaricare.
+    renderer.down = true;
     json(await call(tokenA, 'POST', `${url}/visual/create`), 200);
-    await app.visualRunner.runPending();
+    expect(await app.visualRunner.runPending()).toBe(2);
+    renderer.down = false;
     expect(mediaCalls.images).toBe(before.images + 1);
+    const withoutPng = json<Content>(await call(tokenA, 'GET', url), 200).visual.design!;
+    expect(withoutPng).toMatchObject({ status: 'ready', error: null, renders: [] });
     const scheduled = json<{ content: { status: string } }>(await call(tokenA, 'POST', `${url}/schedule`, when), 200);
     expect(scheduled.content.status).toBe('approved');
   });
