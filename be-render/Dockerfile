@@ -40,9 +40,11 @@ COPY src/design-system/tokens.ts src/design-system/tokens.ts
 COPY be-render be-render
 
 # Browser, server e sito si preparano qui: all'avvio il servizio è pronto in pochi secondi.
+# Il controllo dopo la build: un alias `@/` rimasto nel bundle farebbe cadere il server all'avvio.
 RUN cd be-render \
   && node -e "import('@remotion/renderer').then((renderer) => renderer.ensureBrowser())" \
   && npm run build \
+  && ! grep -q '"@/' dist/server.mjs \
   && npm run bundle-site
 
 ENV NODE_ENV=production

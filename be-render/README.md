@@ -56,3 +56,6 @@ dell'app, quindi si costruisce dalla radice del repo. Chromium vuole almeno 2 GB
 - I caratteri arrivano da Google Fonts e le foto dagli URL firmati: il servizio deve poter uscire su internet.
 - React è quello di questo pacchetto anche per i template, che stanno fuori (`src/site.ts`): due copie romperebbero
   gli hook.
+- La build del server passa `--tsconfig=tsconfig.json` a esbuild: senza, gli alias `@/` dentro `src/` dell'app si
+  risolvono col `tsconfig.json` della radice, che nell'immagine Docker non c'è, e il server cade all'avvio con
+  `Cannot find package '@/design-system'`. Il Dockerfile controlla che nel bundle non resti nessun `@/`.
