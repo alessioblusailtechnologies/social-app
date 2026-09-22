@@ -1,0 +1,109 @@
+---
+import HeroShowcase from './HeroShowcase.astro';
+---
+
+<section class="hero container">
+  <div class="hero__copy">
+    <p class="hero__badge"><span class="hero__badge-dot" aria-hidden="true"></span>Disponibile su iOS e Android</p>
+    <h1 class="hero__title">Il tuo brand sui social,<br /><span class="hero__accent">curato ogni settimana</span></h1>
+    <p class="hero__lead">
+      In cinque minuti Moonbrand impara chi sei, come scrivi e come vuoi apparire. Poi ti propone idee, le mette in un
+      piano settimanale e scrive le bozze per ogni canale — con i visivi nel tuo stile.
+    </p>
+    <div class="hero__actions">
+      <a class="btn btn--lg btn--white" href="#come-funziona">Guarda come funziona</a>
+      <a class="btn btn--lg btn--primary hero__cta" href="#prova">Inizia la prova gratuita <span aria-hidden="true">→</span></a>
+    </div>
+    <p class="hero__note">14 giorni, nessuna carta. Niente si pubblica senza che lo decida tu.</p>
+  </div>
+
+  <HeroShowcase />
+</section>
+
+<style>
+  .hero {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+    gap: 48px;
+    align-items: center;
+    padding-block: 72px 40px;
+  }
+
+  .hero__copy {
+    min-width: 0;
+  }
+
+  .hero__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: rgb(233 113 60 / 0.12);
+    color: var(--accent-strong);
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .hero__badge-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .hero__title {
+    margin-top: 22px;
+    font-size: clamp(40px, 5.4vw, 66px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
+  }
+
+  .hero__accent {
+    color: var(--accent);
+  }
+
+  .hero__lead {
+    max-width: 32em;
+    margin-top: 22px;
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    text-wrap: pretty;
+  }
+
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 30px;
+  }
+
+  .hero__cta {
+    padding-inline: 26px;
+    box-shadow: 0 10px 24px rgb(233 113 60 / 0.28);
+  }
+
+  .hero__note {
+    margin-top: 16px;
+    font-size: 14.5px;
+    color: var(--ink-faint);
+  }
+
+  @media (max-width: 640px) {
+    .hero {
+      padding-block: 44px 32px;
+    }
+
+    .hero__title {
+      line-height: 1.04;
+    }
+
+    .hero__actions .btn {
+      flex: 1 1 auto;
+    }
+  }
+</style>

@@ -1,0 +1,152 @@
+---
+import Instagram from '../assets/icons/instagram.svg';
+import TikTok from '../assets/icons/tiktok.svg';
+import Facebook from '../assets/icons/facebook.svg';
+import X from '../assets/icons/x.svg';
+import Pinterest from '../assets/icons/pinterest.svg';
+import Threads from '../assets/icons/threads.svg';
+import WordPress from '../assets/icons/wordpress.svg';
+import Substack from '../assets/icons/substack.svg';
+
+// LinkedIn non ha un'icona nel set: come nel mock, un quadratino con «in».
+const channels = [
+  { name: 'LinkedIn', Icon: null },
+  { name: 'Instagram', Icon: Instagram },
+  { name: 'TikTok', Icon: TikTok },
+  { name: 'Facebook', Icon: Facebook },
+  { name: 'X', Icon: X },
+  { name: 'Pinterest', Icon: Pinterest },
+  { name: 'Threads', Icon: Threads },
+  { name: 'WordPress', Icon: WordPress },
+  { name: 'Newsletter', Icon: Substack },
+];
+---
+
+<section class="channels container" aria-labelledby="channels-label">
+  <div class="channels__inner">
+    <p class="channels__label" id="channels-label">Scrive e pubblica su</p>
+    <div class="marquee">
+      <div class="marquee__track">
+        {
+          [false, true].map((copy) => (
+            <ul class="marquee__group" aria-hidden={copy ? 'true' : undefined}>
+              {channels.map(({ name, Icon }) => (
+                <li class="channel">
+                  {Icon ? <Icon class="channel__icon" aria-hidden="true" /> : <span class="channel__in" aria-hidden="true">in</span>}
+                  {name}
+                </li>
+              ))}
+            </ul>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .channels {
+    padding-block: 18px 70px;
+  }
+
+  .channels__inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 28px;
+    padding-block: 20px;
+    border-block: 1px solid var(--line);
+  }
+
+  .channels__label {
+    flex: none;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .marquee {
+    flex: 1 1 260px;
+    min-width: 0;
+    overflow: hidden;
+    mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  }
+
+  .marquee__track {
+    display: flex;
+    width: max-content;
+    font-family: var(--font-display);
+    font-size: 16.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    animation: marquee 34s linear infinite;
+  }
+
+  .marquee:hover .marquee__track {
+    animation-play-state: paused;
+  }
+
+  @keyframes marquee {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  .marquee__group {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 44px;
+    padding-right: 44px;
+  }
+
+  .channel {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    white-space: nowrap;
+  }
+
+  .channel__icon {
+    width: 19px;
+    height: 19px;
+    color: var(--ink);
+  }
+
+  .channel__in {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 19px;
+    height: 19px;
+    border-radius: 4px;
+    background: var(--ink);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* Senza movimento i canali vanno a capo e si vedono tutti, una volta sola. */
+  @media (prefers-reduced-motion: reduce) {
+    .marquee {
+      mask-image: none;
+    }
+
+    .marquee__track {
+      width: auto;
+      animation: none;
+    }
+
+    .marquee__group {
+      flex-wrap: wrap;
+      gap: 12px 28px;
+      padding-right: 0;
+    }
+
+    .marquee__group[aria-hidden] {
+      display: none;
+    }
+  }
+</style>

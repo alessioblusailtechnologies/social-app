@@ -1,0 +1,124 @@
+---
+const faqs = [
+  {
+    q: 'Moonbrand pubblica al posto mio?',
+    a: 'No, mai in automatico. Prepara le bozze e i visivi, poi aspetta. Pubblichi tu con un tap quando il testo ti convince — o lo copi e lo porti dove preferisci.',
+  },
+  {
+    q: 'Come fa a scrivere come scrivo io?',
+    a: 'Dalle cinque domande iniziali e da come correggi le bozze. Ogni modifica che fai diventa un esempio: dopo due settimane le prime versioni sono già molto più vicine al tuo modo di parlare.',
+  },
+  {
+    q: 'Quali canali gestisce?',
+    a: 'LinkedIn, Instagram, TikTok, Facebook, X, Threads, Pinterest, WordPress e newsletter. Ogni bozza viene riscritta con la lunghezza e il ritmo giusti per il canale, non copiata uguale ovunque.',
+  },
+  {
+    q: 'I visivi sono davvero nel mio stile?',
+    a: 'Imposti colori, font e un paio di riferimenti: i visivi nascono da lì. Puoi caricare le tue foto oppure partire dai formati pronti e cambiarli a mano.',
+  },
+  {
+    q: "Serve per i clienti di un'agenzia?",
+    a: 'Sì: ogni cliente ha il suo profilo di brand, il suo piano e il suo spazio di revisione. Puoi mandargli le bozze in approvazione senza dargli accesso al resto.',
+  },
+  {
+    q: 'Posso disdire quando voglio?',
+    a: 'Sì, dalle impostazioni, senza scrivere a nessuno. Prima di chiudere puoi esportare piani, bozze e visivi.',
+  },
+];
+---
+
+<section class="section container faq" id="faq">
+  <h2 class="section-title">Domande frequenti</h2>
+  <div class="faq__list">
+    {
+      faqs.map((item, i) => (
+        <details class="faq__item" name="faq" open={i === 0}>
+          <summary class="faq__question">
+            <span>{item.q}</span>
+            <svg class="faq__icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 2v12M2 8h12" />
+            </svg>
+          </summary>
+          <p class="faq__answer">{item.a}</p>
+        </details>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .faq {
+    max-width: calc(860px + 2 * var(--gutter));
+  }
+
+  .faq__list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 36px;
+  }
+
+  .faq__item {
+    overflow: hidden;
+    border-radius: 18px;
+    background: var(--surface);
+  }
+
+  /* Dove il browser lo sa fare, la risposta si apre scorrendo invece che di scatto. */
+  .faq__item::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size 220ms ease,
+      content-visibility 220ms allow-discrete;
+  }
+
+  .faq__item[open]::details-content {
+    block-size: auto;
+  }
+
+  .faq__question {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 500;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .faq__question::-webkit-details-marker {
+    display: none;
+  }
+
+  .faq__question:focus-visible {
+    outline-offset: -4px;
+    border-radius: 18px;
+  }
+
+  .faq__icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    transition: transform 180ms ease;
+  }
+
+  .faq__item[open] .faq__icon {
+    transform: rotate(45deg);
+  }
+
+  .faq__answer {
+    max-width: 46em;
+    padding: 0 24px 22px;
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: var(--ink-muted);
+  }
+</style>

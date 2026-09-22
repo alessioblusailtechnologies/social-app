@@ -1,0 +1,100 @@
+---
+const before = [
+  "La domenica sera a fissare il feed cercando un'idea",
+  'Tre settimane piene, poi un mese di silenzio',
+  'Stesso testo copiato su tutti i canali',
+  'Visivi rifatti ogni volta da zero, stile sempre diverso',
+  'Testi generici che non suonano come te',
+];
+const after = [
+  'Il piano ti aspetta già pronto il lunedì mattina',
+  'Un ritmo sostenibile, anche nelle settimane storte',
+  'Una bozza per canale, con la lunghezza giusta',
+  'Visivi coerenti nei tuoi colori e nei tuoi font',
+  'La tua voce, imparata dai testi che approvi',
+];
+---
+
+<section class="section section--surface">
+  <div class="container compare">
+    <p class="eyebrow">Il confronto</p>
+    <h2 class="section-title">Fai-da-te o con Moonbrand</h2>
+    <div class="compare__grid">
+      <div class="compare__card">
+        <h3 class="compare__heading">Come va di solito</h3>
+        <ul class="compare__list compare__list--before">
+          {before.map((item) => <li>{item}</li>)}
+        </ul>
+      </div>
+      <div class="compare__card compare__card--moonbrand">
+        <h3 class="compare__heading">Con Moonbrand</h3>
+        <ul class="checklist compare__list">
+          {after.map((item) => <li>{item}</li>)}
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .compare {
+    max-width: calc(1000px + 2 * var(--gutter));
+  }
+
+  .compare__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr));
+    gap: 20px;
+    margin-top: 40px;
+  }
+
+  .compare__card {
+    padding: 28px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+  }
+
+  .compare__card--moonbrand {
+    border: 1.5px solid var(--accent);
+    background: rgb(233 113 60 / 0.05);
+    box-shadow: 0 14px 34px rgb(233 113 60 / 0.12);
+  }
+
+  .compare__heading {
+    margin-bottom: 18px;
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--ink-subtle);
+  }
+
+  .compare__card--moonbrand .compare__heading {
+    color: var(--accent-strong);
+  }
+
+  .compare__list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    font-size: 15.5px;
+    line-height: 1.5;
+  }
+
+  .compare__list li {
+    gap: 12px;
+  }
+
+  .compare__list--before {
+    color: var(--ink-muted);
+  }
+
+  .compare__list--before li {
+    display: flex;
+  }
+
+  .compare__list--before li::before {
+    content: '—';
+    flex: none;
+    font-weight: 700;
+    color: rgb(45 48 80 / 0.3);
+  }
+</style>

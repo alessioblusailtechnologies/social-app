@@ -1,0 +1,67 @@
+---
+import { links } from '../site';
+---
+
+<section class="final container" id="prova">
+  <div class="final__card">
+    <h2 class="final__title">Cinque minuti oggi,<br />una settimana già pronta domani.</h2>
+    <p class="final__text">Scarica Moonbrand e prova 14 giorni. Se non ti somiglia, chiudi tutto senza pensarci.</p>
+    <div class="final__actions">
+      <a class="btn btn--pill btn--navy final__btn" href={links.appStore}>Scarica per iPhone</a>
+      <a class="btn btn--pill btn--glass final__btn" href={links.playStore}>Scarica per Android</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .final {
+    padding-block: 20px 90px;
+  }
+
+  .final__card {
+    padding: clamp(36px, 6vw, 72px) clamp(24px, 6vw, 72px);
+    border-radius: 28px;
+    background: var(--accent);
+    color: #fff;
+    text-align: center;
+  }
+
+  .final__title {
+    font-size: clamp(32px, 4.4vw, 52px);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.08;
+    text-wrap: balance;
+  }
+
+  .final__text {
+    max-width: 32em;
+    margin: 18px auto 0;
+    font-size: 18px;
+    line-height: 1.55;
+    color: rgb(255 255 255 / 0.92);
+  }
+
+  .final__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 30px;
+  }
+
+  .final__btn {
+    padding: 16px 30px;
+    font-size: 16.5px;
+  }
+
+  @media (max-width: 640px) {
+    .final {
+      padding-bottom: 64px;
+    }
+
+    .final__btn {
+      flex: 1 1 100%;
+    }
+  }
+</style>

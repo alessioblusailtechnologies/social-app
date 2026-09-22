@@ -1,0 +1,217 @@
+---
+// Prezzi mensili in euro, IVA esclusa. L'annuale è il mensile scontato del 20%, arrotondato all'euro.
+const YEARLY_DISCOUNT = 0.2;
+
+const plans = [
+  {
+    name: 'Solo',
+    who: 'Un brand, un canale alla volta. Per chi è il proprio brand.',
+    monthly: 12,
+    features: ['1 profilo di brand', '3 canali collegati', 'Piano settimanale', 'Bozze illimitate', '30 visivi al mese'],
+  },
+  {
+    name: 'Studio',
+    who: 'Per piccole aziende e team che pubblicano su più canali.',
+    monthly: 29,
+    featured: true,
+    features: [
+      '3 profili di brand',
+      'Tutti i canali',
+      'Piano settimanale e mensile',
+      'Bozze illimitate',
+      'Visivi illimitati',
+      'Fino a 3 persone in revisione',
+    ],
+  },
+  {
+    name: 'Agenzia',
+    who: 'Per chi segue i social dei clienti, con spazi separati.',
+    monthly: 69,
+    features: [
+      'Fino a 20 profili cliente',
+      'Tutti i canali',
+      'Approvazione cliente',
+      'Bozze e visivi illimitati',
+      'Esportazione piani',
+      'Supporto prioritario',
+    ],
+  },
+].map((plan) => ({ ...plan, yearly: Math.round(plan.monthly * (1 - YEARLY_DISCOUNT)) }));
+---
+
+<section class="section section--surface" id="prezzi">
+  <div class="container pricing" data-pricing data-billing="monthly">
+    <div class="pricing__head">
+      <div>
+        <p class="eyebrow">Prezzi</p>
+        <h2 class="section-title">Prova 14 giorni, poi scegli</h2>
+      </div>
+      <div class="billing" role="group" aria-label="Fatturazione">
+        <button class="billing__option" type="button" aria-pressed="true" data-billing-option="monthly">Mensile</button>
+        <button class="billing__option" type="button" aria-pressed="false" data-billing-option="yearly">Annuale −20%</button>
+      </div>
+    </div>
+
+    <div class="plans">
+      {
+        plans.map((plan) => (
+          <article class:list={['plan', { 'plan--featured': plan.featured }]}>
+            <h3 class="plan__name">{plan.name}</h3>
+            <p class="plan__who">{plan.who}</p>
+            <p class="plan__price">
+              <span data-when="monthly">€{plan.monthly}</span>
+              <span data-when="yearly">€{plan.yearly}</span>
+              <span class="plan__per"> /mese</span>
+            </p>
+            <p class="plan__billing">
+              <span data-when="monthly">fatturato mensilmente</span>
+              <span data-when="yearly">fatturato {plan.yearly * 12} € all'anno</span>
+            </p>
+            <a class:list={['btn btn--pill plan__cta', plan.featured ? 'btn--primary' : 'btn--soft']} href="#prova">
+              Inizia la prova
+            </a>
+            <ul class="checklist plan__features">
+              {plan.features.map((f) => <li>{f}</li>)}
+            </ul>
+          </article>
+        ))
+      }
+    </div>
+    <p class="pricing__note">Prezzi IVA esclusa. Nessuna carta richiesta per la prova, disdici quando vuoi.</p>
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-pricing]').forEach((root) => {
+    const options = root.querySelectorAll<HTMLButtonElement>('[data-billing-option]');
+    options.forEach((option) => {
+      option.addEventListener('click', () => {
+        root.dataset.billing = option.dataset.billingOption;
+        options.forEach((o) => o.setAttribute('aria-pressed', String(o === option)));
+      });
+    });
+  });
+</script>
+
+<style>
+  .pricing {
+    max-width: calc(1100px + 2 * var(--gutter));
+  }
+
+  .pricing__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+  }
+
+  .billing {
+    display: flex;
+    gap: 4px;
+    padding: 5px;
+    border-radius: 999px;
+    background: var(--bg);
+  }
+
+  .billing__option {
+    padding: 9px 18px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-subtle);
+    font-family: var(--font-display);
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
+  }
+
+  .billing__option[aria-pressed='true'] {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 2px 6px rgb(45 48 80 / 0.12);
+  }
+
+  /* Il prezzo mensile e quello annuale sono entrambi nella pagina: si vede quello scelto. */
+  [data-billing='monthly'] [data-when='yearly'],
+  [data-billing='yearly'] [data-when='monthly'] {
+    display: none;
+  }
+
+  .plans {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    gap: 20px;
+    margin-top: 40px;
+  }
+
+  .plan {
+    padding: 30px 28px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+  }
+
+  .plan--featured {
+    border: 1.5px solid var(--accent);
+    background: rgb(233 113 60 / 0.05);
+    box-shadow: 0 16px 38px rgb(233 113 60 / 0.14);
+  }
+
+  .plan__name {
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  .plan__who {
+    min-height: 3em;
+    margin-top: 7px;
+    font-size: 14.5px;
+    line-height: 1.5;
+    color: rgb(45 48 80 / 0.65);
+  }
+
+  .plan__price {
+    margin-top: 18px;
+    font-family: var(--font-display);
+    font-size: 38px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .plan__per {
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: rgb(45 48 80 / 0.55);
+  }
+
+  .plan__billing {
+    margin-top: 5px;
+    font-size: 13.5px;
+    color: var(--ink-faint);
+  }
+
+  .plan__cta {
+    display: flex;
+    margin-top: 20px;
+    padding: 13px 20px;
+    font-size: 15.5px;
+  }
+
+  .plan__features {
+    gap: 10px;
+    margin-top: 22px;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  .pricing__note {
+    margin-top: 22px;
+    font-size: 14px;
+    color: var(--ink-faint);
+  }
+</style>

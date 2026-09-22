@@ -130,6 +130,7 @@ services:
       ignoredPaths:
         - be-node/**
         - be-render/**
+        - website/**
     envVars:
       - key: NODE_VERSION
         value: "24"

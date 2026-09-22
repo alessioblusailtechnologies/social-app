@@ -1,0 +1,82 @@
+---
+const promises = [
+  { title: 'Tu approvi, poi si pubblica.', text: 'Ogni bozza passa dalle tue mani.' },
+  { title: 'I tuoi contenuti restano tuoi.', text: 'Nessun uso per addestrare modelli.' },
+  { title: 'Esci quando vuoi.', text: 'Piano e bozze si esportano in un tap.' },
+];
+---
+
+<section class="section container">
+  <div class="trust">
+    <div>
+      <h2 class="trust__title">Niente esce senza di te.</h2>
+      <p class="trust__text">
+        Moonbrand non pubblica, non risponde ai commenti e non scrive nulla a tua insaputa. Prepara, ti mostra, aspetta.
+        L'ultima parola è sempre la tua — e resta tua anche la voce.
+      </p>
+    </div>
+    <ul class="trust__list">
+      {
+        promises.map((p) => (
+          <li class="trust__item">
+            <strong>{p.title}</strong>
+            <span>{p.text}</span>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .trust {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    gap: 40px;
+    align-items: center;
+    padding: clamp(28px, 5vw, 60px);
+    border-radius: 28px;
+    background: var(--ink);
+    color: #fff;
+  }
+
+  .trust__title {
+    font-size: clamp(28px, 3.4vw, 40px);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.14;
+  }
+
+  .trust__text {
+    max-width: 32em;
+    margin-top: 16px;
+    font-size: 17px;
+    line-height: 1.6;
+    color: rgb(255 255 255 / 0.82);
+  }
+
+  .trust__list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .trust__item {
+    display: flex;
+    flex-direction: column;
+    padding: 16px 18px;
+    border-radius: 16px;
+    background: rgb(255 255 255 / 0.08);
+    font-size: 15.5px;
+    line-height: 1.45;
+  }
+
+  .trust__item strong {
+    font-family: var(--font-display);
+    font-weight: 600;
+  }
+
+  .trust__item span {
+    color: rgb(255 255 255 / 0.72);
+  }
+</style>

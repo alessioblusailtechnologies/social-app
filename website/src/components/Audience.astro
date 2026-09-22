@@ -1,0 +1,107 @@
+---
+const audiences = [
+  {
+    shape: 'circle',
+    title: 'Personal brand',
+    text: 'Sei tu il brand e il tempo è poco. Moonbrand tiene il filo del discorso mentre lavori, così non sparisci per tre settimane.',
+    who: 'Consulenti, coach, creator, medici, avvocati',
+  },
+  {
+    shape: 'square',
+    title: 'Piccole aziende',
+    text: 'Chi si occupa dei social lo fa insieme ad altre dieci cose. Qui trova un piano già impostato e visivi sempre in linea.',
+    who: 'Negozi, studi, ristoranti, e-commerce',
+  },
+  {
+    shape: 'diamond',
+    title: 'Agenzie e freelance',
+    text: 'Un profilo di brand per ogni cliente, piani separati e bozze da passare in revisione senza cambiare strumento.',
+    who: 'Fino a 20 clienti in un solo spazio',
+  },
+];
+---
+
+<section class="section container" id="per-chi">
+  <p class="eyebrow">Per chi</p>
+  <h2 class="section-title">Tre modi di usarlo</h2>
+  <div class="audiences">
+    {
+      audiences.map((a) => (
+        <article class="audience">
+          <div class="audience__icon" aria-hidden="true">
+            <span class:list={['audience__shape', `audience__shape--${a.shape}`]} />
+          </div>
+          <h3 class="audience__title">{a.title}</h3>
+          <p class="audience__text">{a.text}</p>
+          <p class="audience__who">{a.who}</p>
+        </article>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .audiences {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+    gap: 20px;
+    margin-top: 40px;
+  }
+
+  .audience {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 30px 28px;
+    border-radius: 22px;
+    background: var(--surface);
+  }
+
+  .audience__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: rgb(233 113 60 / 0.14);
+  }
+
+  .audience__shape {
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+  }
+
+  .audience__shape--circle {
+    border-radius: 50%;
+  }
+
+  .audience__shape--square {
+    border-radius: 3px;
+  }
+
+  .audience__shape--diamond {
+    width: 15px;
+    height: 15px;
+    transform: rotate(45deg);
+  }
+
+  .audience__title {
+    margin-top: 4px;
+    font-size: 21px;
+    font-weight: 600;
+  }
+
+  .audience__text {
+    font-size: 15.5px;
+    line-height: 1.55;
+    color: var(--ink-muted);
+  }
+
+  .audience__who {
+    margin-top: 6px;
+    font-size: 14.5px;
+    color: var(--ink-faint);
+  }
+</style>

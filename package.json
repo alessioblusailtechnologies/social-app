@@ -53,11 +53,13 @@
       "/node_modules/",
       "/__rsc_tests__/",
       "<rootDir>/be-node/",
-      "<rootDir>/be-render/"
+      "<rootDir>/be-render/",
+      "<rootDir>/website/"
     ],
     "modulePathIgnorePatterns": [
       "<rootDir>/be-node/",
-      "<rootDir>/be-render/"
+      "<rootDir>/be-render/",
+      "<rootDir>/website/"
     ],
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/$1"

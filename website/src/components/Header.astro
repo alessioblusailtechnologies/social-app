@@ -1,0 +1,231 @@
+---
+import { Image } from 'astro:assets';
+import logo from '../assets/moonbrand-logo.png';
+
+const sections = [
+  { href: '#come-funziona', label: 'Come funziona' },
+  { href: '#per-chi', label: 'Per chi' },
+  { href: '#prezzi', label: 'Prezzi' },
+  { href: '#faq', label: 'FAQ' },
+];
+---
+
+<header class="header">
+  <nav class="nav" aria-label="Principale" data-nav>
+    <a class="nav__logo" href="/">
+      <Image src={logo} alt="Moonbrand" height={28} densities={[1, 2]} loading="eager" />
+    </a>
+
+    <div class="nav__links" id="nav-links">
+      {sections.map((s) => <a href={s.href}>{s.label}</a>)}
+    </div>
+
+    <div class="nav__actions">
+      <a class="btn btn--soft nav__secondary" href="#prezzi">Vedi i prezzi</a>
+      <a class="btn btn--primary nav__cta" href="#prova">
+        <span class="nav__cta-long">Prova 14 giorni</span>
+        <span class="nav__cta-short">Prova gratis</span>
+        <span class="nav__arrow" aria-hidden="true">→</span>
+      </a>
+      <button class="nav__toggle" type="button" aria-expanded="false" aria-controls="nav-links" data-nav-toggle>
+        <span class="nav__toggle-bars" aria-hidden="true"></span>
+        <span class="visually-hidden">Menu</span>
+      </button>
+    </div>
+  </nav>
+</header>
+
+<script>
+  const nav = document.querySelector<HTMLElement>('[data-nav]');
+  const toggle = document.querySelector<HTMLButtonElement>('[data-nav-toggle]');
+
+  if (nav && toggle) {
+    const setOpen = (open: boolean) => {
+      nav.toggleAttribute('data-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+    };
+    toggle.addEventListener('click', () => setOpen(!nav.hasAttribute('data-open')));
+    nav.querySelectorAll('.nav__links a').forEach((a) => a.addEventListener('click', () => setOpen(false)));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    });
+  }
+</script>
+
+<style>
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    padding: 14px var(--gutter) 0;
+  }
+
+  .nav {
+    max-width: var(--container);
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 28px;
+    padding: 13px 16px 13px 22px;
+    border-radius: 20px;
+    background: var(--surface);
+    box-shadow: 0 8px 26px rgb(45 48 80 / 0.1);
+  }
+
+  .nav__logo img {
+    width: auto;
+    height: 28px;
+  }
+
+  .nav__links {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 10px 28px;
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  .nav__links a {
+    color: var(--ink);
+  }
+
+  .nav__links a:hover {
+    color: var(--accent);
+  }
+
+  .nav__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav__arrow {
+    font-size: 16px;
+  }
+
+  .nav__cta-short,
+  .nav__toggle {
+    display: none;
+  }
+
+  /* Sotto i 960px i link vanno in un menu che si apre sotto la barra. */
+  @media (max-width: 960px) {
+    .nav {
+      justify-content: space-between;
+      gap: 0 12px;
+      padding: 10px 10px 10px 16px;
+      border-radius: 18px;
+    }
+
+    .nav__logo img {
+      height: 24px;
+    }
+
+    .nav__secondary,
+    .nav__arrow {
+      display: none;
+    }
+
+    .nav__actions .btn {
+      padding: 10px 14px;
+      font-size: 14px;
+    }
+
+    .nav__toggle {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border: 0;
+      border-radius: 12px;
+      background: var(--bg);
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    .nav__toggle-bars,
+    .nav__toggle-bars::before,
+    .nav__toggle-bars::after {
+      display: block;
+      width: 18px;
+      height: 2px;
+      border-radius: 2px;
+      background: currentColor;
+      transition:
+        transform 180ms ease,
+        background-color 180ms ease;
+    }
+
+    .nav__toggle-bars {
+      position: relative;
+    }
+
+    .nav__toggle-bars::before,
+    .nav__toggle-bars::after {
+      content: '';
+      position: absolute;
+      left: 0;
+    }
+
+    .nav__toggle-bars::before {
+      transform: translateY(-6px);
+    }
+
+    .nav__toggle-bars::after {
+      transform: translateY(6px);
+    }
+
+    [data-open] .nav__toggle-bars {
+      background: transparent;
+    }
+
+    [data-open] .nav__toggle-bars::before {
+      transform: rotate(45deg);
+    }
+
+    [data-open] .nav__toggle-bars::after {
+      transform: rotate(-45deg);
+    }
+
+    .nav__links {
+      display: none;
+      order: 3;
+      flex-basis: 100%;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 2px;
+      padding: 10px 0 4px;
+      font-size: 17px;
+    }
+
+    [data-open] .nav__links {
+      display: flex;
+    }
+
+    .nav__links a {
+      padding: 12px 6px;
+      border-top: 1px solid var(--line);
+    }
+  }
+
+  /* Sui telefoni stretti l'invito si accorcia; sotto i 340px la barra tiene solo logo e menu. */
+  @media (max-width: 370px) {
+    .nav__cta-long {
+      display: none;
+    }
+
+    .nav__cta-short {
+      display: inline;
+    }
+  }
+
+  @media (max-width: 340px) {
+    .nav__cta {
+      display: none;
+    }
+  }
+</style>

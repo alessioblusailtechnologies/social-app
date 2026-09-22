@@ -1,0 +1,80 @@
+---
+const steps = [
+  {
+    title: 'Ti conosce',
+    text: 'Cinque minuti di domande: cosa fai, per chi, come parli, cosa non diresti mai. Nasce il tuo profilo di brand.',
+  },
+  {
+    title: 'Ti propone idee',
+    text: 'Spunti costruiti sul tuo lavoro e sul tuo pubblico. Tieni quelli che ti somigliano, scarta il resto con uno swipe.',
+  },
+  {
+    title: 'Organizza la settimana',
+    text: 'Le idee diventano un piano: cosa esce, dove e quando. Sposta tutto con un dito quando la settimana cambia.',
+  },
+  {
+    title: 'Scrive e disegna',
+    text: 'Quando lo chiedi, prepara la bozza per ogni canale e i visivi nei tuoi colori. Tu leggi, correggi, decidi.',
+  },
+];
+---
+
+<section class="section section--surface" id="come-funziona">
+  <div class="container">
+    <p class="eyebrow">Come funziona</p>
+    <h2 class="section-title how__title">Dal “chi sei” al post pronto, in quattro passaggi.</h2>
+    <ol class="steps">
+      {
+        steps.map((step, i) => (
+          <li class="step">
+            <p class="step__num">{String(i + 1).padStart(2, '0')}</p>
+            <h3 class="step__title">{step.title}</h3>
+            <p class="step__text">{step.text}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>
+
+<style>
+  .how__title {
+    max-width: 16em;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+    gap: 22px;
+    margin-top: 46px;
+  }
+
+  .step {
+    padding-top: 20px;
+    border-top: 3px solid rgb(45 48 80 / 0.14);
+  }
+
+  .step:first-child {
+    border-top-color: var(--accent);
+  }
+
+  .step__num {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    color: rgb(45 48 80 / 0.4);
+  }
+
+  .step__title {
+    margin-top: 8px;
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  .step__text {
+    margin-top: 9px;
+    font-size: 15.5px;
+    line-height: 1.55;
+    color: var(--ink-muted);
+  }
+</style>

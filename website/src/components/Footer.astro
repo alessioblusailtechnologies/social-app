@@ -1,0 +1,55 @@
+---
+import { Image } from 'astro:assets';
+import logo from '../assets/moonbrand-logo.png';
+import { links } from '../site';
+
+const year = new Date().getFullYear();
+---
+
+<footer class="footer">
+  <div class="container footer__inner">
+    <Image src={logo} alt="Moonbrand" height={26} densities={[1, 2]} />
+    <div class="footer__links">
+      <a href={links.privacy}>Privacy</a>
+      <a href={links.terms}>Termini</a>
+      <a href={links.support}>Supporto</a>
+      <span>© {year} Moonbrand</span>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    border-top: 1px solid rgb(45 48 80 / 0.1);
+  }
+
+  .footer__inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding-block: 34px;
+  }
+
+  .footer__inner img {
+    width: auto;
+    height: 26px;
+  }
+
+  .footer__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 22px;
+    font-size: 14.5px;
+    color: var(--ink-subtle);
+  }
+
+  .footer__links a {
+    color: var(--ink-subtle);
+  }
+
+  .footer__links a:hover {
+    color: var(--accent);
+  }
+</style>
