@@ -194,7 +194,7 @@ export function PlanScreen({ brand }: { brand: Brand }) {
                   <Text variant="heading">Settimana libera</Text>
                   <Text variant="body">
                     Con la sessione di pianificazione distribuisco le uscite nei giorni migliori e le riempio con le
-                    tue idee salvate, rispettando i pesi dei temi.
+                    tue idee salvate, rispettando quanto spesso devono uscire i temi.
                   </Text>
                   <Button block onPress={() => router.push('/plan-session')}>
                     Pianifica

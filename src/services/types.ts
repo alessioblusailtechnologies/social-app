@@ -36,10 +36,39 @@ export interface WebsiteInsights {
   site: string;
   /** Cosa ho capito, in una frase. */
   summary: string;
+  /** Cosa fa il brand in una frase, come la chiede il profilo; vuota se il sito non si è aperto. */
+  pitch: string;
   themes: string[];
   audiences: string[];
   palette: Palette;
 }
+
+/** Obiettivi e pubblico proposti per il profilo, i più adatti prima. */
+export interface PositioningIdeas {
+  goals: string[];
+  audiences: string[];
+  /** Quelli che sceglierei: entrano già selezionati se l'utente non ha ancora scelto. */
+  picked: { goals: string[]; audiences: string[] };
+}
+
+/** Un passo di una generazione che lavora sul web, mentre succede: la lettura del sito li mostra uno per uno. */
+export interface AiStep {
+  id: string;
+  /** Cosa fa, in italiano: «Apro la pagina Chi siamo». */
+  label: string;
+  /** L'indirizzo aperto, la ricerca fatta, quello che ha trovato. */
+  detail?: string;
+  status: 'running' | 'done' | 'failed';
+}
+
+/** Chi guarda una generazione a passi: riceve ogni volta la lista intera. */
+export type OnAiSteps = (steps: AiStep[]) => void;
+
+/** Gli eventi di una risposta a passi del backend: i passi man mano, poi il risultato o l'errore. */
+export type AiStreamEvent<T> =
+  | { type: 'steps'; steps: AiStep[] }
+  | { type: 'result'; result: T }
+  | { type: 'error'; status: number; code: string; message: string };
 
 export interface VoiceSample {
   source: VoiceSource;
@@ -50,8 +79,10 @@ export interface VoiceSample {
 export type VoiceAnalysis = Omit<VoiceCard, 'version' | 'createdAt'>;
 
 export interface AiService {
-  readWebsite(site: string, identity: Identity): Promise<WebsiteInsights>;
+  readWebsite(site: string, identity: Identity, onSteps?: OnAiSteps): Promise<WebsiteInsights>;
   suggestThemes(identity: Identity): Promise<string[]>;
+  /** Obiettivi e pubblico su misura: dalla frase su cosa fa il brand e, se c'è, dalla lettura del sito. */
+  suggestPositioning(identity: Identity, site: WebsiteInsights | null, onSteps?: OnAiSteps): Promise<PositioningIdeas>;
   analyzeVoice(sample: VoiceSample, identity: Identity): Promise<VoiceAnalysis>;
 }
 

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 
 import { ApiError } from '../../contract/errors';
@@ -27,17 +27,22 @@ function toApiError(error: AnyError): ApiError | undefined {
   return undefined;
 }
 
-/** L'unico punto in cui un'eccezione diventa una risposta: lo stack va nel log, mai al client. */
+/** Un'eccezione come `{ status, code, message }`: lo stack va nel log, mai al client. */
+export function describeError(error: unknown, log: FastifyBaseLogger): { status: number; code: string; message: string } {
+  const known = error instanceof Error ? toApiError(error) : undefined;
+  if (known) {
+    if (known.status >= 500) log.warn({ code: known.code }, known.message);
+    return { status: known.status, ...known.body() };
+  }
+  log.error({ err: error }, 'errore non gestito');
+  return { status: 500, code: 'INTERNAL_ERROR', message: 'Il servizio non è momentaneamente disponibile.' };
+}
+
+/** L'unico punto in cui un'eccezione diventa una risposta; le risposte a passi lo dicono nell'ultimo evento. */
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler<AnyError>((error, request, reply) => {
-    const known = toApiError(error);
-    if (known) {
-      if (known.status >= 500) request.log.warn({ code: known.code }, known.message);
-      void reply.status(known.status).send(known.body());
-      return;
-    }
-    request.log.error({ err: error }, 'errore non gestito');
-    void reply.status(500).send({ code: 'INTERNAL_ERROR', message: 'Il servizio non è momentaneamente disponibile.' });
+    const { status, ...body } = describeError(error, request.log);
+    void reply.status(status).send(body);
   });
 
   app.setNotFoundHandler((_request, reply) => {

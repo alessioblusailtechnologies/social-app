@@ -23,6 +23,7 @@ import {
 import type { Brand } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
 import { FORMAT_LABELS, type Idea, type IdeaStatus } from '@/domain/idea';
+import { themeLevelLabel } from '@/domain/themes';
 import { ChannelMark } from '@/features/brand-editors';
 import { formatWeekdayLong, formatWeekdayShort } from '@/lib/dates';
 import {
@@ -159,7 +160,7 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
               <Text variant="strongSmall" style={styles.flex}>
                 {theme.name}
               </Text>
-              <Text variant="strongSmall">{theme.weight}% del piano</Text>
+              <Text variant="strongSmall">Esce {themeLevelLabel(theme).toLowerCase()}</Text>
             </View>
           </Panel>
         )}

@@ -1,13 +1,15 @@
 import { useRouter } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { Platform } from 'react-native';
 
 import {
   Button,
   Chip,
   ChipGroup,
+  FormScrollView,
   IconButton,
+  KeyboardScreen,
   Panel,
   ScreenFooter,
   ScreenTitle,
@@ -63,14 +65,14 @@ export function NewContentScreen({ brand }: { brand: Brand }) {
   };
 
   return (
-    <KeyboardAvoidingView style={screenStyles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardScreen>
       <TopBar
         safeArea={Platform.OS !== 'ios'}
         title="Nuovo contenuto"
         right={<IconButton icon={X} accessibilityLabel="Chiudi" onPress={close} />}
       />
 
-      <ScrollView contentContainerStyle={screenStyles.content} keyboardShouldPersistTaps="handled">
+      <FormScrollView contentContainerStyle={screenStyles.content}>
         {create.isPending ? (
           <>
             <ScreenTitle title="Un attimo" subtitle="Scelgo il taglio, lo lego ai temi del profilo e scrivo seguendo la tua voce." />
@@ -118,7 +120,7 @@ export function NewContentScreen({ brand }: { brand: Brand }) {
             </Panel>
           </>
         )}
-      </ScrollView>
+      </FormScrollView>
 
       <ScreenFooter>
         <Button
@@ -131,6 +133,6 @@ export function NewContentScreen({ brand }: { brand: Brand }) {
           {create.isPending ? 'Sto scrivendo…' : 'Prepara la bozza'}
         </Button>
       </ScreenFooter>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

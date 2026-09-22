@@ -7,7 +7,7 @@ import { applyPatch, type BrandDraft, type BrandKind, type SectionKey, type Sect
 import { changeDraftKind, createEmptyDraft } from '@/domain/catalog';
 import { ONBOARDING_SECTION_KEYS } from '@/domain/sections';
 import { createThemes } from '@/domain/themes';
-import type { WebsiteInsights } from '@/services/types';
+import type { PositioningIdeas, WebsiteInsights } from '@/services/types';
 
 export type OnboardingStep = 'intro' | SectionKey | 'summary';
 
@@ -22,12 +22,15 @@ interface OnboardingState {
   insights: WebsiteInsights | null;
   /** Dopo che l'utente ha toccato i temi, la lettura del sito non li sovrascrive più. */
   themesEdited: boolean;
+  /** Obiettivi e pubblico proposti dall'AI, con il contesto (`key`) da cui vengono. */
+  positioningIdeas: { key: string; ideas: PositioningIdeas } | null;
   goTo: (index: number) => void;
   next: () => void;
   back: () => void;
   chooseKind: (kind: BrandKind) => void;
   patch: (patch: SectionPatch) => void;
   applyInsights: (insights: WebsiteInsights) => void;
+  applyPositioningIdeas: (key: string, ideas: PositioningIdeas) => void;
   reset: () => void;
 }
 
@@ -37,6 +40,7 @@ const INITIAL = {
   draft: null,
   insights: null,
   themesEdited: false,
+  positioningIdeas: null,
 };
 
 const clampStep = (index: number) => Math.max(0, Math.min(ONBOARDING_STEPS.length - 1, index));
@@ -64,17 +68,35 @@ export const useOnboardingStore = create<OnboardingState>()(
         set((state) => {
           const { draft } = state;
           if (!draft) return {};
+          // La frase letta dal sito entra solo al posto di un campo vuoto o della proposta precedente.
+          const { pitch } = draft.identity;
+          const pitchFree = !pitch.trim() || pitch === state.insights?.pitch;
           return {
             insights,
             draft: {
               ...draft,
-              positioning: {
-                ...draft.positioning,
-                audiences: [...new Set([...draft.positioning.audiences, ...insights.audiences])],
-              },
+              identity: pitchFree && insights.pitch ? { ...draft.identity, pitch: insights.pitch } : draft.identity,
               themes: state.themesEdited ? draft.themes : createThemes(insights.themes),
               visual:
                 draft.visual.palette.origin === 'custom' ? draft.visual : { ...draft.visual, palette: insights.palette },
+            },
+          };
+        }),
+      // Le scelte dell'AI entrano solo dove l'utente non ha ancora scelto, e una volta per contesto.
+      applyPositioningIdeas: (key, ideas) =>
+        set((state) => {
+          const { draft } = state;
+          if (!draft || state.positioningIdeas?.key === key) return {};
+          const { goals, audiences } = draft.positioning;
+          return {
+            positioningIdeas: { key, ideas },
+            draft: {
+              ...draft,
+              positioning: {
+                ...draft.positioning,
+                goals: goals.length > 0 ? goals : ideas.picked.goals,
+                audiences: audiences.length > 0 ? audiences : ideas.picked.audiences,
+              },
             },
           };
         }),
@@ -83,7 +105,13 @@ export const useOnboardingStore = create<OnboardingState>()(
     {
       name: 'presenza/onboarding/v1',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ stepIndex, draft, insights, themesEdited }) => ({ stepIndex, draft, insights, themesEdited }),
+      partialize: ({ stepIndex, draft, insights, themesEdited, positioningIdeas }) => ({
+        stepIndex,
+        draft,
+        insights,
+        themesEdited,
+        positioningIdeas,
+      }),
     },
   ),
 );

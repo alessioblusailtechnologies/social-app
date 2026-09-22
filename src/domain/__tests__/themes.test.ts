@@ -1,8 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { addTheme, createThemes, MAX_THEMES, removeTheme, setThemeWeight, totalWeight } from '../themes';
-
-const weights = (themes: { weight: number }[]) => themes.map((theme) => theme.weight);
+import { addTheme, createThemes, MAX_THEMES, removeTheme, totalWeight } from '../themes';
 
 describe('createThemes', () => {
   it('assegna pesi che sommano 100 e colori distinti', () => {
@@ -11,28 +9,6 @@ describe('createThemes', () => {
       expect(totalWeight(themes)).toBe(100);
       expect(new Set(themes.map((theme) => theme.color)).size).toBe(count);
     }
-  });
-});
-
-describe('setThemeWeight', () => {
-  const base = createThemes(['A', 'B', 'C', 'D']); // 40 30 20 10
-
-  it('aumentando un tema toglie al più pesante degli altri', () => {
-    expect(weights(setThemeWeight(base, 3, 15))).toEqual([35, 30, 20, 15]);
-  });
-
-  it('diminuendo un tema restituisce al più leggero degli altri', () => {
-    expect(weights(setThemeWeight(base, 0, 35))).toEqual([35, 30, 20, 15]);
-  });
-
-  it('mantiene la somma a 100 anche con salti ampi', () => {
-    const result = setThemeWeight(base, 2, 100);
-    expect(weights(result)).toEqual([0, 0, 100, 0]);
-    expect(totalWeight(setThemeWeight(result, 2, 0))).toBe(100);
-  });
-
-  it('con un solo tema il peso resta 100', () => {
-    expect(weights(setThemeWeight(createThemes(['Solo']), 0, 40))).toEqual([100]);
   });
 });
 

@@ -105,7 +105,7 @@ export function BalancePanel({ themes, slots, label }: { themes: Theme[]; slots:
         </View>
       </View>
       <Text variant="caption" color={hint ? colors.warning : colors.textBody}>
-        {hint ?? (planned ? 'In linea con i pesi del profilo.' : 'Nessuna uscita con un tema in questo periodo.')}
+        {hint ?? (planned ? 'In linea con il profilo.' : 'Nessuna uscita con un tema in questo periodo.')}
       </Text>
     </Panel>
   );

@@ -1,9 +1,12 @@
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { createEmptyDraft } from '@/domain/catalog';
 import type { Brand } from '@/domain/brand';
 import type { Content } from '@/domain/content';
 import { createThemes } from '@/domain/themes';
+import { createStepLog } from '@/services/ai-steps';
+import type { AiStep } from '@/services/types';
 
 import { cleanLabels, describeBrand } from '../src/ai/brand-context';
 import { cleanHashtags, proposalFromOutput } from '../src/ai/content';
@@ -14,6 +17,8 @@ import { signContents, unsignedVisual } from '../src/visual/files';
 import { fitChannels } from '../src/ai/ideas';
 import { costAtTariff, modelTarget } from '../src/ai/providers';
 import { colorsFromHtml, countColors } from '../src/ai/site-colors';
+import { toolEvents } from '../src/ai/engine';
+import { stepsFromTools } from '../src/ai/steps';
 import { isPrivateAddress, toWebUrl } from '../src/lib/public-url';
 import { scheduleKey, toSlot } from '../src/data/slots';
 
@@ -208,5 +213,49 @@ describe('fornitori del modello', () => {
   it('il costo al listino tiene a parte la cache', () => {
     const tariff = { input: 0.3, output: 1.2, cache: 0.006 };
     expect(costAtTariff({ input: 1_000_000, output: 100_000, cacheRead: 2_000_000, cacheWrite: 0 }, tariff)).toBe(0.432);
+  });
+});
+
+describe('passi della lettura del sito', () => {
+  const assistant = (content: unknown[]) => ({ type: 'assistant', parent_tool_use_id: null, message: { content } }) as unknown as SDKMessage;
+  const user = (content: unknown[], parent: string | null = null) =>
+    ({ type: 'user', parent_tool_use_id: parent, message: { role: 'user', content } }) as unknown as SDKMessage;
+
+  it('dai messaggi della sessione prende solo gli strumenti web della sessione principale', () => {
+    expect(
+      toolEvents(
+        assistant([
+          { type: 'text', text: 'Apro la home.' },
+          { type: 'tool_use', id: 't1', name: 'WebFetch', input: { url: 'https://nodo.it/', prompt: 'x' } },
+          { type: 'tool_use', id: 't2', name: 'StructuredOutput', input: {} },
+        ]),
+      ),
+    ).toEqual([{ type: 'start', id: 't1', tool: 'WebFetch', input: { url: 'https://nodo.it/', prompt: 'x' } }]);
+    expect(toolEvents(user([{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: '404' }]))).toEqual([
+      { type: 'end', id: 't1', ok: false },
+    ]);
+    expect(toolEvents(user([{ type: 'tool_result', tool_use_id: 't9', content: 'ok' }], 'padre'))).toEqual([]);
+  });
+
+  it('una pagina per passo, e fra una e l’altra un passo di passaggio che sparisce', () => {
+    let steps: AiStep[] = [];
+    const onTool = stepsFromTools(createStepLog((next) => (steps = next)), { first: 'Scelgo', next: 'Ragiono' });
+    expect(steps).toEqual([{ id: 'thinking', label: 'Scelgo', status: 'running' }]);
+
+    onTool({ type: 'start', id: 'a', tool: 'WebFetch', input: { url: 'https://nodo.it/' } });
+    onTool({ type: 'start', id: 'b', tool: 'WebFetch', input: { url: 'https://nodo.it/chi-siamo' } });
+    onTool({ type: 'end', id: 'a', ok: true });
+    expect(steps.map((step) => [step.id, step.status])).toEqual([
+      ['a', 'done'],
+      ['b', 'running'],
+    ]);
+
+    onTool({ type: 'end', id: 'b', ok: false });
+    onTool({ type: 'end', id: 'sconosciuto', ok: true });
+    expect(steps).toEqual([
+      { id: 'a', label: 'Apro la home', detail: 'nodo.it', status: 'done' },
+      { id: 'b', label: 'Apro la pagina «Chi siamo»', detail: 'nodo.it/chi-siamo', status: 'failed' },
+      { id: 'thinking', label: 'Ragiono', status: 'running' },
+    ]);
   });
 });

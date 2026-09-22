@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 
 import type { BrandDraft, ChannelId, Identity, SectionPatch } from '@/domain/brand';
 import type { Content, RewriteInstruction } from '@/domain/content';
@@ -8,7 +9,7 @@ import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
 
 import { useSignedIn } from './http/session';
 import { services } from './index';
-import type { DirectContentRequest, SlotPatch, VoiceSample, Workspace } from './types';
+import type { AiStep, DirectContentRequest, SlotPatch, VoiceSample, WebsiteInsights, Workspace } from './types';
 
 const planKey = (brandId: string) => ['plan', brandId] as const;
 const slotContentKey = (slotId: string) => ['content', 'slot', slotId] as const;
@@ -405,10 +406,54 @@ export function useResetDemo() {
   });
 }
 
+/** La lettura del sito con i passi dell'AI, man mano che li fa: `steps` riparte vuoto a ogni lettura. */
 export function useReadWebsite() {
-  return useMutation({
-    mutationFn: ({ site, identity }: { site: string; identity: Identity }) => services.ai.readWebsite(site, identity),
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: ({ site, identity }: { site: string; identity: Identity }) => {
+      setSteps([]);
+      return services.ai.readWebsite(site, identity, setSteps);
+    },
   });
+  return { ...mutation, steps };
+}
+
+/** Da cosa si propongono obiettivi e pubblico: `key` cambia quando cambia quello che si sa del brand. */
+export interface PositioningSource {
+  key: string;
+  site: WebsiteInsights | null;
+}
+
+const positioningStepsKey = (key: string) => ['positioning-steps', key] as const;
+
+/** I passi finiscono in cache accanto al risultato: si vedono anche se la generazione è partita prima del passo. */
+function positioningIdeasOptions(client: Client, identity: Identity, source: PositioningSource) {
+  return queryOptions({
+    queryKey: ['positioning-ideas', source.key],
+    queryFn: () =>
+      services.ai.suggestPositioning(identity, source.site, (steps) =>
+        client.setQueryData(positioningStepsKey(source.key), steps),
+      ),
+  });
+}
+
+/** Obiettivi e pubblico proposti dall'AI, con i passi mentre li prepara: una generazione per contesto. */
+export function usePositioningIdeas(identity: Identity, source: PositioningSource | null) {
+  const client = useQueryClient();
+  const key = source?.key ?? '';
+  const ideas = useQuery({
+    ...positioningIdeasOptions(client, identity, source ?? { key, site: null }),
+    enabled: source !== null,
+  });
+  const steps = useQuery({ queryKey: positioningStepsKey(key), queryFn: skipToken });
+  return { ...ideas, steps: (steps.data as AiStep[] | undefined) ?? [] };
+}
+
+/** Si avvia prima di arrivare al passo, così le proposte sono pronte (o quasi) quando si apre. */
+export function usePrefetchPositioningIdeas() {
+  const client = useQueryClient();
+  return (identity: Identity, source: PositioningSource) =>
+    client.prefetchQuery(positioningIdeasOptions(client, identity, source));
 }
 
 export function useSuggestThemes() {

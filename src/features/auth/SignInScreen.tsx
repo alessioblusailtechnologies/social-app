@@ -1,11 +1,13 @@
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { APP_NAME } from '@/config';
 import {
   Button,
   FieldCard,
+  FormScrollView,
+  KeyboardScreen,
   ScreenFooter,
   ScreenTitle,
   SegmentedControl,
@@ -75,10 +77,10 @@ export function SignInScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={screenStyles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardScreen>
       <TopBar title={APP_NAME} />
 
-      <ScrollView contentContainerStyle={screenStyles.content} keyboardShouldPersistTaps="handled">
+      <FormScrollView contentContainerStyle={screenStyles.content}>
         <ScreenTitle title={copy.title} subtitle={copy.subtitle} />
         <SegmentedControl
           accessibilityLabel="Accedi o registrati"
@@ -128,7 +130,7 @@ export function SignInScreen() {
         <Text variant="caption" style={screenStyles.groupLabel}>
           {copy.hint}
         </Text>
-      </ScrollView>
+      </FormScrollView>
 
       <ScreenFooter>
         <Button
@@ -141,7 +143,7 @@ export function SignInScreen() {
           {submit.isPending ? copy.busy : copy.action}
         </Button>
       </ScreenFooter>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 

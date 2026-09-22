@@ -16,6 +16,7 @@ import {
 import { currentVoiceCard, isConnected, type Brand, type SectionKey } from '@/domain/brand';
 import { CHANNELS, imageStyleLabel, typographyName } from '@/domain/catalog';
 import { identityLine, sectionCopy, sectionSummary } from '@/domain/sections';
+import { themeLevelLabel } from '@/domain/themes';
 import { BrandAvatar, ChannelMark, Swatches } from '@/features/brand-editors';
 import { formatDay } from '@/lib/dates';
 
@@ -99,7 +100,7 @@ function PreviewBody({ sectionKey, brand }: { sectionKey: SectionKey; brand: Bra
               <Text variant="caption" color={colors.textTitle} numberOfLines={1} style={styles.flex}>
                 {theme.name}
               </Text>
-              <Text variant="strongSmall">{theme.weight}%</Text>
+              <Text variant="strongSmall">{themeLevelLabel(theme)}</Text>
             </View>
           ))}
         </View>

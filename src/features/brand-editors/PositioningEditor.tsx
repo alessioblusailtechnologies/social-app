@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import {
@@ -9,12 +9,17 @@ import {
   IconButton,
   LinkButton,
   Panel,
+  SkeletonLines,
+  StepList,
   SunkenInput,
   Text,
   screenStyles,
 } from '@/design-system';
-import type { BrandKind, Positioning } from '@/domain/brand';
+import type { BrandKind, Identity, Positioning } from '@/domain/brand';
 import { AUDIENCES, GOALS } from '@/domain/catalog';
+import { normalizeSite } from '@/lib/site';
+import { usePositioningIdeas, type PositioningSource } from '@/services/queries';
+import type { WebsiteInsights } from '@/services/types';
 
 import type { EditorProps } from './types';
 
@@ -36,17 +41,70 @@ function frequencyNote(perWeek: number): string {
   return 'Ritmo alto: serve una sessione a settimana';
 }
 
+const WHAT_YOU_DO: Record<BrandKind, string> = { person: 'cosa fai', company: 'cosa fate', client: 'cosa fa' };
+
 const toggle = (list: string[], item: string) =>
   list.includes(item) ? list.filter((entry) => entry !== item) : [...list, item];
 
+/** Una frase vera su cosa fa: sotto queste parole non basta per proporre qualcosa su misura. */
+const MIN_PITCH_WORDS = 6;
+
+/**
+ * Da cosa l'AI propone obiettivi e pubblico: la lettura del sito, se è andata, o una frase su cosa fa
+ * abbastanza lunga. Senza nessuna delle due restano le proposte standard (null).
+ */
+export function positioningSource(identity: Identity, insights: WebsiteInsights | null): PositioningSource | null {
+  const site = insights?.pitch && insights.site === normalizeSite(identity.site) ? insights : null;
+  const words = identity.pitch.trim().split(/\s+/).filter(Boolean).length;
+  if (!site && words < MIN_PITCH_WORDS) return null;
+  const { kind, role, company, sector, pitch } = identity;
+  return { key: JSON.stringify([kind, role, company, sector, pitch.trim(), site?.site ?? '']), site };
+}
+
 export function PositioningEditor({ value, onChange, context }: EditorProps<Positioning>) {
-  const kind = context.draft.identity.kind;
+  const { identity } = context.draft;
+  const { kind } = identity;
+  const { onPositioningIdeas } = context;
   const [adding, setAdding] = useState(false);
   const [custom, setCustom] = useState('');
 
-  const goals = [...new Set([...GOALS[kind], ...value.goals])];
-  const audiences = [...new Set([...AUDIENCES[kind], ...(context.insights?.audiences ?? []), ...value.audiences])];
-  const perWeek = value.postsPerWeek;
+  // Solo in onboarding: nel Profilo le scelte ci sono già e restano le proposte standard.
+  const source = onPositioningIdeas ? positioningSource(identity, context.insights) : null;
+  const stored = source && context.positioningIdeas?.key === source.key ? context.positioningIdeas.ideas : null;
+  const generated = usePositioningIdeas(identity, stored ? null : source);
+  const ideas = stored ?? generated.data ?? null;
+  const loading = source !== null && ideas === null && !generated.isError;
+
+  const sourceKey = source?.key;
+  useEffect(() => {
+    if (sourceKey && generated.data && !stored) onPositioningIdeas?.(sourceKey, generated.data);
+  }, [sourceKey, generated.data, stored, onPositioningIdeas]);
+
+  const goals = [...new Set([...(ideas?.goals ?? GOALS[kind]), ...value.goals])];
+  const audiences = [
+    ...new Set([...(ideas?.audiences ?? [...AUDIENCES[kind], ...(context.insights?.audiences ?? [])]), ...value.audiences]),
+  ];
+  const note = !onPositioningIdeas
+    ? null
+    : ideas
+      ? source?.site
+        ? `Proposti leggendo ${source.site.site}: tocca per scegliere o togliere.`
+        : 'Proposti da quello che hai scritto: tocca per scegliere o togliere.'
+      : generated.isError
+        ? 'Non sono riuscito a preparare proposte su misura: ecco le più comuni.'
+        : `Proposte comuni: se nel passo prima scrivi ${WHAT_YOU_DO[kind]} o mi fai leggere il sito, le preparo su misura.`;
+
+  if (loading) {
+    return (
+      <View style={styles.column}>
+        <Panel gap={12}>
+          <Text variant="strongSmall">Preparo obiettivi e pubblico su misura</Text>
+          {generated.steps.length > 0 ? <StepList steps={generated.steps} /> : <SkeletonLines widths={[72, 88]} />}
+        </Panel>
+        <Frequency value={value} onChange={onChange} />
+      </View>
+    );
+  }
 
   const addAudience = () => {
     const label = custom.trim();
@@ -58,6 +116,11 @@ export function PositioningEditor({ value, onChange, context }: EditorProps<Posi
 
   return (
     <View style={styles.column}>
+      {note && (
+        <Text variant="caption" style={screenStyles.groupLabel}>
+          {note}
+        </Text>
+      )}
       <View style={styles.group}>
         <Text variant="label" style={screenStyles.groupLabel}>
           {GOAL_LABEL[kind]}
@@ -109,35 +172,42 @@ export function PositioningEditor({ value, onChange, context }: EditorProps<Posi
         )}
       </View>
 
-      <Panel label="Quanto vuoi pubblicare">
-        <View style={styles.stepper}>
-          <IconButton
-            icon={Minus}
-            variant="outline"
-            size={44}
-            accessibilityLabel="Meno uscite"
-            disabled={perWeek <= 1}
-            onPress={() => onChange({ ...value, postsPerWeek: Math.max(1, perWeek - 1) })}
-          />
-          <View style={styles.stepperValue}>
-            <Text variant="title" align="center">
-              {perWeek} {perWeek === 1 ? 'volta' : 'volte'} a settimana
-            </Text>
-            <Text variant="caption" align="center">
-              {frequencyNote(perWeek)}
-            </Text>
-          </View>
-          <IconButton
-            icon={Plus}
-            variant="outline"
-            size={44}
-            accessibilityLabel="Più uscite"
-            disabled={perWeek >= 7}
-            onPress={() => onChange({ ...value, postsPerWeek: Math.min(7, perWeek + 1) })}
-          />
-        </View>
-      </Panel>
+      <Frequency value={value} onChange={onChange} />
     </View>
+  );
+}
+
+function Frequency({ value, onChange }: Pick<EditorProps<Positioning>, 'value' | 'onChange'>) {
+  const perWeek = value.postsPerWeek;
+  return (
+    <Panel label="Quanto vuoi pubblicare">
+      <View style={styles.stepper}>
+        <IconButton
+          icon={Minus}
+          variant="outline"
+          size={44}
+          accessibilityLabel="Meno uscite"
+          disabled={perWeek <= 1}
+          onPress={() => onChange({ ...value, postsPerWeek: Math.max(1, perWeek - 1) })}
+        />
+        <View style={styles.stepperValue}>
+          <Text variant="title" align="center">
+            {perWeek} {perWeek === 1 ? 'volta' : 'volte'} a settimana
+          </Text>
+          <Text variant="caption" align="center">
+            {frequencyNote(perWeek)}
+          </Text>
+        </View>
+        <IconButton
+          icon={Plus}
+          variant="outline"
+          size={44}
+          accessibilityLabel="Più uscite"
+          disabled={perWeek >= 7}
+          onPress={() => onChange({ ...value, postsPerWeek: Math.min(7, perWeek + 1) })}
+        />
+      </View>
+    </Panel>
   );
 }
 

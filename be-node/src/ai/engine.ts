@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { query, type HookCallback, type Options, type SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, type HookCallback, type Options, type SDKMessage, type SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { FastifyBaseLogger } from 'fastify';
 import { z } from 'zod';
 
@@ -17,7 +17,7 @@ import { costAtTariff, type ModelTarget, type TokenCount } from './providers';
  */
 
 /** Anche `image` e `cutout`, che non passano dall'Agent SDK ma finiscono negli stessi consumi. */
-export type AiTask = 'website' | 'themes' | 'voice' | 'ideas' | 'source-ideas' | 'content' | 'rewrite' | 'image' | 'cutout';
+export type AiTask = 'website' | 'themes' | 'positioning' | 'voice' | 'ideas' | 'source-ideas' | 'content' | 'rewrite' | 'image' | 'cutout';
 export type WebTool = 'WebFetch' | 'WebSearch';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -34,7 +34,13 @@ export interface AiRequest<S extends z.ZodType> {
   /** Chi ha chiesto la generazione: finisce nei consumi. */
   accountId: string;
   brandId?: string | null;
+  /** Gli strumenti web che la sessione apre e chiude, man mano: servono a mostrare i passi. */
+  onTool?: (event: ToolEvent) => void;
 }
+
+export type ToolEvent =
+  | { type: 'start'; id: string; tool: WebTool; input: Record<string, unknown> }
+  | { type: 'end'; id: string; ok: boolean };
 
 /** Chi ha chiesto la generazione, per i consumi: lo passano i servizi a ogni compito. */
 export type AiMeta = Pick<AiRequest<z.ZodType>, 'accountId' | 'brandId'>;
@@ -154,6 +160,7 @@ export class AgentSdkEngine implements AiEngine {
     try {
       for await (const message of query({ prompt: request.prompt, options })) {
         if (message.type === 'result') result = message;
+        else if (request.onTool) toolEvents(message).forEach(request.onTool);
       }
     } catch (error) {
       // Una sessione a colpo singolo lancia anche dopo aver consegnato un risultato d'errore.
@@ -205,6 +212,28 @@ export class AgentSdkEngine implements AiEngine {
     }
     throw new ApiError(502, 'AI_FAILED', 'Non sono riuscito a completare la generazione. Riprova.');
   }
+}
+
+const isWebTool = (name: string): name is WebTool => name === 'WebFetch' || name === 'WebSearch';
+
+/**
+ * Gli strumenti web aperti (le richieste dell'assistente) e chiusi (i risultati che tornano) in un messaggio
+ * della sessione principale. Lo strumento dell'output strutturato non è un passo: resta fuori.
+ */
+export function toolEvents(message: SDKMessage): ToolEvent[] {
+  if (message.type === 'assistant' && message.parent_tool_use_id === null) {
+    return message.message.content.flatMap((block): ToolEvent[] =>
+      block.type === 'tool_use' && isWebTool(block.name)
+        ? [{ type: 'start', id: block.id, tool: block.name, input: (block.input ?? {}) as Record<string, unknown> }]
+        : [],
+    );
+  }
+  if (message.type === 'user' && message.parent_tool_use_id === null && Array.isArray(message.message.content)) {
+    return message.message.content.flatMap((block): ToolEvent[] =>
+      block.type === 'tool_result' ? [{ type: 'end', id: block.tool_use_id, ok: !block.is_error }] : [],
+    );
+  }
+  return [];
 }
 
 /** I token di tutta la sessione: `usage` conta il solo ciclo principale, `modelUsage` anche il riassunto di WebFetch. */

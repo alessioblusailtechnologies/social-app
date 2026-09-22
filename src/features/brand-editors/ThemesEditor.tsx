@@ -1,4 +1,4 @@
-import { Minus, Plus, X } from 'lucide-react-native';
+import { X } from 'lucide-react-native';
 import { useEffect, useRef } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
@@ -7,9 +7,9 @@ import {
   IconButton,
   LinkButton,
   Panel,
+  SegmentedControl,
   SkeletonLines,
   Text,
-  WeightBar,
   colors,
   fontFamily,
   screenStyles,
@@ -21,9 +21,9 @@ import {
   createThemes,
   MAX_THEMES,
   removeTheme,
-  setThemeWeight,
-  totalWeight,
-  WEIGHT_STEP,
+  setThemeLevel,
+  THEME_LEVELS,
+  themeLevel,
 } from '@/domain/themes';
 import { useSuggestThemes } from '@/services/queries';
 
@@ -63,7 +63,6 @@ export function ThemesEditor({ value, onChange, context }: EditorProps<Theme[]>)
     );
   }
 
-  const total = totalWeight(value);
   const rename = (index: number, name: string) =>
     onChange(value.map((theme, i) => (i === index ? { ...theme, name } : theme)));
 
@@ -71,7 +70,7 @@ export function ThemesEditor({ value, onChange, context }: EditorProps<Theme[]>)
     <View style={styles.column}>
       {context.insights && (
         <Text variant="caption" style={screenStyles.groupLabel}>
-          Proposti leggendo {context.insights.site}. Rinominali come vuoi.
+          Proposti leggendo {context.insights.site}, dal più importante. Rinominali e scegli quanto spesso usarli.
         </Text>
       )}
 
@@ -87,7 +86,6 @@ export function ThemesEditor({ value, onChange, context }: EditorProps<Theme[]>)
               accessibilityLabel={`Nome del tema ${index + 1}`}
               style={styles.nameInput}
             />
-            <Text variant="value">{theme.weight}%</Text>
             {value.length > 1 && (
               <IconButton
                 icon={X}
@@ -99,33 +97,18 @@ export function ThemesEditor({ value, onChange, context }: EditorProps<Theme[]>)
               />
             )}
           </View>
-          <View style={styles.weightRow}>
-            <IconButton
-              icon={Minus}
-              variant="outline"
-              size={36}
-              width={44}
-              accessibilityLabel={`Meno spazio a ${theme.name || 'questo tema'}`}
-              disabled={value.length === 1 || theme.weight === 0}
-              onPress={() => onChange(setThemeWeight(value, index, theme.weight - WEIGHT_STEP))}
-            />
-            <WeightBar weight={theme.weight} color={theme.color} />
-            <IconButton
-              icon={Plus}
-              variant="outline"
-              size={36}
-              width={44}
-              accessibilityLabel={`Più spazio a ${theme.name || 'questo tema'}`}
-              disabled={value.length === 1 || theme.weight === 100}
-              onPress={() => onChange(setThemeWeight(value, index, theme.weight + WEIGHT_STEP))}
-            />
-          </View>
+          <SegmentedControl
+            accessibilityLabel={`Quanto spesso esce ${theme.name || 'questo tema'}`}
+            options={THEME_LEVELS}
+            value={themeLevel(theme)}
+            onChange={(level) => onChange(setThemeLevel(value, index, level))}
+          />
         </Panel>
       ))}
 
       <View style={styles.footerRow}>
-        <Text variant="caption" color={total === 100 ? colors.textBody : colors.warning} style={styles.flex}>
-          {total === 100 ? 'La somma resta 100: gli altri temi si adattano.' : `Somma ${total}%: sistemala prima di continuare.`}
+        <Text variant="caption" style={styles.flex}>
+          Nel piano escono più spesso i temi «Spesso», meno quelli «Di rado».
         </Text>
         {value.length < MAX_THEMES && <LinkButton label="Aggiungi un tema" onPress={() => onChange(addTheme(value))} />}
       </View>
@@ -146,7 +129,6 @@ const styles = StyleSheet.create({
     color: colors.textTitle,
     outlineWidth: 0,
   },
-  weightRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 2 },
   flex: { flex: 1 },
 });

@@ -143,7 +143,7 @@ export function PlanSessionScreen({ brand }: { brand: Brand }) {
       <ScrollView contentContainerStyle={screenStyles.content}>
         <ScreenTitle
           title="Le prossime settimane"
-          subtitle="Distribuisco le uscite nei giorni migliori e le riempio con le tue idee salvate, rispettando i pesi dei temi."
+          subtitle="Distribuisco le uscite nei giorni migliori e le riempio con le tue idee salvate, rispettando quanto spesso devono uscire i temi."
         />
 
         <Panel gap={10}>

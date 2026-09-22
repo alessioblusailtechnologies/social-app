@@ -1,5 +1,16 @@
-import type { ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useEffect, useRef, type ReactNode } from 'react';
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+  type ScrollViewProps,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from './Text';
@@ -53,6 +64,86 @@ export function ScreenTitle({ title, subtitle }: { title: string; subtitle?: str
 export function ScreenFooter({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const insets = useSafeAreaInsets();
   return <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 18) }, style]}>{children}</View>;
+}
+
+/**
+ * La schermata con campi di testo: quando si apre la tastiera il contenuto si accorcia e il piede le sta sopra.
+ * Anche su Android, dove l'app va da bordo a bordo e la finestra non si restringe più da sola.
+ * Sul web ci pensa il browser (`interactive-widget` in public/index.html).
+ */
+export function KeyboardScreen({ children }: { children: ReactNode }) {
+  return (
+    <KeyboardAvoidingView style={screenStyles.screen} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+      {children}
+    </KeyboardAvoidingView>
+  );
+}
+
+const NATIVE = Platform.OS !== 'web';
+/** Aria fra il campo attivo e il bordo della tastiera. */
+const REVEAL_MARGIN = 16;
+
+/**
+ * Lo scorrimento delle schermate con campi, dentro `KeyboardScreen`: quando la tastiera si apre, o il campo
+ * cresce mentre scrivi, porta in vista il campo attivo. Sul web ci pensa il browser.
+ */
+export function FormScrollView({ onLayout, onScroll, onContentSizeChange, ...props }: ScrollViewProps) {
+  const scrollRef = useRef<ScrollView>(null);
+  const contentRef = useRef<View>(null!);
+  const viewport = useRef({ height: 0, offset: 0 });
+
+  const reveal = () => {
+    const input = TextInput.State.currentlyFocusedInput();
+    const scroll = scrollRef.current;
+    if (!input || !scroll || !contentRef.current) return;
+    input.measureLayout(
+      contentRef.current,
+      (_x, y, _width, height) => {
+        const { height: visible, offset } = viewport.current;
+        if (visible === 0) return;
+        const bottom = y + height + REVEAL_MARGIN;
+        // Se il campo non ci sta tutto, conta la fine: è lì che si scrive.
+        if (bottom > offset + visible) scroll.scrollTo({ y: bottom - visible, animated: true });
+        else if (y - REVEAL_MARGIN < offset) scroll.scrollTo({ y: Math.max(0, y - REVEAL_MARGIN), animated: true });
+      },
+      () => {},
+    );
+  };
+  const revealWhileTyping = () => {
+    if (NATIVE && Keyboard.isVisible()) reveal();
+  };
+
+  useEffect(() => {
+    if (!NATIVE) return;
+    // Su iOS la lista si accorcia prima che la tastiera finisca di salire, su Android dopo: si guarda in entrambi i momenti.
+    const subscription = Keyboard.addListener('keyboardDidShow', () => requestAnimationFrame(reveal));
+    return () => subscription.remove();
+  }, [reveal]);
+
+  return (
+    <ScrollView
+      ref={scrollRef}
+      {...(NATIVE && { innerViewRef: contentRef })}
+      keyboardShouldPersistTaps="handled"
+      scrollEventThrottle={32}
+      {...props}
+      onLayout={(event) => {
+        const { height } = event.nativeEvent.layout;
+        const shrunk = height < viewport.current.height;
+        viewport.current.height = height;
+        if (shrunk) revealWhileTyping();
+        onLayout?.(event);
+      }}
+      onScroll={(event) => {
+        viewport.current.offset = event.nativeEvent.contentOffset.y;
+        onScroll?.(event);
+      }}
+      onContentSizeChange={(width, height) => {
+        revealWhileTyping();
+        onContentSizeChange?.(width, height);
+      }}
+    />
+  );
 }
 
 export const screenStyles = StyleSheet.create({

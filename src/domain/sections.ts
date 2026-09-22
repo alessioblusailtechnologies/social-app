@@ -1,7 +1,7 @@
 import type { BrandDraft, BrandKind, SectionKey } from './brand';
 import { currentVoiceCard, isConnected } from './brand';
 import { CHANNELS, imageStyleLabel, typographyName } from './catalog';
-import { totalWeight } from './themes';
+import { themeLevelLabel, totalWeight } from './themes';
 
 export type SectionStatus = 'complete' | 'partial' | 'missing';
 
@@ -65,7 +65,7 @@ const COPY: Record<SectionKey, { name: ByKind; title: ByKind; subtitle: ByKind }
     name: same('Temi'),
     title: { person: 'I tuoi temi', company: 'I temi del brand', client: 'I temi del cliente' },
     subtitle: same(
-      'Il peso dice quanto spazio dare a ognuno nel piano. Quando ne cambi uno, gli altri si ribilanciano da soli.',
+      'Per ognuno scegli quanto spesso deve uscire: il piano dà più spazio ai temi che escono spesso.',
     ),
   },
   voice: {
@@ -204,7 +204,7 @@ export function sectionSummary(key: SectionKey, draft: BrandDraft): string {
     }
     case 'themes':
       return draft.themes.length
-        ? draft.themes.map((theme) => `${theme.name} ${theme.weight}%`).join(' · ')
+        ? draft.themes.map((theme) => `${theme.name} (${themeLevelLabel(theme).toLowerCase()})`).join(' · ')
         : 'Nessun tema';
     case 'voice': {
       const card = currentVoiceCard(draft.voice);

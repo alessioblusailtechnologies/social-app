@@ -2,6 +2,7 @@ import type { Brand, BrandKind, ChannelId, Theme } from '@/domain/brand';
 import { isConnected } from '@/domain/brand';
 import { CHANNELS } from '@/domain/catalog';
 import { ideaPreferences, type Idea, type IdeaDraft, type IdeaFormat, type IdeaSource } from '@/domain/idea';
+import { themeLevelLabel } from '@/domain/themes';
 import { formatDay } from '@/lib/dates';
 import { createRng, pick, sample, seedFromString } from '@/lib/random';
 import { normalizeSite } from '@/lib/site';
@@ -292,7 +293,7 @@ export function generateIdeaDrafts(brand: Brand, existing: readonly Idea[], opti
       title: family.title(context),
       angleLabel: family.label,
       angle: family.angle(context),
-      rationale: `«${theme.name}» pesa ${theme.weight}% nel piano. Obiettivo: ${lowerFirst(goal)}.`,
+      rationale: `«${theme.name}» nel piano esce ${themeLevelLabel(theme).toLowerCase()}. Obiettivo: ${lowerFirst(goal)}.`,
       themeId: theme.id,
       signal: { kind: 'theme', label: theme.name },
       formats: family.formats,
@@ -461,7 +462,7 @@ export function draftsFromSource(brand: Brand, source: IdeaSource, variant = 0):
   const { families, basis } = sourceFamilies(brand, source);
   const rng = createRng(seedFromString(`${basis}|${variant}`));
   const theme = matchTheme(brand.themes, basis);
-  const themeNote = theme ? ` Si lega a «${theme.name}», che nel piano pesa ${theme.weight}%.` : '';
+  const themeNote = theme ? ` Si lega a «${theme.name}», che nel piano esce ${themeLevelLabel(theme).toLowerCase()}.` : '';
 
   const signal =
     source.kind === 'prompt'

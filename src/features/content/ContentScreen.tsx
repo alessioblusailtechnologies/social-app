@@ -1,14 +1,16 @@
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import {
   Badge,
   Button,
   Chip,
   ChipGroup,
+  FormScrollView,
   IconButton,
+  KeyboardScreen,
   LinkButton,
   Panel,
   ScreenFooter,
@@ -198,7 +200,7 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
   };
 
   return (
-    <KeyboardAvoidingView style={screenStyles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardScreen>
       <TopBar
         left={<IconButton icon={ChevronLeft} accessibilityLabel="Indietro" onPress={close} />}
         title="Contenuto"
@@ -215,7 +217,7 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
         }
       />
 
-      <ScrollView contentContainerStyle={screenStyles.content} keyboardShouldPersistTaps="handled">
+      <FormScrollView contentContainerStyle={screenStyles.content}>
         <Panel gap={10}>
           {slot ? (
             <SlotSchedule brand={brand} slot={slot} canMove={!published} canChangeChannels={!locked && !direct} />
@@ -419,7 +421,7 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
             <RemoveFromPlan brand={brand} slot={slot} direct={direct} onRemoved={close} />
           </View>
         )}
-      </ScrollView>
+      </FormScrollView>
 
       {!published && !loading && !showPicker && (idea || content) && (
         <ScreenFooter>
@@ -507,7 +509,7 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
           )}
         </ScreenFooter>
       )}
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 

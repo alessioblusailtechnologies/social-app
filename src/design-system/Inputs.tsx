@@ -8,10 +8,12 @@ export interface FieldCardProps extends Omit<TextInputProps, 'style'> {
   label: string;
   /** Azione accanto al campo, es. "Leggi" per il sito. */
   action?: ReactNode;
+  /** Nota sotto il campo, es. da dove viene il testo proposto. */
+  hint?: string;
 }
 
 /** Campo dentro una card bianca con etichetta maiuscola, come negli artboard. */
-export function FieldCard({ label, action, multiline, onFocus, onBlur, ...input }: FieldCardProps) {
+export function FieldCard({ label, action, hint, multiline, onFocus, onBlur, ...input }: FieldCardProps) {
   const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.card, focused && styles.cardFocused]}>
@@ -34,6 +36,7 @@ export function FieldCard({ label, action, multiline, onFocus, onBlur, ...input 
         />
         {action}
       </View>
+      {hint ? <Text variant="caption">{hint}</Text> : null}
     </View>
   );
 }

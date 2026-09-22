@@ -1,6 +1,7 @@
 import type { Brand, BrandKind, Identity } from '@/domain/brand';
 import { currentVoiceCard, isConnected } from '@/domain/brand';
 import { CHANNELS, imageStyleLabel, kindLabel } from '@/domain/catalog';
+import { themeLevelLabel } from '@/domain/themes';
 import { formatDay, formatWeekdayLong, toDay } from '@/lib/dates';
 import { upcomingAnniversaries } from '@/services/mock/idea-generator';
 
@@ -64,7 +65,7 @@ export function describeBrand(brand: Brand, now: Date): string {
     ].join('\n'),
     [
       '## Temi',
-      ...(themes.length > 0 ? themes.map((theme) => `- id "${theme.id}": ${theme.name}, pesa ${theme.weight}% del piano`) : ['- nessun tema']),
+      ...(themes.length > 0 ? themes.map((theme) => `- id "${theme.id}": ${theme.name}, nel piano esce ${themeLevelLabel(theme).toLowerCase()}`) : ['- nessun tema']),
     ].join('\n'),
     card
       ? [

@@ -1,14 +1,16 @@
 import { useRouter } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import {
   Badge,
   Button,
   CheckboxMark,
   Dot,
+  FormScrollView,
   IconButton,
+  KeyboardScreen,
   LinkButton,
   Panel,
   PressableScale,
@@ -93,14 +95,14 @@ export function NewIdeaScreen({ brand }: { brand: Brand }) {
         : `Sto leggendo ${sourceState.file?.name ?? 'il documento'}`;
 
   return (
-    <KeyboardAvoidingView style={screenStyles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardScreen>
       <TopBar
         safeArea={Platform.OS !== 'ios'}
         title="Nuova idea"
         right={<IconButton icon={X} accessibilityLabel="Chiudi" onPress={close} />}
       />
 
-      <ScrollView contentContainerStyle={screenStyles.content} keyboardShouldPersistTaps="handled">
+      <FormScrollView contentContainerStyle={screenStyles.content}>
         {draftIdeas.isPending ? (
           <>
             <ScreenTitle title="Un attimo" subtitle="Cerco tre tagli diversi e li lego ai temi del tuo profilo." />
@@ -164,7 +166,7 @@ export function NewIdeaScreen({ brand }: { brand: Brand }) {
             </View>
           </>
         )}
-      </ScrollView>
+      </FormScrollView>
 
       <ScreenFooter>
         {drafts === null || draftIdeas.isPending ? (
@@ -200,7 +202,7 @@ export function NewIdeaScreen({ brand }: { brand: Brand }) {
           </>
         )}
       </ScreenFooter>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 

@@ -10,6 +10,7 @@ import type {
   ContentService,
   IdeaService,
   PlanService,
+  PositioningIdeas,
   Services,
   VoiceAnalysis,
   WebsiteInsights,
@@ -32,8 +33,23 @@ export function createHttpServices(api: ApiClient): Services {
   };
 
   const ai: AiService = {
-    readWebsite: (site, identity) => api.post<WebsiteInsights>('/ai/website', { site, identity }),
+    readWebsite: (site, identity, onSteps) => api.stream<WebsiteInsights>('/ai/website/stream', { site, identity }, onSteps),
     suggestThemes: (identity) => api.post<string[]>('/ai/themes', { identity }),
+    suggestPositioning: (identity, site, onSteps) =>
+      api.stream<PositioningIdeas>(
+        '/ai/positioning/stream',
+        {
+          identity,
+          site: site && {
+            site: site.site,
+            summary: site.summary,
+            pitch: site.pitch ?? '',
+            themes: site.themes,
+            audiences: site.audiences,
+          },
+        },
+        onSteps,
+      ),
     analyzeVoice: (sample, identity) => api.post<VoiceAnalysis>('/ai/voice', { sample, identity }),
   };
 

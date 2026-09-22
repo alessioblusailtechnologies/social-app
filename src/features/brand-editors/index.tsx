@@ -10,6 +10,7 @@ import { VisualEditor } from './VisualEditor';
 import { VoiceEditor } from './VoiceEditor';
 
 export { BrandAvatar, ChannelMark, Swatches } from './BrandVisuals';
+export { positioningSource } from './PositioningEditor';
 
 export interface SectionEditorProps extends Omit<EditorContext, 'draft'> {
   sectionKey: SectionKey;
@@ -18,8 +19,8 @@ export interface SectionEditorProps extends Omit<EditorContext, 'draft'> {
 }
 
 /** Lo stesso editor serve l'onboarding (un passo) e il Profilo (una modifica). */
-export function SectionEditor({ sectionKey, draft, onPatch, insights, onInsights }: SectionEditorProps) {
-  const context: EditorContext = { draft, insights, onInsights };
+export function SectionEditor({ sectionKey, draft, onPatch, ...rest }: SectionEditorProps) {
+  const context: EditorContext = { draft, ...rest };
   switch (sectionKey) {
     case 'identity':
       return <IdentityEditor value={draft.identity} onChange={(value) => onPatch({ key: 'identity', value })} context={context} />;

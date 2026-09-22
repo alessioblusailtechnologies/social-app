@@ -1,12 +1,13 @@
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 
 import {
   Badge,
   Button,
+  FormScrollView,
   IconButton,
+  KeyboardScreen,
   ScreenFooter,
   ScreenTitle,
   TopBar,
@@ -54,7 +55,7 @@ export function SectionEditScreen({ brand, sectionKey }: { brand: Brand; section
     );
 
   return (
-    <KeyboardAvoidingView style={screenStyles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardScreen>
       <TopBar
         left={<IconButton icon={ChevronLeft} accessibilityLabel="Torna al profilo" onPress={goBack} />}
         title={`Profilo · ${brand.identity.name}`}
@@ -66,7 +67,7 @@ export function SectionEditScreen({ brand, sectionKey }: { brand: Brand; section
           ) : undefined
         }
       />
-      <ScrollView contentContainerStyle={screenStyles.content} keyboardShouldPersistTaps="handled">
+      <FormScrollView contentContainerStyle={screenStyles.content}>
         <ScreenTitle title={title} subtitle={subtitle} />
         <SectionEditor
           sectionKey={sectionKey}
@@ -77,7 +78,7 @@ export function SectionEditScreen({ brand, sectionKey }: { brand: Brand; section
             setDraft((current) => applyPatch(current, patch));
           }}
         />
-      </ScrollView>
+      </FormScrollView>
       <ScreenFooter>
         <Button
           size="lg"
@@ -89,6 +90,6 @@ export function SectionEditScreen({ brand, sectionKey }: { brand: Brand; section
           {update.isPending ? 'Salvo…' : 'Salva'}
         </Button>
       </ScreenFooter>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }

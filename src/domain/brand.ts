@@ -35,11 +35,16 @@ export interface ChannelState {
 
 export type Channels = Record<ChannelId, ChannelState>;
 
+/** Quanto spesso esce un tema nel piano: è quello che l'utente sceglie. */
+export type ThemeLevel = 'often' | 'sometimes' | 'rarely';
+
 export interface Theme {
   id: string;
   name: string;
-  /** Percentuale a multipli di 5; la somma dei temi fa 100. */
+  /** Percentuale intera, ricavata dal livello; la somma dei temi fa 100. La usano piano e idee. */
   weight: number;
+  /** Manca nei temi salvati prima dei livelli: `themeLevel()` lo ricava dal peso. */
+  level?: ThemeLevel;
   color: string;
 }
 

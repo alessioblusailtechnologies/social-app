@@ -62,6 +62,7 @@ const themesSchema = z
       id: z.string().min(1).max(100),
       name: text(120),
       weight: z.number().int().min(0).max(100),
+      level: z.enum(['often', 'sometimes', 'rarely']).optional(),
       color: text(40),
     }),
   )
@@ -128,6 +129,17 @@ export const brandDraftSchema = z.object(sectionSchemas) satisfies z.ZodType<Bra
 export const websiteRequestSchema = z.object({ site: z.string().trim().min(3).max(300), identity: identitySchema });
 
 export const themesRequestSchema = z.object({ identity: identitySchema });
+
+/** Quello che la lettura del sito ha capito: il contesto per obiettivi e pubblico. */
+const siteContextSchema = z.object({
+  site: text(300),
+  summary: text(1000),
+  pitch: text(2000),
+  themes: z.array(text(200)).max(10),
+  audiences: z.array(text(200)).max(10),
+});
+
+export const positioningRequestSchema = z.object({ identity: identitySchema, site: siteContextSchema.nullable() });
 
 export const voiceRequestSchema = z.object({
   sample: z.object({

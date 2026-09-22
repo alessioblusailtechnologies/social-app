@@ -1,9 +1,19 @@
 import type { BrandKind, Identity } from '@/domain/brand';
-import { AUDIENCES, channelName } from '@/domain/catalog';
+import { AUDIENCES, channelName, GOALS } from '@/domain/catalog';
 import { delay, latency } from '@/lib/delay';
 import { createRng, pick, sample, seedFromString } from '@/lib/random';
 import { normalizeSite } from '@/lib/site';
 
+import {
+  colorsFound,
+  contextStep,
+  createStepLog,
+  pageStep,
+  pickedDetail,
+  POSITIONING_STEPS,
+  THINKING_STEP,
+  WEBSITE_STEPS,
+} from '../ai-steps';
 import type { AiService, VoiceAnalysis } from '../types';
 
 /**
@@ -51,6 +61,27 @@ const SITE_PALETTES: [string, string, string, string][] = [
 ];
 
 const SITE_TONES = ['asciutto e tecnico', 'caldo e colloquiale', 'istituzionale', 'diretto e ironico'];
+
+const SITE_PAGES = ['chi-siamo', 'servizi', 'progetti', 'blog', 'prodotti', 'team', 'casi-studio'];
+
+/** La frase «cosa fai» come la scriverebbe l'AI: con la persona grammaticale del campo. */
+const PITCHES: Record<BrandKind, string[]> = {
+  person: [
+    'Aiuto le piccole imprese a mettere ordine nei processi, partendo da quello che fa perdere più tempo ogni settimana',
+    'Affianco founder e team di prodotto nelle scelte difficili, con i numeri alla mano e senza giri di parole',
+    'Porto dati e automazioni nelle aziende che lavorano ancora a mano, un processo alla volta',
+  ],
+  company: [
+    'Facciamo pochi prodotti e li facciamo bene, con materie prime del territorio e prezzi chiari per chi compra ogni giorno',
+    'Progettiamo e installiamo impianti su misura per case e negozi, con un solo referente dal sopralluogo alla manutenzione',
+    'Cuciniamo ricette di famiglia con ingredienti di stagione, a pranzo per chi lavora e la sera per chi vuole fermarsi',
+  ],
+  client: [
+    'Progetta spazi di lavoro piccoli che funzionano, con tempi e costi chiari fin dal primo incontro',
+    'Segue le famiglie nella scelta della casa, dalla prima visita al rogito, senza sorprese sui costi',
+    'Produce arredi su misura in legno massello per case e locali, con consegna e montaggio inclusi',
+  ],
+};
 
 const REGISTERS: Record<Group, string[]> = {
   person: [
@@ -117,15 +148,36 @@ function analyzeTexts(text: string, group: Group): Pick<VoiceAnalysis, 'rhythm' 
 
 export function createMockAiService(): AiService {
   return {
-    async readWebsite(site: string, identity: Identity) {
+    async readWebsite(site: string, identity: Identity, onSteps) {
       const host = normalizeSite(site);
       const group = groupOf(identity.kind);
       const rng = createRng(seedFromString(`${host}|${group}`));
-      await delay(latency(1600, 2300));
-      const pages = 6 + Math.floor(rng() * 19);
+      const pages = [`https://${host}/`, ...sample(rng, SITE_PAGES, 2).map((page) => `https://${host}/${page}`)];
+
+      // Gli stessi passi della lettura vera, con i tempi di una lettura corta.
+      const log = createStepLog(onSteps);
+      log.start('address', WEBSITE_STEPS.address, host);
+      await delay(latency(300, 500));
+      log.finish('address');
+      log.start('colors', WEBSITE_STEPS.colors);
+      await delay(latency(500, 800));
+      log.finish('colors', { detail: colorsFound(3 + Math.floor(rng() * 5)) });
+      log.start(THINKING_STEP, WEBSITE_STEPS.plan);
+      await delay(latency(600, 900));
+      for (const url of pages) {
+        log.drop(THINKING_STEP);
+        const { label, detail } = pageStep(url);
+        log.start(url, label, detail);
+        await delay(latency(700, 1100));
+        log.finish(url);
+        log.start(THINKING_STEP, WEBSITE_STEPS.reflect);
+        await delay(latency(400, 700));
+      }
+
       return {
         site: host,
-        summary: `Ho letto ${pages} pagine di ${host}, tono ${pick(rng, SITE_TONES)}. Ho proposto temi, pubblico e una palette.`,
+        summary: `Ho letto ${pages.length} pagine di ${host}, tono ${pick(rng, SITE_TONES)}. Ho proposto temi, pubblico e una palette.`,
+        pitch: pick(rng, PITCHES[identity.kind]),
         themes: sample(rng, THEMES[group], 4),
         audiences: [...sample(rng, AUDIENCES[identity.kind], 2), pick(rng, EXTRA_AUDIENCES[group])],
         palette: { id: `site-${host}`, name: 'Dal sito', colors: pick(rng, SITE_PALETTES), origin: 'site' },
@@ -137,6 +189,31 @@ export function createMockAiService(): AiService {
       const rng = createRng(seedFromString(`${identity.pitch}|${group}`));
       await delay(latency(1200, 1700));
       return sample(rng, THEMES[group], 4);
+    },
+
+    async suggestPositioning(identity, site, onSteps) {
+      const group = groupOf(identity.kind);
+      const rng = createRng(seedFromString(`${identity.pitch}|${site?.site ?? ''}|${identity.kind}`));
+      const log = createStepLog(onSteps);
+      const labels = POSITIONING_STEPS[identity.kind];
+      const start = contextStep(site?.site ?? null, site?.pitch || identity.pitch);
+      log.start('context', start.label, start.detail);
+      await delay(latency(300, 500));
+      log.finish('context');
+
+      log.start('goals', labels.goals);
+      await delay(latency(900, 1300));
+      const goals = sample(rng, GOALS[identity.kind], 5);
+      log.finish('goals', { detail: pickedDetail(goals.length, goals.slice(0, 2)) });
+
+      log.start('audiences', labels.audiences);
+      await delay(latency(900, 1300));
+      const audiences = [
+        ...new Set([...(site?.audiences ?? []), ...sample(rng, [...AUDIENCES[identity.kind], ...EXTRA_AUDIENCES[group]], 6)]),
+      ].slice(0, 6);
+      log.finish('audiences', { detail: pickedDetail(audiences.length, audiences.slice(0, 2)) });
+
+      return { goals, audiences, picked: { goals: goals.slice(0, 2), audiences: audiences.slice(0, 2) } };
     },
 
     async analyzeVoice(voiceSample, identity) {

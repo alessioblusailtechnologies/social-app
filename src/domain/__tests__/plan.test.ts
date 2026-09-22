@@ -100,7 +100,7 @@ describe('equilibrio', () => {
     const slots = [slot({ themeId: themes[0].id }), slot({ themeId: themes[0].id }), slot({ themeId: themes[1].id })];
     const balance = themeBalance(themes, slots);
     expect(balance.map((entry) => entry.planned)).toEqual([67, 33, 0, 0]);
-    expect(balanceHint(balance)).toBe('Manca «Numeri e prezzi», che nel profilo pesa 20%.');
+    expect(balanceHint(balance)).toBe('Manca «Numeri e prezzi», che nel profilo esce ogni tanto.');
   });
 });
 

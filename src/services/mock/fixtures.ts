@@ -2,6 +2,7 @@ import type { Brand, ChannelId, Theme } from '@/domain/brand';
 import { createEmptyDraft, PALETTE_PRESETS } from '@/domain/catalog';
 import type { Idea, IdeaFormat } from '@/domain/idea';
 import { BEST_TIMES, type PlanSlot, type SlotStatus } from '@/domain/plan';
+import { themeLevelLabel } from '@/domain/themes';
 import { addDays, startOfWeek } from '@/lib/dates';
 import { createId } from '@/lib/id';
 
@@ -29,7 +30,7 @@ export function createDemoPlan(brand: Brand, demoIdeas: Idea[], from: string): {
     title,
     angleLabel,
     angle,
-    rationale: `«${theme.name}» pesa ${theme.weight}% nel piano.`,
+    rationale: `«${theme.name}» nel piano esce ${themeLevelLabel(theme).toLowerCase()}.`,
     themeId: theme.id,
     signal: { kind: 'theme', label: theme.name },
     source: null,

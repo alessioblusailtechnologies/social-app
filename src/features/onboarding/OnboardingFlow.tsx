@@ -1,13 +1,15 @@
 import { useRouter } from 'expo-router';
 import { ChevronLeft, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 
 import { DEMO_MODE } from '@/config';
 import {
   Button,
+  FormScrollView,
   IconButton,
+  KeyboardScreen,
   ProgressSegments,
   ScreenFooter,
   ScreenTitle,
@@ -20,8 +22,8 @@ import {
 } from '@/design-system';
 import type { BrandKind, SectionKey } from '@/domain/brand';
 import { isSkippable, sectionCopy, sectionError } from '@/domain/sections';
-import { SectionEditor } from '@/features/brand-editors';
-import { useActiveBrand, useCreateBrand, useLoadDemoBrand } from '@/services/queries';
+import { positioningSource, SectionEditor } from '@/features/brand-editors';
+import { useActiveBrand, useCreateBrand, useLoadDemoBrand, usePrefetchPositioningIdeas } from '@/services/queries';
 
 import { IntroStep } from './IntroStep';
 import { ONBOARDING_STEPS, useOnboardingHydrated, useOnboardingStore, type OnboardingStep } from './store';
@@ -48,11 +50,25 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
   const router = useRouter();
   const toast = useToast();
   const hydrated = useOnboardingHydrated();
-  const { stepIndex, direction, draft, insights, next, back, goTo, chooseKind, patch, applyInsights, reset } =
-    useOnboardingStore();
+  const {
+    stepIndex,
+    direction,
+    draft,
+    insights,
+    positioningIdeas,
+    next,
+    back,
+    goTo,
+    chooseKind,
+    patch,
+    applyInsights,
+    applyPositioningIdeas,
+    reset,
+  } = useOnboardingStore();
   const { brand } = useActiveBrand();
   const createBrand = useCreateBrand();
   const loadDemo = useLoadDemoBrand();
+  const prefetchPositioning = usePrefetchPositioningIdeas();
   const [createdBrandId, setCreatedBrandId] = useState<string | null>(null);
 
   // Si entra nel Profilo solo quando il nuovo brand risulta attivo, così la guardia delle route lo lascia passare.
@@ -86,6 +102,13 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
   const error = sectionStep && draft ? sectionError(sectionStep, draft) : null;
   const busy = createBrand.isPending || loadDemo.isPending || createdBrandId !== null;
 
+  // Obiettivi e pubblico si preparano mentre si passa al passo dopo il sito.
+  function goNext() {
+    const source = step === 'identity' && draft ? positioningSource(draft.identity, insights) : null;
+    if (draft && source && positioningIdeas?.key !== source.key) void prefetchPositioning(draft.identity, source);
+    next();
+  }
+
   const primary =
     step === 'intro'
       ? { label: 'Iniziamo', disabled: !draft, reason: 'Scegli per chi costruiamo la presenza.', onPress: next }
@@ -101,10 +124,10 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
                 onError: () => toast('Non sono riuscito a creare il profilo. Riprova.'),
               }),
           }
-        : { label: 'Continua', disabled: error !== null, reason: error ?? '', onPress: next };
+        : { label: 'Continua', disabled: error !== null, reason: error ?? '', onPress: goNext };
 
   return (
-    <KeyboardAvoidingView style={screenStyles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardScreen>
       <TopBar
         left={
           stepIndex > 0 && draft ? (
@@ -133,7 +156,7 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
         <ProgressSegments count={ONBOARDING_STEPS.length} current={draft ? stepIndex : 0} />
       </TopBar>
 
-      <ScrollView key={step} contentContainerStyle={screenStyles.content} keyboardShouldPersistTaps="handled">
+      <FormScrollView key={step} contentContainerStyle={screenStyles.content}>
         <Animated.View
           entering={(direction === 1 ? FadeInRight : FadeInLeft).duration(motion.slow).easing(standardEasing)}
           style={styles.body}>
@@ -149,10 +172,12 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
               onPatch={patch}
               insights={insights}
               onInsights={applyInsights}
+              positioningIdeas={positioningIdeas}
+              onPositioningIdeas={applyPositioningIdeas}
             />
           )}
         </Animated.View>
-      </ScrollView>
+      </FormScrollView>
 
       <ScreenFooter>
         <Button
@@ -180,7 +205,7 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
           </Button>
         )}
       </ScreenFooter>
-    </KeyboardAvoidingView>
+    </KeyboardScreen>
   );
 }
 

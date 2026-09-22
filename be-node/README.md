@@ -120,8 +120,15 @@ Tutto JSON. Gli errori sono `{ "code": "NOT_FOUND", "message": "…" }`, con lo 
 | Metodo | Percorso | Corpo | Risposta |
 |---|---|---|---|
 | POST | `/api/ai/website` | `{ site, identity }` | `WebsiteInsights` |
+| POST | `/api/ai/website/stream` | `{ site, identity }` | `text/event-stream` di `AiStreamEvent<WebsiteInsights>` |
 | POST | `/api/ai/themes` | `{ identity }` | `string[]` |
+| POST | `/api/ai/positioning` | `{ identity, site: { site, summary, pitch, themes, audiences } \| null }` | `PositioningIdeas` |
 | POST | `/api/ai/voice` | `{ sample, identity }` | `VoiceAnalysis` |
+
+`website/stream` fa la stessa lettura e intanto manda i passi dell'AI (indirizzo, colori, ogni pagina aperta):
+un evento `data:` con `{ type: 'steps', steps }` a ogni cambio, poi `{ type: 'result', result }` oppure
+`{ type: 'error', status, code, message }`. Gli errori di validazione arrivano prima, come risposta normale.
+`WebsiteInsights.pitch` è la frase «cosa fai» letta dal sito, vuota se il sito non si apre.
 
 `voice` con `source: 'history'` o `'recording'` risponde 422 `NOT_AVAILABLE`: servono il collegamento vero del
 canale e una registrazione vera.

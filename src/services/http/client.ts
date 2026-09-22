@@ -1,3 +1,4 @@
+import type { AiStreamEvent, OnAiSteps } from '../types';
 import { endSession, updateTokens, useSessionStore, type TokenResponse } from './session';
 
 /** L'errore del backend, con il codice stabile e il messaggio da mostrare: `{ code, message }`. */
@@ -23,6 +24,8 @@ export interface ApiClient {
   put<T>(path: string, body?: unknown): Promise<T>;
   patch<T>(path: string, body?: unknown): Promise<T>;
   delete(path: string): Promise<void>;
+  /** Una POST con risposta a passi (Server-Sent Events): i passi vanno a `onSteps` man mano, poi arriva il risultato. */
+  stream<T>(path: string, body: unknown, onSteps?: OnAiSteps): Promise<T>;
   /** Le rotte di accesso: nessun token, nessun rinnovo. */
   publicPost<T>(path: string, body: unknown): Promise<T>;
 }
@@ -40,8 +43,14 @@ export function route(strings: TemplateStringsArray, ...segments: string[]): str
 export function createApiClient(baseUrl: string): ApiClient {
   let refreshing: Promise<boolean> | null = null;
 
-  async function send(method: Method, path: string, body: unknown, accessToken: string | null): Promise<Response> {
-    const headers: Record<string, string> = { Accept: 'application/json' };
+  async function send(
+    method: Method,
+    path: string,
+    body: unknown,
+    accessToken: string | null,
+    accept = 'application/json',
+  ): Promise<Response> {
+    const headers: Record<string, string> = { Accept: accept };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
     try {
@@ -91,20 +100,71 @@ export function createApiClient(baseUrl: string): ApiClient {
     return refreshing;
   }
 
-  async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  /** La risposta di una rotta protetta, dopo l'eventuale rinnovo del token. */
+  async function authorized(method: Method, path: string, body: unknown, accept?: string): Promise<Response> {
     const current = useSessionStore.getState().tokens;
     if (current && current.expiresAt - REFRESH_MARGIN_MS <= Date.now()) await refresh();
 
     const token = () => useSessionStore.getState().tokens?.accessToken ?? null;
     if (!token()) throw new ApiError(401, 'UNAUTHENTICATED', 'Sessione scaduta: accedi di nuovo.');
 
-    let response = await send(method, path, body, token());
+    let response = await send(method, path, body, token(), accept);
     if (response.status === 401) {
-      if (!(await refresh())) return parse<T>(response);
-      response = await send(method, path, body, token());
+      if (!(await refresh())) return response;
+      response = await send(method, path, body, token(), accept);
       if (response.status === 401) endSession();
     }
-    return parse<T>(response);
+    return response;
+  }
+
+  async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+    return parse<T>(await authorized(method, path, body));
+  }
+
+  async function stream<T>(path: string, body: unknown, onSteps?: OnAiSteps): Promise<T> {
+    const response = await authorized('POST', path, body, 'text/event-stream');
+    if (!response.ok) return parse<T>(response);
+
+    let outcome: AiStreamEvent<T> | null = null;
+    const dispatch = (block: string) => {
+      const data = block
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trimStart())
+        .join('\n');
+      if (!data) return;
+      const event = JSON.parse(data) as AiStreamEvent<T>;
+      if (event.type === 'steps') onSteps?.(event.steps);
+      else outcome = event;
+    };
+
+    try {
+      const reader = response.body?.getReader();
+      if (reader) {
+        const decoder = new TextDecoder();
+        let buffer = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+          for (let end = buffer.indexOf('\n\n'); end >= 0; end = buffer.indexOf('\n\n')) {
+            dispatch(buffer.slice(0, end));
+            buffer = buffer.slice(end + 2);
+          }
+        }
+        dispatch(buffer);
+      } else {
+        // Senza lettura a pezzi i passi arrivano tutti insieme alla fine: il risultato resta giusto.
+        (await response.text()).split(/\r?\n\r?\n/).forEach(dispatch);
+      }
+    } catch {
+      throw new ApiError(0, 'NETWORK', 'La connessione si è interrotta. Controlla la rete e riprova.');
+    }
+
+    const result = outcome as AiStreamEvent<T> | null;
+    if (result?.type === 'result') return result.result;
+    if (result?.type === 'error') throw new ApiError(result.status, result.code, result.message);
+    throw new ApiError(0, 'NETWORK', 'La risposta si è interrotta. Riprova.');
   }
 
   return {
@@ -113,6 +173,7 @@ export function createApiClient(baseUrl: string): ApiClient {
     put: (path, body) => request('PUT', path, body),
     patch: (path, body) => request('PATCH', path, body),
     delete: (path) => request('DELETE', path),
+    stream,
     publicPost: async (path, body) => parse(await send('POST', path, body, null)),
   };
 }

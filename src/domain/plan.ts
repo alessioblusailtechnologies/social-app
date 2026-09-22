@@ -3,6 +3,7 @@ import { addDays, weekdayIndex } from '@/lib/dates';
 import type { Brand, ChannelId, Theme } from './brand';
 import { CHANNELS } from './catalog';
 import type { Idea } from './idea';
+import { themeLevelLabel } from './themes';
 
 /**
  * Il piano è una sequenza di uscite: un contenuto, in un giorno e in un orario,
@@ -178,13 +179,13 @@ export function themeBalance(themes: readonly Theme[], slots: readonly SlotDraft
   });
 }
 
-/** Il tema più lontano dal peso del profilo, se lo scarto è evidente. */
+/** Il tema più lontano da quanto spesso dovrebbe uscire, se lo scarto è evidente. */
 export function balanceHint(balance: ReturnType<typeof themeBalance>): string | null {
   const worst = [...balance].sort((a, b) => a.planned - a.target - (b.planned - b.target))[0];
   if (!worst || worst.target - worst.planned < 15) return null;
   return worst.count === 0
-    ? `Manca «${worst.theme.name}», che nel profilo pesa ${worst.target}%.`
-    : `«${worst.theme.name}» è sotto: ${worst.planned}% contro il ${worst.target}% del profilo.`;
+    ? `Manca «${worst.theme.name}», che nel profilo esce ${themeLevelLabel(worst.theme).toLowerCase()}.`
+    : `«${worst.theme.name}» ha poche uscite: nel profilo esce ${themeLevelLabel(worst.theme).toLowerCase()}.`;
 }
 
 /** Dove mettere un'idea: la prima uscita vuota dello stesso tema, altrimenti il primo giorno buono libero. */

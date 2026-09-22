@@ -1,8 +1,9 @@
-import { StyleSheet, View } from 'react-native';
+import { Keyboard, StyleSheet, View } from 'react-native';
 
-import { Badge, Button, FieldCard, Panel, SkeletonLines, Text, colors, useToast } from '@/design-system';
+import { Badge, Button, FieldCard, Panel, SkeletonLines, StepList, Text, colors, useToast } from '@/design-system';
 import type { BrandKind, Identity } from '@/domain/brand';
 import { normalizeSite } from '@/lib/site';
+import { apiErrorMessage } from '@/services';
 import { useReadWebsite } from '@/services/queries';
 
 import type { EditorProps } from './types';
@@ -52,8 +53,11 @@ export function IdentityEditor({ value, onChange, context }: EditorProps<Identit
   const site = normalizeSite(value.site);
   const alreadyRead = context.insights?.site === site;
   const canRead = Boolean(context.onInsights) && site.includes('.') && !alreadyRead;
+  const pitchFromSite = Boolean(context.insights?.pitch) && value.pitch === context.insights?.pitch;
 
-  const read = () =>
+  const read = () => {
+    // Giù la tastiera: si devono vedere i passi della lettura.
+    Keyboard.dismiss();
     readWebsite.mutate(
       { site: value.site, identity: value },
       {
@@ -61,9 +65,10 @@ export function IdentityEditor({ value, onChange, context }: EditorProps<Identit
           context.onInsights?.(insights);
           toast('Ho letto il sito: temi, pubblico e palette sono già proposti nei prossimi passi.');
         },
-        onError: () => toast('Non riesco a leggere il sito. Riprova tra poco.'),
+        onError: (error) => toast(apiErrorMessage(error, 'Non riesco a leggere il sito. Riprova tra poco.')),
       },
     );
+  };
 
   return (
     <View style={styles.column}>
@@ -98,7 +103,7 @@ export function IdentityEditor({ value, onChange, context }: EditorProps<Identit
       {readWebsite.isPending && (
         <Panel gap={12}>
           <Text variant="strongSmall">Sto leggendo {site}</Text>
-          <SkeletonLines widths={[88, 64]} />
+          {readWebsite.steps.length > 0 ? <StepList steps={readWebsite.steps} /> : <SkeletonLines widths={[88, 64]} />}
         </Panel>
       )}
       {alreadyRead && context.insights && !readWebsite.isPending && (
@@ -115,7 +120,8 @@ export function IdentityEditor({ value, onChange, context }: EditorProps<Identit
       <FieldCard
         label={PITCH[value.kind].label}
         value={value.pitch}
-        placeholder={PITCH[value.kind].placeholder}
+        placeholder={readWebsite.isPending ? 'La scrivo io appena finisco di leggere il sito…' : PITCH[value.kind].placeholder}
+        hint={pitchFromSite ? 'L’ho scritta leggendo il sito: cambiala come vuoi.' : undefined}
         multiline
         onChangeText={(text) => onChange({ ...value, pitch: text })}
       />
