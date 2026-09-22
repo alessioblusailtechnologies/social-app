@@ -20,6 +20,7 @@ import {
   useToast,
 } from '@/design-system';
 import type { Brand } from '@/domain/brand';
+import { templateFallback } from '@/domain/line';
 import type { Content } from '@/domain/content';
 import {
   CARD_FIELD_LABELS,
@@ -35,6 +36,7 @@ import {
   type CardField,
   type CardItem,
   type CardText,
+  type TemplateId,
   type VisualDesign,
   type VisualEdit,
   type VisualPage,
@@ -49,12 +51,22 @@ import {
   useUploadPhoto,
 } from '@/services/queries';
 
+import { CardView } from './CardView';
 import { TemplateSketch } from './TemplateSketch';
 
 /** Oltre questa misura la foto non passa dal corpo della richiesta, né dallo storage del mock sul web. */
 const PHOTO_LIMIT = 3_000_000;
 
 type TextField = Exclude<CardField, 'items'>;
+
+/** Una scelta di layout: un template del brand o un layout del motore. */
+interface LayoutOption {
+  id: string;
+  name: string;
+  templateId: TemplateId;
+  custom?: string;
+  photo: boolean;
+}
 
 const FIELD_LIMITS: Record<TextField, number> = {
   kicker: CARD_LIMITS.kicker,
@@ -120,7 +132,22 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
   const kit = brandKit(brand);
   const cover = design.pages[0];
   const spec = templateSpec(cover.templateId);
-  const options = layoutOptions(design.kind, cover.text);
+  // Con i template scritti per il brand si sceglie tra quelli; altrimenti tra i layout del motore adatti ai testi.
+  const brandTemplates = kit.line.templates;
+  const coverTemplate = cover.custom ? brandTemplates.find((template) => template.id === cover.custom) : undefined;
+  const layoutName = coverTemplate?.name ?? spec.name;
+  const coverFields = coverTemplate ? coverTemplate.fields : spec.fields;
+  const options: LayoutOption[] =
+    brandTemplates.length > 0
+      ? brandTemplates.map((template) => ({
+          id: template.id,
+          name: template.name,
+          templateId: templateFallback(template),
+          custom: template.id,
+          photo: template.photo,
+        }))
+      : layoutOptions(design.kind, cover.text).map((option) => ({ id: option.id, name: option.name, templateId: option.id, photo: option.image !== null }));
+  const currentLayout = cover.custom ?? cover.templateId;
   const roles = imageRoles(design);
   const usesImage = roles.length > 0;
   const pagesLabel = design.pages.length > 1 ? ` · ${design.pages.length} slide` : '';
@@ -136,12 +163,21 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
       },
     );
 
+  const chooseLayout = (next: LayoutOption) =>
+    apply({
+      // Un template del brand porta con sé la foto: il tipo del visivo lo segue.
+      ...(next.custom && { kind: next.photo ? 'photo' : 'infographic' }),
+      pages: design.pages.map((page, i) => (i === 0 ? { text: page.text, templateId: next.templateId, ...(next.custom && { custom: next.custom }) } : page)),
+    });
+
   const cycleLayout = (step: number) => {
     if (options.length < 2) return;
-    const current = Math.max(0, options.findIndex((option) => option.id === cover.templateId));
-    const next = options[(current + step + options.length) % options.length];
-    apply({ pages: design.pages.map((page, i) => (i === 0 ? { ...page, templateId: next.id } : page)) });
+    const current = Math.max(0, options.findIndex((option) => option.id === currentLayout));
+    chooseLayout(options[(current + step + options.length) % options.length]);
   };
+
+  /** Coi template del brand, togliere o aggiungere la foto passa al primo template senza foto o con la foto. */
+  const photoSwitch = (photo: boolean) => (brandTemplates.length > 0 ? options.find((option) => option.photo === photo) : undefined);
 
   const startCreation = () => create.mutate(content.id, { onError: () => toast('Non riesco a creare il visivo. Riprova.') });
 
@@ -174,7 +210,7 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
   if (locked) {
     return (
       <Panel label="Visivo" gap={6}>
-        <Text variant="strongSmall">{design.status === 'ready' ? `${spec.name}${pagesLabel}` : 'Nessun visivo creato'}</Text>
+        <Text variant="strongSmall">{design.status === 'ready' ? `${layoutName}${pagesLabel}` : 'Nessun visivo creato'}</Text>
         {design.renders.length > 0 && <LinkButton label="Scarica le immagini" onPress={download} />}
       </Panel>
     );
@@ -222,7 +258,7 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
   }
 
   if (design.status === 'ready') {
-    const position = options.findIndex((option) => option.id === cover.templateId);
+    const position = options.findIndex((option) => option.id === currentLayout);
     return (
       <Panel label="Visivo" gap={12}>
         {design.nextPages && (
@@ -247,7 +283,7 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
           </Text>
           <IconButton icon={ChevronLeft} size={32} variant="outline" disabled={options.length < 2} accessibilityLabel="Layout precedente" onPress={() => cycleLayout(-1)} />
           <Text variant="action" style={styles.layoutName} numberOfLines={1}>
-            {spec.name}
+            {layoutName}
             {options.length > 1 && position >= 0 ? ` · ${position + 1} di ${options.length}` : ''}
           </Text>
           <IconButton icon={ChevronRight} size={32} variant="outline" disabled={options.length < 2} accessibilityLabel="Layout successivo" onPress={() => cycleLayout(1)} />
@@ -271,7 +307,11 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
                 />
               )}
               <LinkButton label="Usa una tua foto" onPress={pickPhoto} />
-              <LinkButton label="Togli la foto" tone="muted" onPress={() => apply({ kind: 'infographic' }, 'Tolta la foto: resta la card.')} />
+              {brandTemplates.length === 0 ? (
+                <LinkButton label="Togli la foto" tone="muted" onPress={() => apply({ kind: 'infographic' }, 'Tolta la foto: resta la card.')} />
+              ) : photoSwitch(false) ? (
+                <LinkButton label="Togli la foto" tone="muted" onPress={() => chooseLayout(photoSwitch(false)!)} />
+              ) : null}
             </View>
           </View>
         ) : (
@@ -279,7 +319,11 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
             <Text variant="caption" style={styles.flex}>
               Card senza foto
             </Text>
-            <LinkButton label="Aggiungi una foto" onPress={() => apply({ kind: 'mixed' })} />
+            {brandTemplates.length === 0 ? (
+              <LinkButton label="Aggiungi una foto" onPress={() => apply({ kind: 'mixed' })} />
+            ) : photoSwitch(true) ? (
+              <LinkButton label="Aggiungi una foto" onPress={() => chooseLayout(photoSwitch(true)!)} />
+            ) : null}
           </View>
         )}
 
@@ -305,25 +349,40 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
 
   return (
     <Panel label="Visivo" gap={12}>
-      <SegmentedControl
-        accessibilityLabel="Tipo di visivo"
-        value={design.kind}
-        options={VISUAL_KINDS.map((kind) => ({ value: kind, label: VISUAL_KIND_LABELS[kind] }))}
-        onChange={(kind) => kind !== design.kind && apply({ kind })}
-      />
+      {brandTemplates.length === 0 && (
+        <SegmentedControl
+          accessibilityLabel="Tipo di visivo"
+          value={design.kind}
+          options={VISUAL_KINDS.map((kind) => ({ value: kind, label: VISUAL_KIND_LABELS[kind] }))}
+          onChange={(kind) => kind !== design.kind && apply({ kind })}
+        />
+      )}
 
       <View style={styles.proposal}>
-        <TemplateSketch templateId={cover.templateId} kit={kit} width={64} />
+        {coverTemplate ? (
+          <CardView
+            kit={kit}
+            page={cover}
+            pageIndex={0}
+            pageCount={design.pages.length}
+            photoUrl={design.image.photo?.url || null}
+            cutoutUrl={null}
+            aspect="4:5"
+            width={64}
+          />
+        ) : (
+          <TemplateSketch templateId={cover.templateId} kit={kit} width={64} />
+        )}
         <View style={[styles.flex, styles.stack]}>
           <Text variant="strongSmall">
-            {spec.name}
+            {layoutName}
             {pagesLabel}
           </Text>
-          {cover.text.value && spec.fields.includes('value') ? <Text variant="heading">{cover.text.value}</Text> : null}
+          {cover.text.value && coverFields.includes('value') ? <Text variant="heading">{cover.text.value}</Text> : null}
           <Text variant="body" color={colors.textTitle} numberOfLines={3}>
             {cover.text.headline || cover.text.body || 'Solo la foto, con la firma del brand.'}
           </Text>
-          {spec.fields.includes('items') && cover.text.items.length > 0 && (
+          {coverFields.includes('items') && cover.text.items.length > 0 && (
             <Text variant="caption" numberOfLines={2}>
               {cover.text.items.map((item) => item.body || item.title).join(' · ')}
             </Text>

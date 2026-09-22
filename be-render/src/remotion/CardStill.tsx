@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { continueRender, delayRender, Img } from 'remotion';
 
 import { Card, ImageElement, loadBrandFonts } from '@/templates';
@@ -6,12 +6,14 @@ import { Card, ImageElement, loadBrandFonts } from '@/templates';
 import type { CardInput } from './Root';
 
 /**
- * La card per lo scatto. Si disegna solo coi caratteri del brand già caricati, così il testo si
- * adatta con le misure vere; `Img` di Remotion tiene fermo lo scatto finché ogni immagine non c'è.
+ * La card per lo scatto. Si disegna solo coi caratteri del brand già caricati, così il testo si adatta con le misure
+ * vere; lo scatto parte quando la card dice di essere pronta: caratteri, foto (anche quelle dei template del brand, che
+ * `Img` di Remotion non vede) e testi adattati.
  */
 export function CardStill(props: CardInput) {
-  const [handle] = useState(() => delayRender('Caratteri del brand'));
+  const [handle] = useState(() => delayRender('Card del brand'));
   const [fontsReady, setFontsReady] = useState(false);
+  const released = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -23,18 +25,11 @@ export function CardStill(props: CardInput) {
     };
   }, [props.kit]);
 
-  useEffect(() => {
-    if (!fontsReady) return;
-    // Due fotogrammi: il primo disegna, il secondo lascia finire l'adattamento del testo.
-    let second = 0;
-    const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => continueRender(handle));
-    });
-    return () => {
-      cancelAnimationFrame(first);
-      cancelAnimationFrame(second);
-    };
-  }, [fontsReady, handle]);
+  const onReady = useCallback(() => {
+    if (released.current) return;
+    released.current = true;
+    continueRender(handle);
+  }, [handle]);
 
-  return <ImageElement.Provider value={Img}>{fontsReady ? <Card {...props} /> : null}</ImageElement.Provider>;
+  return <ImageElement.Provider value={Img}>{fontsReady ? <Card {...props} onReady={onReady} /> : null}</ImageElement.Provider>;
 }

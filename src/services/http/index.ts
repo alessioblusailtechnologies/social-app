@@ -62,7 +62,8 @@ export function createHttpServices(api: ApiClient): Services {
 
   const ideas: IdeaService = {
     list: (brandId) => api.get<Idea[]>(route`/brands/${brandId}/ideas`),
-    generate: (brandId, count) => api.post<Idea[]>(route`/brands/${brandId}/ideas/generate`, { count }),
+    generate: (brandId, count, onSteps) =>
+      api.stream<Idea[]>(route`/brands/${brandId}/ideas/generate/stream`, { count }, onSteps),
     draftFromSource: (brandId, source, variant) =>
       api.post<IdeaDraft[]>(route`/brands/${brandId}/ideas/drafts`, { source, variant }),
     save: (brandId, drafts) => api.post<Idea[]>(route`/brands/${brandId}/ideas`, { drafts }),
@@ -73,7 +74,7 @@ export function createHttpServices(api: ApiClient): Services {
     list: (brandId) => api.get<PlanSlot[]>(route`/brands/${brandId}/slots`),
     propose: (brandId, request) => api.post<SlotDraft[]>(route`/brands/${brandId}/plan/proposal`, request),
     confirm: (brandId, drafts) => api.post<PlanSlot[]>(route`/brands/${brandId}/plan/confirm`, { drafts }),
-    addIdea: (brandId, ideaId) => api.post<PlanSlot>(route`/brands/${brandId}/plan/ideas`, { ideaId }),
+    addIdea: (brandId, ideaId, channels) => api.post<PlanSlot>(route`/brands/${brandId}/plan/ideas`, { ideaId, channels }),
     addSlot: (brandId, draft) => api.post<PlanSlot>(route`/brands/${brandId}/slots`, draft),
     updateSlot: (slotId, patch) => api.patch<PlanSlot>(route`/slots/${slotId}`, patch),
     removeSlot: (slotId) => api.delete(route`/slots/${slotId}`),
@@ -95,14 +96,21 @@ export function createHttpServices(api: ApiClient): Services {
     getForSlot: async (slotId) =>
       (await api.get<{ content: Content | null }>(route`/slots/${slotId}/content`)).content,
     listDrafts: (brandId) => api.get<Content[]>(route`/brands/${brandId}/contents/drafts`),
-    prepare: (slotId, format) => api.post<ContentWithSlot>(route`/slots/${slotId}/content/prepare`, { format }),
-    createDirect: (brandId, request) => api.post<Content>(route`/brands/${brandId}/contents`, request),
-    createFromIdea: (brandId, ideaId) => api.post<Content>(route`/brands/${brandId}/contents/from-idea`, { ideaId }),
-    regenerate: (contentId, format) => api.post<Content>(route`/contents/${contentId}/regenerate`, { format }),
+    // Scrivere una bozza richiede tempo: si passa dalle rotte a passi, così si vede cosa sta facendo.
+    prepare: (slotId, format, onSteps) =>
+      api.stream<ContentWithSlot>(route`/slots/${slotId}/content/prepare/stream`, { format }, onSteps),
+    createDirect: (brandId, request, onSteps) =>
+      api.stream<Content>(route`/brands/${brandId}/contents/stream`, request, onSteps),
+    createFromIdea: (brandId, ideaId, channels, onSteps) =>
+      api.stream<Content>(route`/brands/${brandId}/contents/from-idea/stream`, { ideaId, channels }, onSteps),
+    regenerate: (contentId, format, onSteps) =>
+      api.stream<Content>(route`/contents/${contentId}/regenerate/stream`, { format }, onSteps),
     updateVariant: (contentId, channel, text) =>
       api.put<Content>(route`/contents/${contentId}/variants/${channel}`, { text }),
-    rewrite: (contentId, channel, instruction) =>
-      api.post<Content>(route`/contents/${contentId}/variants/${channel}/rewrite`, { instruction }),
+    setVariantLayout: (contentId, channel, layout) =>
+      api.patch<Content>(route`/contents/${contentId}/variants/${channel}`, layout),
+    rewrite: (contentId, channel, instruction, onSteps) =>
+      api.stream<Content>(route`/contents/${contentId}/variants/${channel}/rewrite/stream`, { instruction }, onSteps),
     approve: (contentId) => api.post<ContentWithSlot>(route`/contents/${contentId}/approve`),
     schedule: (contentId, when) => api.post<ContentWithSlot>(route`/contents/${contentId}/schedule`, when),
     reopen: (contentId) => api.post<ContentWithSlot>(route`/contents/${contentId}/reopen`),

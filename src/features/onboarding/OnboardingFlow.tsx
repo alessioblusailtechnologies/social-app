@@ -10,9 +10,11 @@ import {
   FormScrollView,
   IconButton,
   KeyboardScreen,
+  Panel,
   ProgressSegments,
   ScreenFooter,
   ScreenTitle,
+  StepList,
   Text,
   TopBar,
   motion,
@@ -23,11 +25,20 @@ import {
 import type { BrandKind, SectionKey } from '@/domain/brand';
 import { isSkippable, sectionCopy, sectionError } from '@/domain/sections';
 import { positioningSource, SectionEditor } from '@/features/brand-editors';
-import { useActiveBrand, useCreateBrand, useLoadDemoBrand, usePrefetchPositioningIdeas } from '@/services/queries';
+import {
+  useActiveBrand,
+  useCreateBrand,
+  useFirstIdeas,
+  useLoadDemoBrand,
+  usePrefetchPositioningIdeas,
+} from '@/services/queries';
 
 import { IntroStep } from './IntroStep';
 import { ONBOARDING_STEPS, useOnboardingHydrated, useOnboardingStore, type OnboardingStep } from './store';
 import { SummaryStep } from './SummaryStep';
+
+/** Le idee che il cliente ritrova in Home appena finito l'onboarding. */
+const FIRST_IDEAS = 6;
 
 function stepCopy(step: OnboardingStep, kind: BrandKind, name: string) {
   if (step === 'intro') {
@@ -69,15 +80,19 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
   const createBrand = useCreateBrand();
   const loadDemo = useLoadDemoBrand();
   const prefetchPositioning = usePrefetchPositioningIdeas();
+  const firstIdeas = useFirstIdeas();
   const [createdBrandId, setCreatedBrandId] = useState<string | null>(null);
+  /** Dopo «Crea il profilo» si preparano le prime idee; il profilo di esempio le ha già. */
+  const [ideasPhase, setIdeasPhase] = useState<'idle' | 'preparing' | 'done'>('idle');
 
-  // Si entra nel Profilo solo quando il nuovo brand risulta attivo, così la guardia delle route lo lascia passare.
+  // Si entra in Home quando il nuovo brand risulta attivo, così la guardia delle route lo lascia passare,
+  // e le prime idee sono pronte (o non sono riuscite: le propone la sezione Idee al primo accesso).
   useEffect(() => {
-    if (!createdBrandId || brand?.id !== createdBrandId) return;
+    if (!createdBrandId || brand?.id !== createdBrandId || ideasPhase !== 'done') return;
     reset();
-    if (mode === 'new') router.dismissTo('/profile');
-    else router.replace('/profile');
-  }, [createdBrandId, brand?.id, mode, reset, router]);
+    if (mode === 'new') router.dismissTo('/');
+    else router.replace('/');
+  }, [createdBrandId, brand?.id, ideasPhase, mode, reset, router]);
 
   // Una bozza persa (storage azzerato) riporta al primo passo.
   useEffect(() => {
@@ -86,21 +101,45 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Mentre il profilo si crea e le prime idee si preparano, indietro non porta da nessuna parte.
+      if (createdBrandId) return true;
       if (stepIndex === 0) return false;
       back();
       return true;
     });
     return () => subscription.remove();
-  }, [stepIndex, back]);
+  }, [stepIndex, back, createdBrandId]);
 
   if (!hydrated) return <View style={screenStyles.screen} />;
 
   const step: OnboardingStep = draft ? ONBOARDING_STEPS[stepIndex] : 'intro';
   const kind = draft?.identity.kind ?? 'person';
-  const { title, subtitle } = stepCopy(step, kind, draft?.identity.name ?? '');
+  const copy = stepCopy(step, kind, draft?.identity.name ?? '');
+  const { title, subtitle } =
+    ideasPhase === 'idle'
+      ? copy
+      : { title: 'Preparo le prime idee', subtitle: 'Rileggo il profilo e cerco spunti: le ritrovi in Home appena ho finito.' };
   const sectionStep: SectionKey | null = step === 'intro' || step === 'summary' ? null : step;
   const error = sectionStep && draft ? sectionError(sectionStep, draft) : null;
   const busy = createBrand.isPending || loadDemo.isPending || createdBrandId !== null;
+  const preparingIdeas = ideasPhase === 'preparing';
+
+  const create = () =>
+    draft &&
+    createBrand.mutate(draft, {
+      onSuccess: (created) => {
+        setCreatedBrandId(created.id);
+        setIdeasPhase('preparing');
+        firstIdeas.mutate(
+          { brandId: created.id, count: FIRST_IDEAS },
+          {
+            onError: () => toast('Le prime idee non sono pronte: te le preparo quando apri Idee.'),
+            onSettled: () => setIdeasPhase('done'),
+          },
+        );
+      },
+      onError: () => toast('Non sono riuscito a creare il profilo. Riprova.'),
+    });
 
   // Obiettivi e pubblico si preparano mentre si passa al passo dopo il sito.
   function goNext() {
@@ -114,15 +153,10 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
       ? { label: 'Iniziamo', disabled: !draft, reason: 'Scegli per chi costruiamo la presenza.', onPress: next }
       : step === 'summary'
         ? {
-            label: busy ? 'Sto preparando il profilo…' : 'Crea il profilo',
+            label: preparingIdeas ? 'Preparo le prime idee…' : busy ? 'Sto preparando il profilo…' : 'Crea il profilo',
             disabled: false,
             reason: '',
-            onPress: () =>
-              draft &&
-              createBrand.mutate(draft, {
-                onSuccess: (created) => setCreatedBrandId(created.id),
-                onError: () => toast('Non sono riuscito a creare il profilo. Riprova.'),
-              }),
+            onPress: create,
           }
         : { label: 'Continua', disabled: error !== null, reason: error ?? '', onPress: goNext };
 
@@ -130,7 +164,7 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
     <KeyboardScreen>
       <TopBar
         left={
-          stepIndex > 0 && draft ? (
+          busy ? undefined : stepIndex > 0 && draft ? (
             <IconButton icon={ChevronLeft} accessibilityLabel="Passo precedente" onPress={back} />
           ) : mode === 'new' ? (
             <IconButton icon={X} accessibilityLabel="Chiudi" onPress={() => router.back()} />
@@ -162,8 +196,13 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
           style={styles.body}>
           <ScreenTitle title={title} subtitle={subtitle} />
           {step === 'intro' && <IntroStep kind={draft?.identity.kind ?? null} onChoose={chooseKind} />}
-          {step === 'summary' && draft && (
+          {step === 'summary' && draft && ideasPhase === 'idle' && (
             <SummaryStep draft={draft} onEdit={(key) => goTo(ONBOARDING_STEPS.indexOf(key))} />
+          )}
+          {ideasPhase !== 'idle' && (
+            <Panel gap={12}>
+              <StepList steps={firstIdeas.steps} waiting="Salvo il profilo" />
+            </Panel>
           )}
           {sectionStep && draft && (
             <SectionEditor
@@ -197,7 +236,10 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
             busy={busy}
             onPress={() =>
               loadDemo.mutate(undefined, {
-                onSuccess: (demo) => setCreatedBrandId(demo.id),
+                onSuccess: (demo) => {
+                  setCreatedBrandId(demo.id);
+                  setIdeasPhase('done');
+                },
                 onError: () => toast('Non riesco a caricare il profilo di esempio.'),
               })
             }>

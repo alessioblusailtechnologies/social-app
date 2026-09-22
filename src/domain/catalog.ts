@@ -10,6 +10,7 @@ import type {
   SignalSource,
   TypographyId,
 } from './brand';
+import type { IdeaFormat } from './idea';
 
 export const KIND_OPTIONS: { kind: BrandKind; title: string; meta: string; label: string }[] = [
   {
@@ -47,6 +48,15 @@ export const CHANNELS: { id: ChannelId; name: string }[] = [
 export function channelName(id: ChannelId): string {
   return CHANNELS.find((channel) => channel.id === id)?.name ?? id;
 }
+
+/** I formati che hanno senso su ogni canale: il visivo si sceglie tra questi. */
+export const CHANNEL_FORMATS: Record<ChannelId, IdeaFormat[]> = {
+  linkedin: ['post', 'carousel', 'article', 'video'],
+  instagram: ['post', 'carousel', 'video'],
+  facebook: ['post', 'carousel', 'video'],
+  tiktok: ['video'],
+  x: ['post', 'article'],
+};
 
 export const GOALS: Record<BrandKind, string[]> = {
   person: [
@@ -163,6 +173,60 @@ export const TYPOGRAPHY_OPTIONS: { id: TypographyId; name: string; heading: Font
 
 export function typographyName(id: TypographyId | undefined): string {
   return (TYPOGRAPHY_OPTIONS.find((option) => option.id === id) ?? TYPOGRAPHY_OPTIONS[0]).name;
+}
+
+export type FontKind = 'serif' | 'sans' | 'mono';
+
+/**
+ * I caratteri della linea grafica, da Google Fonts (licenza OFL). Pesi e corsivo sono quelli che Google serve
+ * davvero: chiederne uno che non c'è fa fallire tutto il foglio, e la card esce coi caratteri di sistema.
+ */
+export interface LineFontOption {
+  id: string;
+  family: string;
+  kind: FontKind;
+  weights: readonly number[];
+  italic: boolean;
+  /** Com'è, per l'AI che lo sceglie. */
+  note: string;
+}
+
+const range = (from: number, to: number) => Array.from({ length: (to - from) / 100 + 1 }, (_, i) => from + i * 100);
+
+export const LINE_FONTS: LineFontOption[] = [
+  { id: 'newsreader', family: 'Newsreader', kind: 'serif', weights: range(200, 800), italic: true, note: 'serif da quotidiano, caldo e leggibile, bellissimo in corsivo' },
+  { id: 'source-serif', family: 'Source Serif 4', kind: 'serif', weights: range(200, 900), italic: true, note: 'serif sobrio e istituzionale, vicino a Georgia' },
+  { id: 'fraunces', family: 'Fraunces', kind: 'serif', weights: range(100, 900), italic: true, note: 'serif morbido e con carattere, artigianale' },
+  { id: 'playfair', family: 'Playfair Display', kind: 'serif', weights: range(400, 900), italic: true, note: 'serif ad alto contrasto, moda ed eleganza' },
+  { id: 'dm-serif', family: 'DM Serif Display', kind: 'serif', weights: [400], italic: true, note: 'serif da titolo, deciso ed elegante; solo peso 400' },
+  { id: 'instrument-serif', family: 'Instrument Serif', kind: 'serif', weights: [400], italic: true, note: 'serif stretto e contemporaneo, da rivista; solo peso 400' },
+  { id: 'eb-garamond', family: 'EB Garamond', kind: 'serif', weights: range(400, 800), italic: true, note: 'garamond classico: libri, tradizione, cultura' },
+  { id: 'cormorant', family: 'Cormorant Garamond', kind: 'serif', weights: range(300, 700), italic: true, note: 'garamond sottile e raffinato, lusso discreto; solo in corpi grandi' },
+  { id: 'lora', family: 'Lora', kind: 'serif', weights: range(400, 700), italic: true, note: 'serif morbido e cordiale' },
+  { id: 'inter-tight', family: 'Inter Tight', kind: 'sans', weights: range(100, 900), italic: true, note: 'grottesco neutro e compatto, moderno' },
+  { id: 'inter', family: 'Inter', kind: 'sans', weights: range(100, 900), italic: false, note: 'sans neutro, il più leggibile per i testi' },
+  { id: 'archivo', family: 'Archivo', kind: 'sans', weights: range(100, 900), italic: true, note: 'grottesco robusto e deciso' },
+  { id: 'space-grotesk', family: 'Space Grotesk', kind: 'sans', weights: range(300, 700), italic: false, note: 'grottesco tecnico, tecnologia' },
+  { id: 'manrope', family: 'Manrope', kind: 'sans', weights: range(200, 800), italic: false, note: 'sans morbido e rotondo' },
+  { id: 'dm-sans', family: 'DM Sans', kind: 'sans', weights: range(100, 900), italic: true, note: 'sans geometrico, pulito e cordiale' },
+  { id: 'work-sans', family: 'Work Sans', kind: 'sans', weights: range(100, 900), italic: true, note: 'grottesco caldo, da studio grafico' },
+  { id: 'plus-jakarta', family: 'Plus Jakarta Sans', kind: 'sans', weights: range(200, 800), italic: true, note: 'sans geometrico contemporaneo' },
+  { id: 'source-sans', family: 'Source Sans 3', kind: 'sans', weights: range(200, 900), italic: true, note: 'sans umanista, sobrio' },
+  { id: 'ibm-plex-sans', family: 'IBM Plex Sans', kind: 'sans', weights: range(100, 700), italic: true, note: 'sans istituzionale e tecnico' },
+  { id: 'syne', family: 'Syne', kind: 'sans', weights: range(400, 800), italic: false, note: 'sans espressivo, mondo creativo e arte' },
+  { id: 'ibm-plex-mono', family: 'IBM Plex Mono', kind: 'mono', weights: range(100, 700), italic: true, note: 'mono istituzionale, da etichetta' },
+  { id: 'jetbrains-mono', family: 'JetBrains Mono', kind: 'mono', weights: range(100, 800), italic: true, note: 'mono tecnico e netto' },
+  { id: 'space-mono', family: 'Space Mono', kind: 'mono', weights: [400, 700], italic: true, note: 'mono con carattere, un po’ retrò' },
+  { id: 'dm-mono', family: 'DM Mono', kind: 'mono', weights: [300, 400, 500], italic: true, note: 'mono morbido e leggero' },
+];
+
+export function lineFontOption(id: string | null | undefined): LineFontOption | null {
+  return LINE_FONTS.find((font) => font.id === id) ?? null;
+}
+
+/** Il carattere del catalogo con quel nome di famiglia: i brand di prima hanno solo la coppia dei titoli e dei testi. */
+export function lineFontByFamily(family: string): LineFontOption | null {
+  return LINE_FONTS.find((font) => font.family === family) ?? null;
 }
 
 const DEFAULT_SOURCES: Record<BrandKind, SignalSource[]> = {

@@ -1,4 +1,5 @@
 import type { Idea, IdeaDraft, IdeaSource, IdeaStatus } from '@/domain/idea';
+import type { OnAiSteps } from '@/services/types';
 
 import { draftIdeasFromSource, generateIdeas } from '../ai/ideas';
 import { ApiError } from '../contract/errors';
@@ -15,12 +16,18 @@ export function listBrandIdeas(deps: Deps, identity: Identity, brandId: string):
 }
 
 /** L'AI propone nuove idee dal contesto del brand: finiscono tra le proposte. */
-export async function generateBrandIdeas(deps: Deps, identity: Identity, brandId: string, count: number): Promise<Idea[]> {
+export async function generateBrandIdeas(
+  deps: Deps,
+  identity: Identity,
+  brandId: string,
+  count: number,
+  onSteps?: OnAiSteps,
+): Promise<Idea[]> {
   const { brand, existing } = await inTransaction(deps, identity, async (db) => ({
     brand: await requireBrand(db, brandId),
     existing: await listIdeas(db, brandId),
   }));
-  const drafts = await generateIdeas(deps.ai, aiMeta(identity, brandId), brand, existing, count, deps.now());
+  const drafts = await generateIdeas(deps.ai, aiMeta(identity, brandId), brand, existing, count, deps.now(), onSteps);
   return inTransaction(deps, identity, (db) => insertDrafts(db, identity.accountId, brandId, drafts, 'new', deps.now()));
 }
 

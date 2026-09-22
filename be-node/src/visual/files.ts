@@ -81,13 +81,22 @@ function mapVisualFiles(visual: Visual, change: (file: MediaFile) => MediaFile):
     ...visual,
     ...(visual.references && { references: visual.references.map(change) }),
     ...(visual.examples && {
-      examples: visual.examples.map((example) => ({ ...example, file: example.file && change(example.file) })),
+      examples: visual.examples.map((example) => ({
+        ...example,
+        file: example.file && change(example.file),
+        ...(example.photo && { photo: change(example.photo) }),
+      })),
     }),
+    ...(visual.line?.band?.photo && { line: { ...visual.line, band: { ...visual.line.band, photo: change(visual.line.band.photo) } } }),
   };
 }
 
 function visualPaths(visual: Visual): string[] {
-  return [...(visual.references ?? []), ...(visual.examples ?? []).map((example) => example.file)]
+  return [
+    ...(visual.references ?? []),
+    ...(visual.examples ?? []).flatMap((example) => [example.file, example.photo]),
+    visual.line?.band?.photo,
+  ]
     .map((file) => file?.path)
     .filter((path): path is string => Boolean(path));
 }
@@ -101,7 +110,9 @@ export function storableVisual(accountId: string, visual: Visual): Visual {
   const cleaned: Visual = {
     ...visual,
     ...(visual.references && { references: visual.references.filter(own) }),
-    ...(visual.examples && { examples: visual.examples.filter((example) => own(example.file)) }),
+    ...(visual.examples && { examples: visual.examples.filter((example) => own(example.file) && own(example.photo ?? null)) }),
+    // La foto della fascia di un altro account non si tiene: la linea resta, senza foto.
+    ...(visual.line?.band && !own(visual.line.band.photo) && { line: { ...visual.line, band: { ...visual.line.band, photo: null } } }),
   };
   return mapVisualFiles(cleaned, (file) => (file.path ? { ...file, url: '' } : file));
 }

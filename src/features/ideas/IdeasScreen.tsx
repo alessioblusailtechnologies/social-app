@@ -11,7 +11,7 @@ import {
   LinkButton,
   Panel,
   SegmentedControl,
-  SkeletonLines,
+  StepList,
   Text,
   TopBar,
   colors,
@@ -23,6 +23,7 @@ import {
 import type { Brand } from '@/domain/brand';
 import { ideaPreferences, topScore, type Idea } from '@/domain/idea';
 import { useGenerateIdeas, useIdeas, useSetIdeaStatus } from '@/services/queries';
+import type { AiStep } from '@/services/types';
 
 import { IdeaDeck, type IdeaDecision } from './IdeaDeck';
 import { IdeaListItem } from './IdeaParts';
@@ -128,12 +129,12 @@ export function IdeasScreen({ brand }: { brand: Brand }) {
 
       {firstLoad ? (
         <View style={styles.padded}>
-          <Generating />
+          <Generating steps={generate.steps} />
         </View>
       ) : view === 'proposals' ? (
         <View style={[styles.padded, styles.flex]}>
           {generate.isPending && proposals.length === 0 ? (
-            <Generating />
+            <Generating steps={generate.steps} />
           ) : proposals.length === 0 ? (
             <EmptyState
               title={themeId ? 'Nessuna proposta su questo tema' : 'Hai visto tutte le proposte'}
@@ -185,12 +186,11 @@ export function IdeasScreen({ brand }: { brand: Brand }) {
   );
 }
 
-function Generating() {
+function Generating({ steps }: { steps: AiStep[] }) {
   return (
     <Panel gap={12} style={styles.generating}>
-      <Text variant="strongSmall">Sto leggendo il tuo Brand DNA</Text>
-      <SkeletonLines widths={[94, 80, 100, 62]} />
-      <Text variant="caption">Temi e pesi · date che contano · fonti dei segnali · canali</Text>
+      <Text variant="strongSmall">Preparo le idee dal tuo Brand DNA</Text>
+      <StepList steps={steps} waiting="Rileggo il profilo" />
     </Panel>
   );
 }

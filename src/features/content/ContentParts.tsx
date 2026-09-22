@@ -116,15 +116,18 @@ export function PostPreview({
   format,
   visual,
   when,
+  withVisual = true,
 }: {
   brand: Brand;
   variant: ChannelVariant;
   format: IdeaFormat;
   visual: ContentVisual;
   when: string;
+  /** Falso al passo del testo, dove il visivo non c'entra ancora. */
+  withVisual?: boolean;
 }) {
   const mediaFirst: ChannelId[] = ['instagram', 'tiktok'];
-  const media = <VisualPreview brand={brand} format={format} visual={visual} channel={variant.channel} />;
+  const media = withVisual ? <VisualPreview brand={brand} format={format} visual={visual} channel={variant.channel} /> : null;
   return (
     <View style={styles.post}>
       <View style={styles.postHeader}>

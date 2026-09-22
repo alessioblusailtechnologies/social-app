@@ -127,11 +127,16 @@ Tutto JSON. Gli errori sono `{ "code": "NOT_FOUND", "message": "…" }`, con lo 
 | POST | `/api/media/references` | `{ dataUri }` | `MediaFile` (immagine di riferimento, `account/profilo/…`) |
 | POST | `/api/ai/visual/stream` | `VisualStyleRequest` | `text/event-stream` di `AiStreamEvent<VisualStyle>` |
 
-`visual/stream` è lo stile delle card del passo «Come appare»: Gemini (`VISION_MODEL`, con `GEMINI_API_KEY`) guarda le
-immagini di riferimento e le indicazioni, sceglie caratteri e stile dal catalogo e scrive i testi di una card di
-esempio per canale; be-render le compone. Se be-render non risponde gli esempi arrivano senza PNG (`file: null`) e
-l'app li disegna dal vivo. Riferimenti ed esempi si salvano nel brand col solo percorso (dell'account) e si firmano
-a ogni lettura del workspace.
+`visual/stream` costruisce la linea grafica del brand nel passo «Come appare», come il generatore delle card di
+assieme ma per ogni brand. La fa un direttore artistico che vede le immagini, Claude (`DESIGN_MODEL`, di base
+`claude-opus-5`, con `ANTHROPIC_API_KEY`), in una chiamata sola: fondo e accento dalla palette, caratteri per ruolo
+dal catalogo `LINE_FONTS`, composizione, firma, indirizzo, 3–4 rubriche fisse, regole dei testi e da 3 a 5 card
+d'esempio col layout scelto card per card seguendo i riferimenti. Senza la chiave, Gemini (`VISION_MODEL`) guarda i
+riferimenti e il modello dei testi scrive. Con una linea già fatta e un'indicazione è una correzione (il direttore
+vede le card di prima; `restart: true` riparte da capo). Ogni card con la foto ha la sua, fatta dal modello d'immagine.
+be-render compone le card. Se be-render non risponde gli esempi arrivano senza PNG (`file: null`) e l'app li disegna
+dal vivo. Riferimenti, esempi e foto della fascia si salvano nel brand col solo percorso (dell'account) e si firmano a
+ogni lettura del workspace.
 
 `website/stream` fa la stessa lettura e intanto manda i passi dell'AI (indirizzo, colori, ogni pagina aperta):
 un evento `data:` con `{ type: 'steps', steps }` a ogni cambio, poi `{ type: 'result', result }` oppure
@@ -147,6 +152,7 @@ canale e una registrazione vera.
 |---|---|---|---|
 | GET | `/api/brands/:brandId/ideas` | | `Idea[]`, dalla più recente |
 | POST | `/api/brands/:brandId/ideas/generate` | `{ count? }` | `Idea[]` (nuove proposte) |
+| POST | `/api/brands/:brandId/ideas/generate/stream` | `{ count? }` | `text/event-stream` di `AiStreamEvent<Idea[]>`: i passi (profilo, ricerche, pagine aperte) e le idee |
 | POST | `/api/brands/:brandId/ideas/drafts` | `{ source, variant? }` | `IdeaDraft[]` (non salvate) |
 | POST | `/api/brands/:brandId/ideas` | `{ drafts }` | 201 `Idea[]` (salvate) |
 | PATCH | `/api/ideas/:ideaId` | `{ status }` | `Idea` |

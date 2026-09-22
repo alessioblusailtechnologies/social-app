@@ -1,6 +1,7 @@
 import type { Brand, ChannelId, Identity } from '@/domain/brand';
 import { applyPatch } from '@/domain/brand';
-import type { Content } from '@/domain/content';
+import { channelName } from '@/domain/catalog';
+import { channelsWithoutImage, type Content } from '@/domain/content';
 import type { Idea, IdeaDraft, IdeaStatus } from '@/domain/idea';
 import {
   buildSkeleton,
@@ -30,7 +31,16 @@ import { toDay, today } from '@/lib/dates';
 import { delay, latency } from '@/lib/delay';
 import { createId } from '@/lib/id';
 
-import type { BrandService, ChannelService, ContentService, IdeaService, PlanService, Services } from '../types';
+import { createStepLog, IDEAS_STEPS, REWRITE_STEPS, WRITING_STEPS, pageStep, searchStep, THINKING_STEP } from '../ai-steps';
+import type {
+  BrandService,
+  ChannelService,
+  ContentService,
+  IdeaService,
+  OnAiSteps,
+  PlanService,
+  Services,
+} from '../types';
 import { createMockAiService } from './ai';
 import { generateContent, generateDirectContent, rewriteText } from './content-generator';
 import {
@@ -170,9 +180,28 @@ function createMockIdeaService(): IdeaService {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
 
-    async generate(brandId, count = 8) {
+    async generate(brandId, count = 8, onSteps) {
       const brand = await brandById(brandId);
-      await delay(latency(2200, 3000));
+      // Gli stessi passi della generazione vera, con due ricerche finte sui temi.
+      const log = createStepLog(onSteps);
+      log.start('context', IDEAS_STEPS.context(brand.identity.name), `${brand.themes.length} temi`);
+      await delay(latency(300, 500));
+      log.finish('context');
+      log.start(THINKING_STEP, IDEAS_STEPS.plan);
+      await delay(latency(500, 800));
+      for (const theme of brand.themes.slice(0, 2)) {
+        log.drop(THINKING_STEP);
+        const { label } = searchStep(`${theme.name} novità`);
+        log.start(theme.id, label);
+        await delay(latency(500, 800));
+        log.finish(theme.id);
+        log.start(THINKING_STEP, IDEAS_STEPS.reflect);
+        await delay(latency(400, 600));
+      }
+      log.drop(THINKING_STEP);
+      log.start('write', IDEAS_STEPS.write(count));
+      await delay(latency(300, 500));
+      log.finish('write');
       return ideasCollection.update((ideas) => {
         const now = new Date();
         const existing = ideas.filter((idea) => idea.brandId === brandId);
@@ -264,11 +293,13 @@ function createMockPlanService(): PlanService {
       });
     },
 
-    async addIdea(brandId, ideaId) {
+    async addIdea(brandId, ideaId, channels) {
       const brand = await brandById(brandId);
       await delay(latency(400, 700));
-      const idea = (await ideasCollection.list()).find((candidate) => candidate.id === ideaId);
-      if (!idea) throw new Error('Idea non trovata');
+      const found = (await ideasCollection.list()).find((candidate) => candidate.id === ideaId);
+      if (!found) throw new Error('Idea non trovata');
+      // I canali scelti da chi guarda l'idea vincono su quelli che l'idea si porta dietro.
+      const idea = channels && channels.length > 0 ? { ...found, channels: [...channels] } : found;
       return slotsCollection.update((slots) => {
         const placement = placeIdea(brand, idea, slots, today());
         const target = 'slotId' in placement ? slots.find((slot) => slot.id === placement.slotId) : undefined;
@@ -417,9 +448,69 @@ function resumeCreation(content: Content | undefined): Content | null {
 }
 
 function assertVisualReady(content: Content) {
-  const waiting = channelsWaitingForVisual(content.format, content.channels, content.visual.design);
+  const waiting = channelsWaitingForVisual(
+    content.format,
+    content.channels,
+    content.visual.design,
+    channelsWithoutImage(content),
+  );
   if (waiting.length > 0) throw new Error('Crea prima il visivo: senza immagine questi canali non pubblicano');
 }
+
+/**
+ * I passi della scrittura di una bozza, simulati con gli stessi tempi e le stesse parole di quelli veri:
+ * profilo, fonte, eventuale lettura del link, un testo per canale, il visivo.
+ */
+async function writingSteps(
+  onSteps: OnAiSteps | undefined,
+  { brand, basis, channels, link }: { brand: Brand; basis: string; channels: readonly ChannelId[]; link?: string },
+): Promise<void> {
+  const log = createStepLog(onSteps);
+  log.start('context', WRITING_STEPS.context(brand.identity.name), `${brand.themes.length} temi`);
+  await delay(latency(300, 500));
+  log.finish('context');
+  if (basis) {
+    log.start('basis', WRITING_STEPS.basis(basis));
+    await delay(latency(250, 450));
+    log.finish('basis');
+  }
+  log.start(THINKING_STEP, WRITING_STEPS.plan);
+  await delay(latency(500, 800));
+  if (link) {
+    log.drop(THINKING_STEP);
+    const { label, detail } = pageStep(link);
+    log.start('page', label, detail);
+    await delay(latency(600, 900));
+    log.finish('page');
+    log.start(THINKING_STEP, WRITING_STEPS.reflect);
+    await delay(latency(400, 600));
+  }
+  log.drop(THINKING_STEP);
+  log.start('write', WRITING_STEPS.write(channels.map(channelName).join(' e ')));
+  await delay(latency(700, 1100));
+  log.finish('write');
+  log.start('visual', WRITING_STEPS.visual);
+  await delay(latency(300, 500));
+  log.finish('visual');
+}
+
+/** I passi di un ritocco chiesto dall'utente. */
+async function rewritingSteps(onSteps: OnAiSteps | undefined, channel: ChannelId, instruction: string): Promise<void> {
+  const log = createStepLog(onSteps);
+  log.start('read', REWRITE_STEPS.read(channelName(channel)));
+  await delay(latency(250, 400));
+  log.finish('read');
+  log.start('ask', REWRITE_STEPS.ask(instruction));
+  await delay(latency(200, 350));
+  log.finish('ask');
+  log.start('write', REWRITE_STEPS.write);
+  await delay(latency(500, 800));
+  log.finish('write');
+}
+
+/** Il link da cui nasce il contenuto, se la fonte è un indirizzo. */
+const linkOf = (source: { kind: string; url?: string } | null | undefined) =>
+  source?.kind === 'link' ? source.url : undefined;
 
 function createMockContentService(): ContentService {
   return {
@@ -470,13 +561,13 @@ function createMockContentService(): ContentService {
       return updateDesign(contentId, (design) => refreshDesign(design));
     },
 
-    async prepare(slotId, format) {
+    async prepare(slotId, format, onSteps) {
       const slot = (await slotsCollection.list()).find((candidate) => candidate.id === slotId);
       if (!slot?.ideaId) throw new Error('L’uscita non ha un’idea');
       const idea = (await ideasCollection.list()).find((candidate) => candidate.id === slot.ideaId);
       if (!idea) throw new Error('Idea non trovata');
       const brand = await brandById(slot.brandId);
-      await delay(latency(2400, 3200));
+      await writingSteps(onSteps, { brand, basis: idea.title, channels: slot.channels, link: linkOf(idea.source) });
 
       const content = await contentsCollection.update((contents) => {
         const previous = contents.find((candidate) => candidate.slotId === slotId);
@@ -517,8 +608,16 @@ function createMockContentService(): ContentService {
       }));
     },
 
-    async rewrite(contentId, channel, instruction) {
-      await delay(latency(900, 1400));
+    async setVariantLayout(contentId, channel, layout) {
+      await delay(latency(150, 300));
+      return updateContent(contentId, (content) => ({
+        ...content,
+        variants: content.variants.map((variant) => (variant.channel === channel ? { ...variant, ...layout } : variant)),
+      }));
+    },
+
+    async rewrite(contentId, channel, instruction, onSteps) {
+      await rewritingSteps(onSteps, channel, instruction);
       return updateContent(contentId, (content) => ({
         ...content,
         variants: content.variants.map((variant) =>
@@ -541,9 +640,14 @@ function createMockContentService(): ContentService {
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
 
-    async createDirect(brandId, { source, channels, format }) {
+    async createDirect(brandId, { source, channels, format }, onSteps) {
       const brand = await brandById(brandId);
-      await delay(latency(2400, 3200));
+      await writingSteps(onSteps, {
+        brand,
+        basis: source.kind === 'prompt' ? source.text : source.kind === 'link' ? source.url : source.name,
+        channels,
+        link: linkOf(source),
+      });
       const id = createId('content');
       const now = new Date().toISOString();
       const content: Content = {
@@ -563,14 +667,16 @@ function createMockContentService(): ContentService {
       return contentsCollection.update((contents) => ({ items: [...contents, content], result: content }));
     },
 
-    async createFromIdea(brandId, ideaId) {
+    async createFromIdea(brandId, ideaId, wanted, onSteps) {
       const brand = await brandById(brandId);
       const idea = (await ideasCollection.list()).find((candidate) => candidate.id === ideaId);
       if (!idea) throw new Error('Idea non trovata');
-      await delay(latency(2400, 3200));
       const allowed = selectedChannels(brand);
-      const fitting = idea.channels.filter((channel) => allowed.includes(channel));
+      // I canali scelti da chi guarda l'idea vincono; senza scelta valgono quelli dell'idea.
+      const asked = wanted && wanted.length > 0 ? [...wanted] : idea.channels;
+      const fitting = asked.filter((channel) => allowed.includes(channel));
       const channels: ChannelId[] = fitting.length > 0 ? fitting : allowed.length > 0 ? allowed : ['linkedin'];
+      await writingSteps(onSteps, { brand, basis: idea.title, channels, link: linkOf(idea.source) });
       const now = new Date().toISOString();
       const content: Content = {
         id: createId('content'),
@@ -591,7 +697,7 @@ function createMockContentService(): ContentService {
       return contentsCollection.update((contents) => ({ items: [...contents, content], result: content }));
     },
 
-    async regenerate(contentId, format) {
+    async regenerate(contentId, format, onSteps) {
       const current = (await contentsCollection.list()).find((content) => content.id === contentId);
       if (!current) throw new Error('Contenuto non trovato');
       const idea = current.ideaId
@@ -602,10 +708,15 @@ function createMockContentService(): ContentService {
       const revision = current.revision + 1;
       let generated;
       if (idea) {
-        await delay(latency(2400, 3200));
+        await writingSteps(onSteps, { brand, basis: idea.title, channels: current.channels, link: linkOf(idea.source) });
         generated = generateContent(brand, idea, current.channels, nextFormat, revision);
       } else if (current.brief) {
-        await delay(latency(2400, 3200));
+        await writingSteps(onSteps, {
+          brand,
+          basis: current.title,
+          channels: current.channels,
+          link: linkOf(current.brief),
+        });
         generated = generateDirectContent(brand, current.brief, current.channels, nextFormat, revision, current.id);
       } else {
         throw new Error('Non so da cosa rifare la bozza');

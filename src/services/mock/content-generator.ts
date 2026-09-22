@@ -1,5 +1,6 @@
 import type { Brand, ChannelId, ImageStyle } from '@/domain/brand';
 import { currentVoiceCard } from '@/domain/brand';
+import { withBrandTemplates } from '@/domain/line';
 import { proposeDesign, type VisualKind, type VisualProposal } from '@/domain/visual';
 import {
   CHANNEL_LIMITS,
@@ -233,7 +234,8 @@ export function generateContent(
         ].map((scene) => ({ ...scene, description: clean(scene.description) }))
       : [];
 
-  const design = proposeDesign(visualProposal(brand, idea, angle, clean), format, slides);
+  // Coi template scritti per il brand, la card usa quelli.
+  const design = withBrandTemplates(proposeDesign(visualProposal(brand, idea, angle, clean), format, slides), brand.visual.line?.templates ?? []);
   return { format, variants, visual: { headline: clean(shortHook(idea.title)), slides, scenes, design } };
 }
 
@@ -300,6 +302,10 @@ export function rewriteText(text: string, instruction: RewriteInstruction, seed:
       paragraphs = paragraphs.map((paragraph) =>
         INFORMAL.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), paragraph),
       );
+      break;
+    // Una richiesta scritta a mano: qui nel finto non si capisce cosa chiede, si ripulisce e basta.
+    default:
+      paragraphs = paragraphs.map((paragraph) => paragraph.replace(HEDGES, '').replace(/\s{2,}/g, ' ').trim());
       break;
   }
 

@@ -1,5 +1,5 @@
-import type { Brand, ChannelId } from './brand';
-import { TYPOGRAPHY_OPTIONS, type FontFace } from './catalog';
+import type { Brand, BrandLine, BrandTemplate, ChannelId, LineAnchor, LineFont, LineFooter, LinePhoto, TemplateFont } from './brand';
+import { lineFontByFamily, lineFontOption, TYPOGRAPHY_OPTIONS, type FontFace, type LineFontOption } from './catalog';
 import type { CarouselSlide } from './content';
 import type { IdeaFormat } from './idea';
 
@@ -67,7 +67,10 @@ export interface VisualImage {
 }
 
 export interface VisualPage {
+  /** Il layout del motore: quello che si disegna se il brand non ha un template suo con l'id di `custom`. */
   templateId: TemplateId;
+  /** Un template scritto per il brand (`BrandLine.templates`): se c'è, la card si disegna con quello. */
+  custom?: string;
   text: CardText;
 }
 
@@ -144,8 +147,24 @@ export interface TemplateSpec {
   sketch: SketchBlock[];
 }
 
-const headlineLines = (y: number, widths: number[], x = 0.1): SketchBlock[] =>
-  widths.map((w, i) => ({ x, y: y + i * 0.085, w, h: 0.06, tone: 'ink' }));
+const textLines = (y: number, widths: number[], tone: SketchBlock['tone'] = 'ink', x = 0.085): SketchBlock[] =>
+  widths.map((w, i) => ({ x, y: y + i * 0.075, w, h: 0.05, tone }));
+
+/** La rubrica in alto e il piede con filetto e firma: ogni tavola li ha, come in assieme. */
+const KICKER: SketchBlock = { x: 0.085, y: 0.07, w: 0.26, h: 0.022, tone: 'accent' };
+const FOOTER: SketchBlock[] = [
+  { x: 0.085, y: 0.895, w: 0.83, h: 0.004, tone: 'soft' },
+  { x: 0.085, y: 0.922, w: 0.2, h: 0.024, tone: 'soft' },
+  { x: 0.76, y: 0.925, w: 0.155, h: 0.018, tone: 'soft' },
+];
+
+const rows = (ys: number[], titled: boolean): SketchBlock[] =>
+  ys.flatMap((y): SketchBlock[] => [
+    { x: 0.085, y, w: 0.83, h: 0.003, tone: 'soft' },
+    { x: 0.085, y: y + 0.03, w: 0.05, h: 0.022, tone: 'accent' },
+    { x: 0.17, y: y + 0.028, w: titled ? 0.36 : 0.62, h: 0.026, tone: 'ink' },
+    ...(titled ? [{ x: 0.17, y: y + 0.066, w: 0.58, h: 0.02, tone: 'soft' as const }] : []),
+  ]);
 
 export const TEMPLATES: TemplateSpec[] = [
   {
@@ -157,15 +176,9 @@ export const TEMPLATES: TemplateSpec[] = [
     requires: ['headline'],
     fields: ['kicker', 'headline', 'body'],
     items: null,
-    hint: 'una frase forte che si regge da sola: una tesi, una domanda, un errore comune',
-    ground: 'primary',
-    sketch: [
-      { x: 0.1, y: 0.12, w: 0.28, h: 0.03, tone: 'accent' },
-      ...headlineLines(0.36, [0.78, 0.7, 0.46]),
-      { x: 0.1, y: 0.66, w: 0.6, h: 0.03, tone: 'soft' },
-      { x: 0.1, y: 0.8, w: 0.1, h: 0.08, tone: 'accent' },
-      { x: 0.21, y: 0.8, w: 0.1, h: 0.08, tone: 'soft' },
-    ],
+    hint: 'una frase della voce del brand che si regge da sola: una tesi, una domanda, un errore comune; sotto, facoltativa, una riga che la completa',
+    ground: 'ground',
+    sketch: [KICKER, ...textLines(0.36, [0.8, 0.72, 0.46]), { x: 0.085, y: 0.62, w: 0.56, h: 0.024, tone: 'soft' }, ...FOOTER],
   },
   {
     id: 'stat',
@@ -176,13 +189,14 @@ export const TEMPLATES: TemplateSpec[] = [
     requires: ['value', 'headline'],
     fields: ['kicker', 'value', 'headline', 'body'],
     items: null,
-    hint: 'un numero che sorprende e la frase che lo spiega; solo con un dato vero o da completare tra parentesi quadre',
+    hint: 'un numero grande e la frase che lo spiega; solo con un dato vero o da completare tra parentesi quadre',
     ground: 'ground',
     sketch: [
-      { x: 0.1, y: 0.12, w: 0.28, h: 0.03, tone: 'soft' },
-      { x: 0.1, y: 0.26, w: 0.6, h: 0.22, tone: 'accent' },
-      ...headlineLines(0.56, [0.76, 0.52]),
-      { x: 0.1, y: 0.78, w: 0.56, h: 0.03, tone: 'soft' },
+      KICKER,
+      { x: 0.085, y: 0.24, w: 0.46, h: 0.17, tone: 'accent' },
+      ...textLines(0.48, [0.76, 0.52]),
+      { x: 0.085, y: 0.68, w: 0.56, h: 0.024, tone: 'soft' },
+      ...FOOTER,
     ],
   },
   {
@@ -194,15 +208,9 @@ export const TEMPLATES: TemplateSpec[] = [
     requires: ['headline', 'items'],
     fields: ['kicker', 'headline', 'items'],
     items: { min: 3, max: 5, titled: false },
-    hint: 'da 3 a 5 punti brevi: consigli, errori, motivi',
+    hint: 'un titolo e da 3 a 5 punti brevi, numerati: consigli, errori, motivi',
     ground: 'ground',
-    sketch: [
-      ...headlineLines(0.12, [0.7, 0.44]),
-      ...[0.4, 0.52, 0.64, 0.76].flatMap((y): SketchBlock[] => [
-        { x: 0.1, y, w: 0.05, h: 0.04, tone: 'accent' },
-        { x: 0.19, y, w: 0.62, h: 0.04, tone: 'soft' },
-      ]),
-    ],
+    sketch: [KICKER, ...textLines(0.17, [0.7, 0.44]), ...rows([0.38, 0.49, 0.6, 0.71], false), ...FOOTER],
   },
   {
     id: 'steps',
@@ -215,14 +223,7 @@ export const TEMPLATES: TemplateSpec[] = [
     items: { min: 3, max: 4, titled: true },
     hint: 'un processo in 3 o 4 passi, ognuno con un titolo corto e una frase',
     ground: 'ground',
-    sketch: [
-      ...headlineLines(0.12, [0.66]),
-      ...[0.3, 0.48, 0.66].flatMap((y): SketchBlock[] => [
-        { x: 0.1, y, w: 0.1, h: 0.08, tone: 'accent' },
-        { x: 0.26, y, w: 0.4, h: 0.035, tone: 'ink' },
-        { x: 0.26, y: y + 0.05, w: 0.56, h: 0.03, tone: 'soft' },
-      ]),
-    ],
+    sketch: [KICKER, ...textLines(0.17, [0.66]), ...rows([0.32, 0.47, 0.62], true), ...FOOTER],
   },
   {
     id: 'quote',
@@ -234,47 +235,39 @@ export const TEMPLATES: TemplateSpec[] = [
     fields: ['body', 'author', 'kicker'],
     items: null,
     hint: 'una frase detta da qualcuno (chi pubblica, un cliente, il team), con chi la dice',
-    ground: 'primary',
-    sketch: [
-      { x: 0.1, y: 0.12, w: 0.14, h: 0.1, tone: 'accent' },
-      ...headlineLines(0.32, [0.8, 0.74, 0.56]),
-      { x: 0.1, y: 0.74, w: 0.08, h: 0.01, tone: 'accent' },
-      { x: 0.22, y: 0.72, w: 0.34, h: 0.035, tone: 'soft' },
-    ],
+    ground: 'ground',
+    sketch: [KICKER, ...textLines(0.32, [0.8, 0.74, 0.56]), { x: 0.085, y: 0.6, w: 0.26, h: 0.022, tone: 'accent' }, ...FOOTER],
   },
   {
     id: 'photo-cover',
-    name: 'Titolo sulla foto',
-    kind: 'photo',
-    role: 'single',
-    image: 'photo',
-    requires: ['headline'],
-    fields: ['kicker', 'headline'],
-    items: null,
-    hint: 'il titolo sopra una foto a tutta pagina, con un velo del colore del brand',
-    ground: 'image',
-    sketch: [
-      { x: 0, y: 0, w: 1, h: 1, tone: 'image' },
-      { x: 0.1, y: 0.58, w: 0.26, h: 0.03, tone: 'accent' },
-      ...headlineLines(0.66, [0.78, 0.5]),
-    ],
-  },
-  {
-    id: 'photo-frame',
-    name: 'Foto con fascia',
+    name: 'Frase con fascia',
     kind: 'photo',
     role: 'single',
     image: 'photo',
     requires: ['headline'],
     fields: ['kicker', 'headline', 'body'],
     items: null,
-    hint: 'una foto grande e una fascia di colore con il titolo e una frase',
-    ground: 'primary',
+    hint: 'l’apertura: una frase breve della voce e, in basso, una fascia con la foto che sfuma nel fondo',
+    ground: 'ground',
     sketch: [
-      { x: 0, y: 0, w: 1, h: 0.6, tone: 'image' },
-      ...headlineLines(0.68, [0.74, 0.48]),
-      { x: 0.1, y: 0.86, w: 0.5, h: 0.03, tone: 'soft' },
+      KICKER,
+      ...textLines(0.26, [0.74, 0.5]),
+      { x: 0.085, y: 0.44, w: 0.5, h: 0.024, tone: 'soft' },
+      { x: 0, y: 0.62, w: 1, h: 0.38, tone: 'image' },
     ],
+  },
+  {
+    id: 'photo-frame',
+    name: 'Foto nel riquadro',
+    kind: 'photo',
+    role: 'single',
+    image: 'photo',
+    requires: ['headline'],
+    fields: ['kicker', 'headline'],
+    items: null,
+    hint: 'la frase in alto e sotto la foto grande in un riquadro bordato',
+    ground: 'ground',
+    sketch: [KICKER, ...textLines(0.14, [0.74, 0.5]), { x: 0.085, y: 0.36, w: 0.83, h: 0.5, tone: 'image' }, ...FOOTER],
   },
   {
     id: 'photo-only',
@@ -285,12 +278,9 @@ export const TEMPLATES: TemplateSpec[] = [
     requires: [],
     fields: [],
     items: null,
-    hint: 'solo la foto con la firma del brand, quando l’immagine dice tutto e il testo sta nella didascalia',
+    hint: 'solo la foto con la firma del brand in basso, quando l’immagine dice tutto e il testo sta nella didascalia',
     ground: 'image',
-    sketch: [
-      { x: 0, y: 0, w: 1, h: 1, tone: 'image' },
-      { x: 0.74, y: 0.88, w: 0.16, h: 0.05, tone: 'soft' },
-    ],
+    sketch: [{ x: 0, y: 0, w: 1, h: 0.87, tone: 'image' }, ...FOOTER],
   },
   {
     id: 'cutout-statement',
@@ -301,13 +291,9 @@ export const TEMPLATES: TemplateSpec[] = [
     requires: ['headline'],
     fields: ['kicker', 'headline'],
     items: null,
-    hint: 'titolo grande e un soggetto scontornato (una persona, un prodotto, un oggetto) che entra nella card dal basso',
-    ground: 'primary',
-    sketch: [
-      { x: 0.1, y: 0.1, w: 0.26, h: 0.03, tone: 'accent' },
-      ...headlineLines(0.18, [0.78, 0.62]),
-      { x: 0.4, y: 0.48, w: 0.5, h: 0.52, tone: 'image' },
-    ],
+    hint: 'la frase in alto e un soggetto scontornato (una persona, un prodotto, un oggetto) appoggiato al piede',
+    ground: 'ground',
+    sketch: [KICKER, ...textLines(0.15, [0.74, 0.54]), { x: 0.36, y: 0.4, w: 0.56, h: 0.48, tone: 'image' }, ...FOOTER],
   },
   {
     id: 'cutout-stat',
@@ -321,9 +307,11 @@ export const TEMPLATES: TemplateSpec[] = [
     hint: 'un numero grande accanto a un soggetto scontornato',
     ground: 'ground',
     sketch: [
-      { x: 0.1, y: 0.14, w: 0.44, h: 0.2, tone: 'accent' },
-      ...headlineLines(0.42, [0.4, 0.34]),
-      { x: 0.52, y: 0.38, w: 0.44, h: 0.62, tone: 'image' },
+      KICKER,
+      { x: 0.085, y: 0.18, w: 0.4, h: 0.15, tone: 'accent' },
+      ...textLines(0.4, [0.4, 0.34]),
+      { x: 0.5, y: 0.36, w: 0.45, h: 0.52, tone: 'image' },
+      ...FOOTER,
     ],
   },
   {
@@ -335,13 +323,14 @@ export const TEMPLATES: TemplateSpec[] = [
     requires: ['headline'],
     fields: ['kicker', 'headline', 'body', 'items'],
     items: { min: 0, max: 3, titled: false },
-    hint: 'metà foto e metà testo: il titolo con una frase, o con due o tre punti',
+    hint: 'la foto in alto a tutta larghezza e sotto la frase, con una riga o con due o tre punti',
     ground: 'ground',
     sketch: [
-      { x: 0, y: 0, w: 1, h: 0.46, tone: 'image' },
-      ...headlineLines(0.54, [0.74, 0.5]),
-      { x: 0.1, y: 0.78, w: 0.62, h: 0.03, tone: 'soft' },
-      { x: 0.1, y: 0.84, w: 0.5, h: 0.03, tone: 'soft' },
+      { x: 0, y: 0, w: 1, h: 0.44, tone: 'image' },
+      { x: 0.085, y: 0.5, w: 0.26, h: 0.022, tone: 'accent' },
+      ...textLines(0.55, [0.74, 0.5]),
+      { x: 0.085, y: 0.73, w: 0.6, h: 0.024, tone: 'soft' },
+      ...FOOTER,
     ],
   },
   {
@@ -353,13 +342,14 @@ export const TEMPLATES: TemplateSpec[] = [
     requires: ['headline'],
     fields: ['headline', 'body'],
     items: null,
-    hint: 'slide centrale del carosello: un punto con il suo numero',
+    hint: 'slide centrale del carosello: il numero del punto, la frase e una riga che la spiega',
     ground: 'ground',
     sketch: [
-      { x: 0.1, y: 0.12, w: 0.2, h: 0.12, tone: 'accent' },
-      ...headlineLines(0.34, [0.74, 0.5]),
-      { x: 0.1, y: 0.56, w: 0.74, h: 0.03, tone: 'soft' },
-      { x: 0.1, y: 0.62, w: 0.6, h: 0.03, tone: 'soft' },
+      KICKER,
+      { x: 0.085, y: 0.3, w: 0.08, h: 0.026, tone: 'accent' },
+      ...textLines(0.36, [0.78, 0.7, 0.4]),
+      { x: 0.085, y: 0.62, w: 0.6, h: 0.024, tone: 'soft' },
+      ...FOOTER,
     ],
   },
   {
@@ -371,14 +361,9 @@ export const TEMPLATES: TemplateSpec[] = [
     requires: ['headline'],
     fields: ['headline', 'body'],
     items: null,
-    hint: 'ultima slide del carosello: la chiusura con un invito e la firma',
-    ground: 'primary',
-    sketch: [
-      ...headlineLines(0.26, [0.72, 0.5]),
-      { x: 0.1, y: 0.5, w: 0.6, h: 0.03, tone: 'soft' },
-      { x: 0.1, y: 0.74, w: 0.16, h: 0.12, tone: 'accent' },
-      { x: 0.27, y: 0.74, w: 0.16, h: 0.12, tone: 'soft' },
-    ],
+    hint: 'ultima slide del carosello o post d’invito: la frase che chiude e, in accento, dove andare o cosa fare',
+    ground: 'ground',
+    sketch: [KICKER, ...textLines(0.36, [0.72, 0.5]), { x: 0.085, y: 0.54, w: 0.34, h: 0.026, tone: 'accent' }, ...FOOTER],
   },
 ];
 
@@ -396,9 +381,6 @@ export function isTemplateId(value: unknown): value is TemplateId {
 
 /** I template che fanno un post o la copertina di un carosello. */
 export const SINGLE_TEMPLATES = TEMPLATES.filter((spec) => spec.role === 'single');
-
-/** I layout degli esempi dello stile, uno diverso per canale: si vede come rende ogni tipo di card grafica. */
-export const EXAMPLE_TEMPLATES: TemplateId[] = ['statement', 'stat', 'list', 'steps', 'statement'];
 
 export const CARD_FIELD_LABELS: Record<CardField, string> = {
   kicker: 'Etichetta',
@@ -511,8 +493,12 @@ function templateFor(kind: VisualKind, index: number, page: VisualPage, count: n
 }
 
 function normalizePages(kind: VisualKind, pages: readonly VisualPage[]): VisualPage[] {
+  const rubric = cleanCardText(pages[0]?.text).kicker;
   return pages.map((page, index) => {
-    const text = cleanCardText(page.text);
+    // La rubrica è quella della copertina su ogni slide, come nei caroselli di assieme.
+    const text = cleanCardText(index === 0 ? page.text : { ...page.text, kicker: rubric });
+    // Con un template del brand il layout del motore è solo la sua riserva: resta quello scelto con il template.
+    if (page.custom) return { text, templateId: page.templateId, custom: page.custom };
     return { text, templateId: templateFor(kind, index, { ...page, text }, pages.length) };
   });
 }
@@ -683,10 +669,10 @@ export function redoDesign(previous: VisualDesign | null | undefined, proposed: 
 export function refreshDesign(current: VisualDesign): VisualDesign {
   if (!current.nextPages) return current;
   if (current.status === 'creating') throw new VisualBusyError();
-  const pages = current.nextPages.map((page, i) => ({
-    text: page.text,
-    templateId: i === 0 ? (current.pages[0]?.templateId ?? page.templateId) : page.templateId,
-  }));
+  const pages = current.nextPages.map((page, i) => {
+    const kept = i === 0 ? (current.pages[0] ?? page) : page;
+    return { text: page.text, templateId: kept.templateId, ...(kept.custom && { custom: kept.custom }) };
+  });
   return { ...current, pages: normalizePages(current.kind, pages), nextPages: null, renders: [] };
 }
 
@@ -734,31 +720,85 @@ export function needsMedia(channel: ChannelId): boolean {
   return channel === 'instagram' || channel === 'tiktok';
 }
 
-/** I canali che aspettano il visivo prima di poter approvare. */
+/** I canali che aspettano il visivo prima di poter approvare; chi esce senza immagine per scelta non aspetta. */
 export function channelsWaitingForVisual(
   format: IdeaFormat,
   channels: readonly ChannelId[],
   design: VisualDesign | null | undefined,
+  withoutImage: readonly ChannelId[] = [],
 ): ChannelId[] {
   if (format === 'video' || design?.status === 'ready') return [];
-  return channels.filter(needsMedia);
+  return channels.filter((channel) => needsMedia(channel) && !withoutImage.includes(channel));
 }
 
 // ---------------------------------------------------------------------------
 // Kit del brand
 // ---------------------------------------------------------------------------
 
+/** Un carattere pronto per i template: la famiglia con i ripieghi di sistema, il peso e il corsivo. */
+export interface KitFace {
+  family: string;
+  /** Per `font-family`: la famiglia del brand, poi i caratteri di sistema dello stesso genere. */
+  stack: string;
+  weight: number;
+  italic: boolean;
+}
+
+/** I colori della linea per ruolo, come nel generatore di assieme: si ricavano tutti da fondo e accento. */
+export interface LineTones {
+  ground: string;
+  /** Il testo principale. */
+  ink: string;
+  /** Le righe secondarie. */
+  soft: string;
+  /** Pagina e indirizzo. */
+  muted: string;
+  accent: string;
+  /** Filetti e bordi dei riquadri. */
+  rule: string;
+}
+
+/** La linea grafica pronta per i template: quella del brand, o quella ricavata da palette e caratteri. */
+export interface KitLine {
+  tones: LineTones;
+  voice: KitFace;
+  title: KitFace;
+  label: KitFace & { spaced: boolean };
+  text: KitFace;
+  /** La firma scritta: il carattere della voce, in corsivo se ce l'ha. */
+  sign: KitFace;
+  signature: string;
+  address: string;
+  /** L'iniziale del brand, per il marchio in basso quando non c'è il logo. */
+  monogram: string;
+  /** La foto delle aperture, già firmata; nulla finché non c'è. */
+  bandUrl: string | null;
+  photo: LinePhoto;
+  inset: boolean;
+  kicker: boolean;
+  footer: LineFooter;
+  anchor: LineAnchor;
+  /** I template scritti per il brand, se ci sono. */
+  templates: BrandTemplate[];
+}
+
 export interface BrandKit {
   name: string;
   colors: { primary: string; secondary: string; accent: string; ground: string };
+  /** La coppia di caratteri di prima della linea: la usa ancora chi mostra la palette. */
   heading: FontFace;
   body: FontFace;
-  /** Il foglio di Google Fonts con i pesi che servono. */
+  /** Il foglio di Google Fonts con le facce che servono alla linea. */
   fontsHref: string;
+  /** Un foglio per famiglia dei caratteri dei template del brand: se uno non si carica, gli altri sì. */
+  fontLinks: string[];
+  /** Le facce da aspettare prima di disegnare, in forma CSS: `italic 400 48px "Newsreader"`. */
+  faces: string[];
   logoUrl: string | null;
+  /** Il logo al posto della firma scritta, in basso a sinistra. */
   signature: boolean;
-  decoration: 'geometric' | 'none';
   treatment: 'natural' | 'desaturated';
+  line: KitLine;
 }
 
 export const DEFAULT_TYPOGRAPHY = TYPOGRAPHY_OPTIONS[0];
@@ -767,39 +807,200 @@ export function typographyOption(id: string | null | undefined) {
   return TYPOGRAPHY_OPTIONS.find((option) => option.id === id) ?? DEFAULT_TYPOGRAPHY;
 }
 
-export function googleFontsHref(faces: readonly FontFace[]): string {
-  const weights = new Map<string, Set<number>>();
-  for (const face of faces) weights.set(face.family, (weights.get(face.family) ?? new Set()).add(face.weight));
-  const families = [...weights.entries()].map(
-    ([family, set]) => `family=${family.replace(/ /g, '+')}:wght@${[...set].sort((a, b) => a - b).join(';')}`,
-  );
+/** Il foglio di Google Fonts con esattamente le facce chieste: un peso o un corsivo in più fa fallire tutto. */
+export function googleFontsHref(faces: readonly (FontFace & { italic?: boolean })[]): string {
+  const styles = new Map<string, Map<string, [number, number]>>();
+  for (const face of faces) {
+    const set = styles.get(face.family) ?? new Map<string, [number, number]>();
+    const italic = face.italic ? 1 : 0;
+    set.set(`${italic},${face.weight}`, [italic, face.weight]);
+    styles.set(face.family, set);
+  }
+  const families = [...styles.entries()].map(([family, set]) => {
+    const tuples = [...set.values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const name = family.replace(/ /g, '+');
+    return tuples.some(([italic]) => italic === 1)
+      ? `family=${name}:ital,wght@${tuples.map(([italic, weight]) => `${italic},${weight}`).join(';')}`
+      : `family=${name}:wght@${tuples.map(([, weight]) => weight).join(';')}`;
+  });
   return `https://fonts.googleapis.com/css2?${families.join('&')}&display=swap`;
 }
 
-function hexOr(value: string, fallback: string): string {
-  return /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : fallback;
+function hexOr(value: string | null | undefined, fallback: string): string {
+  return value && /^#[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : fallback;
 }
 
-export function brandKit(brand: { identity: Pick<Brand['identity'], 'name'>; visual: Brand['visual'] }): BrandKit {
+/** `share` di `b` dentro `a`, in esadecimale. */
+export function mixHex(a: string, b: string, share: number): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16);
+  return `#${[1, 3, 5]
+    .map((i) => Math.round(channel(a, i) * (1 - share) + channel(b, i) * share))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')}`.toUpperCase();
+}
+
+const FALLBACK_VOICE = 'newsreader';
+const FALLBACK_TEXT = 'inter';
+
+function nearestWeight(option: LineFontOption, weight: number): number {
+  return option.weights.reduce((best, candidate) => (Math.abs(candidate - weight) < Math.abs(best - weight) ? candidate : best));
+}
+
+function fontStack(option: LineFontOption): string {
+  const generic =
+    option.kind === 'serif' ? 'Georgia, serif' : option.kind === 'mono' ? 'ui-monospace, Consolas, monospace' : 'system-ui, sans-serif';
+  return `"${option.family}", ${generic}`;
+}
+
+/** Un carattere della linea sul catalogo: un id sconosciuto prende il ripiego, peso e corsivo solo se esistono. */
+function kitFace(font: Partial<LineFont> | null | undefined, fallback: string): KitFace {
+  const option = lineFontOption(font?.font) ?? lineFontOption(fallback)!;
+  return {
+    family: option.family,
+    stack: fontStack(option),
+    weight: nearestWeight(option, font?.weight ?? 400),
+    italic: Boolean(font?.italic) && option.italic,
+  };
+}
+
+/** «https://www.forno.it/» → «forno.it». */
+export function siteLabel(site: string | null | undefined): string {
+  return (site ?? '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+}
+
+/**
+ * La linea dei brand salvati prima del motore delle card: fondo scuro se il colore principale lo è, altrimenti lo
+ * sfondo della palette; i caratteri dalla coppia scelta; la firma col nome e il sito.
+ */
+export function defaultLine(identity: { name: string; site?: string }, visual: Pick<Brand['visual'], 'palette' | 'typography'>): BrandLine {
+  const [primary, , accent, ground] = visual.palette.colors.map((color, i) => hexOr(color, ['#1C2150', '#2F3452', '#FF6B35', '#ECEEEF'][i]));
+  const pair = typographyOption(visual.typography);
+  const heading = lineFontByFamily(pair.heading.family)?.id ?? FALLBACK_VOICE;
+  const body = lineFontByFamily(pair.body.family)?.id ?? FALLBACK_TEXT;
+  return {
+    ground: isDark(primary) ? primary : ground,
+    accent,
+    voice: { font: heading, weight: pair.heading.weight, italic: false },
+    title: { font: heading, weight: pair.heading.weight, italic: false },
+    label: { font: body, weight: 600, italic: false, spaced: false },
+    text: { font: body, weight: 400, italic: false },
+    signature: identity.name.trim(),
+    address: siteLabel(identity.site),
+    band: null,
+    rubrics: [],
+    copy: [],
+  };
+}
+
+const INK_DARK = '#15171F';
+const INK_LIGHT = '#FFFFFF';
+
+/** L'accento su quel fondo: se non si legge, scivola verso l'inchiostro finché non si legge. */
+function legibleAccent(accent: string, ground: string, ink: string): string {
+  let color = accent;
+  for (let share = 0.15; contrastRatio(color, ground) < 3.2 && share <= 1; share += 0.15) color = mixHex(accent, ink, share);
+  return color;
+}
+
+/**
+ * I colori per ruolo da fondo e accento. L'inchiostro è un colore della palette se si legge benissimo (un avorio su
+ * un fondo scuro, un navy su un fondo chiaro), altrimenti bianco o quasi nero; il resto sono sue sfumature sul fondo.
+ */
+export function lineTones(ground: string, accent: string, palette: readonly string[] = []): LineTones {
+  const bg = hexOr(ground, '#14181D');
+  const own = palette
+    .map((color) => hexOr(color, ''))
+    .filter((color) => color && color !== bg)
+    .map((color) => ({ color, ratio: contrastRatio(color, bg) }))
+    .sort((a, b) => b.ratio - a.ratio)[0];
+  const ink =
+    own && own.ratio >= 9 ? own.color : contrastRatio(INK_LIGHT, bg) >= contrastRatio(INK_DARK, bg) ? INK_LIGHT : INK_DARK;
+  return {
+    ground: bg,
+    ink,
+    soft: mixHex(ink, bg, 0.2),
+    muted: mixHex(ink, bg, 0.45),
+    accent: legibleAccent(hexOr(accent, ink), bg, ink),
+    rule: mixHex(ink, bg, 0.82),
+  };
+}
+
+/** Una famiglia di Google Fonts dei template: nomi e pesi solo se sensati, così il foglio non va in errore per poco. */
+function templateFontHref(font: TemplateFont): string | null {
+  const family = font.family.trim();
+  if (!/^[A-Za-z0-9 ]{2,60}$/.test(family)) return null;
+  const weights = [...new Set(font.weights.filter((weight) => Number.isInteger(weight) && weight >= 100 && weight <= 900))];
+  return googleFontsHref((weights.length > 0 ? weights : [400]).flatMap((weight) => [
+    { family, weight },
+    ...(font.italic ? [{ family, weight, italic: true }] : []),
+  ]));
+}
+
+function templateFontFaces(font: TemplateFont): string[] {
+  const weights = font.weights.length > 0 ? font.weights : [400];
+  return weights.flatMap((weight) => [`${weight} 48px "${font.family}"`, ...(font.italic ? [`italic ${weight} 48px "${font.family}"`] : [])]);
+}
+
+const faceCss = (face: KitFace) => `${face.italic ? 'italic ' : ''}${face.weight} 48px "${face.family}"`;
+
+export function brandKit(brand: {
+  identity: Pick<Brand['identity'], 'name'> & Partial<Pick<Brand['identity'], 'site'>>;
+  visual: Brand['visual'];
+}): BrandKit {
   const { visual } = brand;
   const [primary, secondary, accent, ground] = visual.palette.colors;
+  const colors = {
+    primary: hexOr(primary, '#1C2150'),
+    secondary: hexOr(secondary, '#2F3452'),
+    accent: hexOr(accent, '#FF6B35'),
+    ground: hexOr(ground, '#ECEEEF'),
+  };
   // I brand salvati prima dei caratteri non hanno il campo: prendono la coppia di base.
   const type = typographyOption(visual.typography);
+  const line = visual.line ?? defaultLine(brand.identity, visual);
+
+  const voice = kitFace(line.voice, FALLBACK_VOICE);
+  const title = kitFace(line.title, line.voice?.font ?? FALLBACK_VOICE);
+  const label = { ...kitFace(line.label, FALLBACK_TEXT), spaced: Boolean(line.label?.spaced) };
+  const text = kitFace(line.text, FALLBACK_TEXT);
+  const sign = kitFace({ ...line.voice, weight: 400, italic: true }, FALLBACK_VOICE);
+  const faces = [voice, title, label, text, sign];
+
   return {
     name: brand.identity.name,
-    colors: {
-      primary: hexOr(primary, '#1C2150'),
-      secondary: hexOr(secondary, '#2F3452'),
-      accent: hexOr(accent, '#FF6B35'),
-      ground: hexOr(ground, '#ECEEEF'),
-    },
+    colors,
     heading: type.heading,
     body: type.body,
-    fontsHref: googleFontsHref([type.heading, type.body, { family: type.body.family, weight: 600 }]),
+    fontsHref: googleFontsHref(faces),
+    fontLinks: (line.fonts ?? []).flatMap((font) => (templateFontHref(font) ? [templateFontHref(font)!] : [])),
+    faces: [...new Set([...faces.map(faceCss), ...(line.fonts ?? []).flatMap(templateFontFaces)])],
     logoUrl: visual.logoUri,
     signature: visual.signature && Boolean(visual.logoUri),
-    decoration: visual.imageStyle === 'flat-geometric' ? 'geometric' : 'none',
     treatment: visual.imageStyle === 'desaturated-photo' ? 'desaturated' : 'natural',
+    line: {
+      tones: lineTones(line.ground, line.accent, Object.values(colors)),
+      voice,
+      title,
+      label,
+      text,
+      sign,
+      signature: line.signature?.trim() || brand.identity.name,
+      address: line.address?.trim() ?? '',
+      monogram: (brand.identity.name.trim().match(/[\p{L}\p{N}]/u)?.[0] ?? '·').toUpperCase(),
+      bandUrl: line.band?.photo?.url || null,
+      // Le linee di prima non hanno la composizione: vale quella di assieme.
+      photo: line.photo ?? 'band',
+      inset: line.inset ?? false,
+      kicker: line.kicker ?? true,
+      footer: line.footer ?? 'rule',
+      anchor: line.anchor ?? 'center',
+      templates: line.templates ?? [],
+    },
   };
 }
 
@@ -820,9 +1021,6 @@ export function contrastRatio(a: string, b: string): number {
 export function isDark(hex: string): boolean {
   return luminance(hexOr(hex, '#808080')) < 0.36;
 }
-
-const INK_DARK = '#15171F';
-const INK_LIGHT = '#FFFFFF';
 
 /** Il colore del testo su un fondo: un colore del brand se si legge bene, altrimenti quasi nero o bianco. */
 export function inkOn(background: string, kit: BrandKit): string {

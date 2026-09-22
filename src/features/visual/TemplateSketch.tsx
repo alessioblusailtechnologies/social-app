@@ -1,22 +1,21 @@
 import { StyleSheet, View } from 'react-native';
 
-import { accentOn, inkOn, templateSpec, type BrandKit, type SketchBlock, type TemplateId } from '@/domain/visual';
+import { templateSpec, type BrandKit, type SketchBlock, type TemplateId } from '@/domain/visual';
 
-/** Lo schizzo di un layout nei colori del brand: la miniatura della proposta, prima di creare. */
+/** Lo schizzo di un layout nei colori della linea: la miniatura della proposta, prima di creare. */
 export function TemplateSketch({ templateId, kit, width = 64 }: { templateId: TemplateId; kit: BrandKit; width?: number }) {
   const spec = templateSpec(templateId);
   const height = width * 1.25;
-  const background = spec.ground === 'ground' ? kit.colors.ground : kit.colors.primary;
-  const ink = inkOn(background, kit);
+  const { ground: background, ink, soft, accent, muted } = kit.line.tones;
 
   const tone = (block: SketchBlock) => {
     switch (block.tone) {
       case 'image':
-        return { backgroundColor: kit.colors.secondary, opacity: 0.55 };
+        return { backgroundColor: muted, opacity: 0.6 };
       case 'accent':
-        return { backgroundColor: accentOn(background, kit) };
+        return { backgroundColor: accent };
       case 'soft':
-        return { backgroundColor: ink, opacity: 0.35 };
+        return { backgroundColor: soft, opacity: 0.5 };
       default:
         return { backgroundColor: ink };
     }

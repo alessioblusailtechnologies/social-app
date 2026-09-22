@@ -8,6 +8,7 @@ import {
   ideaRefSchema,
   rewriteSchema,
   scheduleSchema,
+  variantLayoutSchema,
   variantTextSchema,
 } from '../../contract/schemas';
 import {
@@ -23,10 +24,12 @@ import {
   reopenContent,
   rewriteContentVariant,
   scheduleContent,
+  updateVariantLayout,
   updateVariantText,
   type WithSlot,
 } from '../../services/contents';
 import type { Deps } from '../../services/deps';
+import { sendSteps } from '../steps';
 import { signContent, signContents } from '../../visual/files';
 import { channelFrom, idFrom } from './params';
 
@@ -68,6 +71,15 @@ export function registerContentRoutes(app: FastifyInstance, deps: Deps): void {
     return withSlot(prepareContent(deps, request.identity, idFrom(request.params.slotId, 'Uscita non trovata.'), format));
   });
 
+  // Le gemelle a passi: scrivere una bozza richiede tempo, e chi aspetta vede cosa sta succedendo.
+  app.post<{ Params: { slotId: string } }>('/api/slots/:slotId/content/prepare/stream', (request, reply) => {
+    const { format } = formatOptionSchema.parse(request.body ?? {});
+    const slotId = idFrom(request.params.slotId, 'Uscita non trovata.');
+    return sendSteps(request, reply, (onSteps) =>
+      withSlot(prepareContent(deps, request.identity, slotId, format, onSteps)),
+    );
+  });
+
   app.post<BrandParams>('/api/brands/:brandId/contents', async (request, reply) => {
     const content = await createDirectContent(
       deps,
@@ -78,10 +90,24 @@ export function registerContentRoutes(app: FastifyInstance, deps: Deps): void {
     return reply.code(201).send(await signContent(deps.media.storage, content));
   });
 
+  app.post<BrandParams>('/api/brands/:brandId/contents/stream', (request, reply) => {
+    const direct = directContentSchema.parse(request.body);
+    const id = brandId(request.params.brandId);
+    return sendSteps(request, reply, (onSteps) => one(createDirectContent(deps, request.identity, id, direct, onSteps)));
+  });
+
   app.post<BrandParams>('/api/brands/:brandId/contents/from-idea', async (request, reply) => {
-    const { ideaId } = ideaRefSchema.parse(request.body);
-    const content = await createContentFromIdea(deps, request.identity, brandId(request.params.brandId), ideaId);
+    const { ideaId, channels } = ideaRefSchema.parse(request.body);
+    const content = await createContentFromIdea(deps, request.identity, brandId(request.params.brandId), ideaId, channels);
     return reply.code(201).send(await signContent(deps.media.storage, content));
+  });
+
+  app.post<BrandParams>('/api/brands/:brandId/contents/from-idea/stream', (request, reply) => {
+    const { ideaId, channels } = ideaRefSchema.parse(request.body);
+    const id = brandId(request.params.brandId);
+    return sendSteps(request, reply, (onSteps) =>
+      one(createContentFromIdea(deps, request.identity, id, ideaId, channels, onSteps)),
+    );
   });
 
   app.post<ContentParams>('/api/contents/:contentId/regenerate', (request) => {
@@ -89,10 +115,29 @@ export function registerContentRoutes(app: FastifyInstance, deps: Deps): void {
     return one(regenerateContent(deps, request.identity, contentId(request.params.contentId), format));
   });
 
+  app.post<ContentParams>('/api/contents/:contentId/regenerate/stream', (request, reply) => {
+    const { format } = formatOptionSchema.parse(request.body ?? {});
+    const id = contentId(request.params.contentId);
+    return sendSteps(request, reply, (onSteps) => one(regenerateContent(deps, request.identity, id, format, onSteps)));
+  });
+
   app.put<VariantParams>('/api/contents/:contentId/variants/:channel', (request) => {
     const { text } = variantTextSchema.parse(request.body);
     return one(
       updateVariantText(deps, request.identity, contentId(request.params.contentId), channelFrom(request.params.channel), text),
+    );
+  });
+
+  app.patch<VariantParams>('/api/contents/:contentId/variants/:channel', (request) => {
+    const layout = variantLayoutSchema.parse(request.body);
+    return one(
+      updateVariantLayout(
+        deps,
+        request.identity,
+        contentId(request.params.contentId),
+        channelFrom(request.params.channel),
+        layout,
+      ),
     );
   });
 
@@ -106,6 +151,15 @@ export function registerContentRoutes(app: FastifyInstance, deps: Deps): void {
         channelFrom(request.params.channel),
         instruction,
       ),
+    );
+  });
+
+  app.post<VariantParams>('/api/contents/:contentId/variants/:channel/rewrite/stream', (request, reply) => {
+    const { instruction } = rewriteSchema.parse(request.body);
+    const id = contentId(request.params.contentId);
+    const channel = channelFrom(request.params.channel);
+    return sendSteps(request, reply, (onSteps) =>
+      one(rewriteContentVariant(deps, request.identity, id, channel, instruction, onSteps)),
     );
   });
 

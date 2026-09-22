@@ -1,10 +1,10 @@
 import type { ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
-import type { Content, RewriteInstruction } from '@/domain/content';
+import { channelsWithoutImage, type Content, type RewriteInstruction } from '@/domain/content';
 import type { IdeaFormat } from '@/domain/idea';
 import { selectedChannels, type PlanSlot } from '@/domain/plan';
 import { channelsWaitingForVisual, redoDesign } from '@/domain/visual';
-import type { DirectContentRequest } from '@/services/types';
+import type { DirectContentRequest, OnAiSteps } from '@/services/types';
 
 import { rewriteVariant, writeContent } from '../ai/content';
 import { ApiError } from '../contract/errors';
@@ -34,7 +34,12 @@ const AI_FAILED = () => new ApiError(502, 'AI_FAILED', 'Non sono riuscito a comp
 
 /** Instagram e TikTok non pubblicano senza immagine: senza visivo pronto non si approva. */
 function assertVisualReady(content: Content): void {
-  const waiting = channelsWaitingForVisual(content.format, content.channels, content.visual.design);
+  const waiting = channelsWaitingForVisual(
+    content.format,
+    content.channels,
+    content.visual.design,
+    channelsWithoutImage(content),
+  );
   if (waiting.length > 0) {
     throw ApiError.conflict(
       'VISUAL_MISSING',
@@ -70,7 +75,13 @@ export function getSlotContent(deps: Deps, identity: Identity, slotId: string): 
 }
 
 /** Prepara (o rifà) la bozza dall'idea dell'uscita, che passa a "Da approvare". */
-export async function prepareContent(deps: Deps, identity: Identity, slotId: string, format?: IdeaFormat): Promise<WithSlot> {
+export async function prepareContent(
+  deps: Deps,
+  identity: Identity,
+  slotId: string,
+  format?: IdeaFormat,
+  onSteps?: OnAiSteps,
+): Promise<WithSlot> {
   const { slot, idea, brand, previous } = await inTransaction(deps, identity, async (db) => {
     const slot = await requireSlot(db, slotId, deps.now());
     if (!slot.ideaId) throw ApiError.invalid('L’uscita non ha un’idea: sceglila prima di preparare la bozza.');
@@ -91,6 +102,7 @@ export async function prepareContent(deps: Deps, identity: Identity, slotId: str
     revision,
     previous,
     now: deps.now(),
+    onSteps,
   });
 
   return inTransaction(deps, identity, async (db) => {
@@ -127,6 +139,7 @@ export async function createDirectContent(
   identity: Identity,
   brandId: string,
   { source, channels, format }: DirectContentRequest,
+  onSteps?: OnAiSteps,
 ): Promise<Content> {
   const brand = await inTransaction(deps, identity, (db) => requireBrand(db, brandId));
   const written = await writeContent(deps.ai, aiMeta(identity, brandId), {
@@ -137,6 +150,7 @@ export async function createDirectContent(
     revision: 0,
     previous: null,
     now: deps.now(),
+    onSteps,
   });
   return inTransaction(deps, identity, (db) =>
     insertContent(db, identity.accountId, brandId, {
@@ -157,7 +171,14 @@ export async function createDirectContent(
 }
 
 /** Bozza scritta subito da un'idea, senza passare dal piano: entra nel piano quando viene programmata. */
-export async function createContentFromIdea(deps: Deps, identity: Identity, brandId: string, ideaId: string): Promise<Content> {
+export async function createContentFromIdea(
+  deps: Deps,
+  identity: Identity,
+  brandId: string,
+  ideaId: string,
+  wanted?: readonly ChannelId[],
+  onSteps?: OnAiSteps,
+): Promise<Content> {
   const { brand, idea } = await inTransaction(deps, identity, async (db) => {
     const brand = await requireBrand(db, brandId);
     const idea = await requireIdea(db, ideaId);
@@ -165,7 +186,9 @@ export async function createContentFromIdea(deps: Deps, identity: Identity, bran
     return { brand, idea };
   });
   const allowed = selectedChannels(brand);
-  const fitting = idea.channels.filter((channel) => allowed.includes(channel));
+  // I canali scelti da chi guarda l'idea vincono; senza scelta valgono quelli dell'idea.
+  const asked = wanted && wanted.length > 0 ? [...wanted] : idea.channels;
+  const fitting = asked.filter((channel) => allowed.includes(channel));
   const channels: ChannelId[] = fitting.length > 0 ? fitting : allowed.length > 0 ? allowed : ['linkedin'];
   const written = await writeContent(deps.ai, aiMeta(identity, brandId), {
     brand,
@@ -175,6 +198,7 @@ export async function createContentFromIdea(deps: Deps, identity: Identity, bran
     revision: 0,
     previous: null,
     now: deps.now(),
+    onSteps,
   });
   return inTransaction(deps, identity, (db) =>
     insertContent(db, identity.accountId, brandId, {
@@ -195,7 +219,13 @@ export async function createContentFromIdea(deps: Deps, identity: Identity, bran
 }
 
 /** Rifà la bozza con un altro taglio o formato: dall'idea se c'è, altrimenti dalla richiesta dell'utente. */
-export async function regenerateContent(deps: Deps, identity: Identity, contentId: string, format?: IdeaFormat): Promise<Content> {
+export async function regenerateContent(
+  deps: Deps,
+  identity: Identity,
+  contentId: string,
+  format?: IdeaFormat,
+  onSteps?: OnAiSteps,
+): Promise<Content> {
   const { content, idea, brand } = await inTransaction(deps, identity, async (db) => {
     const content = await requireContent(db, contentId);
     return {
@@ -215,6 +245,7 @@ export async function regenerateContent(deps: Deps, identity: Identity, contentI
     revision,
     previous: content,
     now: deps.now(),
+    onSteps,
   });
 
   return inTransaction(deps, identity, async (db) => {
@@ -251,18 +282,39 @@ export function updateVariantText(
   });
 }
 
+/** Come esce su un canale: formato del visivo e uscita senza immagine. Il testo resta quello che è. */
+export function updateVariantLayout(
+  deps: Deps,
+  identity: Identity,
+  contentId: string,
+  channel: ChannelId,
+  layout: { format?: IdeaFormat; withoutImage?: boolean },
+): Promise<Content> {
+  return inTransaction(deps, identity, async (db) => {
+    const content = await requireContent(db, contentId);
+    if (!content.variants.some((variant) => variant.channel === channel)) {
+      throw ApiError.notFound('Il contenuto non esce su questo canale.');
+    }
+    return saveContent(db, {
+      ...content,
+      variants: content.variants.map((variant) => (variant.channel === channel ? { ...variant, ...layout } : variant)),
+    });
+  });
+}
+
 export async function rewriteContentVariant(
   deps: Deps,
   identity: Identity,
   contentId: string,
   channel: ChannelId,
   instruction: RewriteInstruction,
+  onSteps?: OnAiSteps,
 ): Promise<Content> {
   const { content, brand } = await inTransaction(deps, identity, async (db) => {
     const content = await requireContent(db, contentId);
     return { content, brand: await requireBrand(db, content.brandId) };
   });
-  const text = await rewriteVariant(deps.ai, aiMeta(identity, brand.id), { brand, content, channel, instruction, now: deps.now() });
+  const text = await rewriteVariant(deps.ai, aiMeta(identity, brand.id), { brand, content, channel, instruction, now: deps.now(), onSteps });
   if (!text) throw AI_FAILED();
   return updateVariantText(deps, identity, contentId, channel, text);
 }

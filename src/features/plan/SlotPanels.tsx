@@ -38,7 +38,8 @@ export function DayTimePicker({
   channel: ChannelId;
   onChange: (next: { date: string; time: string }) => void;
 }) {
-  const days = Array.from({ length: 14 }, (_, i) => addDays(today(), i + 1));
+  // Il giorno scelto c'è sempre, anche se è oggi o più in là delle due settimane proposte.
+  const days = [...new Set([date, ...Array.from({ length: 14 }, (_, i) => addDays(today(), i + 1))])].sort();
   const times = [...new Set([time, BEST_TIMES[channel].time, ...TIMES])].sort();
   return (
     <>
@@ -164,7 +165,15 @@ export function SlotSchedule({
 
       {(canMove || canChangeChannels) && (
         <LinkButton
-          label={editing ? 'Fatto' : canChangeChannels ? 'Cambia giorno o canali' : 'Sposta'}
+          label={
+            editing
+              ? 'Fatto'
+              : canMove && canChangeChannels
+                ? 'Cambia giorno o canali'
+                : canChangeChannels
+                  ? 'Cambia canali'
+                  : 'Sposta'
+          }
           onPress={() => setEditing(!editing)}
         />
       )}

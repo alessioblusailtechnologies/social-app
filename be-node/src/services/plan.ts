@@ -1,3 +1,4 @@
+import type { ChannelId } from '@/domain/brand';
 import {
   buildSkeleton,
   channelsWithIdea,
@@ -59,12 +60,20 @@ export function confirmPlan(deps: Deps, identity: Identity, brandId: string, dra
 }
 
 /** "Aggiungi al piano" da un'idea: riempie un'uscita vuota adatta o ne crea una. */
-export function addIdeaToPlan(deps: Deps, identity: Identity, brandId: string, ideaId: string): Promise<PlanSlot> {
+export function addIdeaToPlan(
+  deps: Deps,
+  identity: Identity,
+  brandId: string,
+  ideaId: string,
+  channels?: readonly ChannelId[],
+): Promise<PlanSlot> {
   return inTransaction(deps, identity, async (db) => {
     const now = deps.now();
     const brand = await requireBrand(db, brandId);
-    const idea = await requireIdea(db, ideaId);
-    if (idea.brandId !== brandId) throw ApiError.notFound('Idea non trovata.');
+    const found = await requireIdea(db, ideaId);
+    if (found.brandId !== brandId) throw ApiError.notFound('Idea non trovata.');
+    // I canali scelti da chi guarda l'idea vincono su quelli che l'idea si porta dietro.
+    const idea = channels && channels.length > 0 ? { ...found, channels: [...channels] } : found;
     const slots = await listSlots(db, brandId, now);
 
     const placement = placeIdea(brand, idea, slots, toDay(now));

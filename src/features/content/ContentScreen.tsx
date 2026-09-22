@@ -1,42 +1,41 @@
-import { useRouter } from 'expo-router';
-import { ChevronLeft } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ChevronLeft, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 
 import {
   Badge,
   Button,
-  Chip,
-  ChipGroup,
   FormScrollView,
   IconButton,
   KeyboardScreen,
   LinkButton,
   Panel,
+  ProgressSegments,
   ScreenFooter,
-  SegmentedControl,
+  ScreenTitle,
   SkeletonLines,
-  SunkenInput,
+  StepList,
   Text,
   TopBar,
   colors,
+  motion,
   screenStyles,
+  standardEasing,
   useToast,
 } from '@/design-system';
-import { currentVoiceCard, isConnected, type Brand, type ChannelId } from '@/domain/brand';
+import { isConnected, type Brand, type ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
-import { CHANNEL_LIMITS, checkVoice, REWRITE_INSTRUCTIONS, type Content } from '@/domain/content';
-import { FORMAT_LABELS, type IdeaFormat, type IdeaSource } from '@/domain/idea';
+import { channelsWithoutImage, type Content } from '@/domain/content';
+import { FORMAT_LABELS, type IdeaFormat } from '@/domain/idea';
 import { nextFreeDay, SLOT_STATUS_LABELS, type PlanSlot } from '@/domain/plan';
 import { channelsWaitingForVisual } from '@/domain/visual';
 import { ChannelMark } from '@/features/brand-editors';
 import { SLOT_TONES } from '@/features/plan/PlanParts';
-import { DayTimePicker, IdeaPicker, RemoveFromPlan, SlotSchedule } from '@/features/plan/SlotPanels';
-import { VisualPanel } from '@/features/visual/VisualPanel';
+import { IdeaPicker, RemoveFromPlan, SlotSchedule } from '@/features/plan/SlotPanels';
 import { formatWeekdayShort, today } from '@/lib/dates';
 import {
-  useApproveContent,
-  useEditVariant,
   useIdeas,
   usePlan,
   usePrepareContent,
@@ -46,15 +45,26 @@ import {
   useScheduleContent,
 } from '@/services/queries';
 
-import { PostPreview, ScenesPanel, VoicePanel } from './ContentParts';
+import {
+  CONTENT_STEPS,
+  RetouchBar,
+  ReviewStep,
+  TextStep,
+  VisualStep,
+  WhenStep,
+  describeBrief,
+  type ContentStep,
+  type WhenChoice,
+} from './ContentSteps';
 
 const FORMATS = Object.keys(FORMAT_LABELS) as IdeaFormat[];
 
-function describeBrief(brief: IdeaSource): string {
-  if (brief.kind === 'prompt') return brief.text;
-  if (brief.kind === 'link') return brief.note ? `${brief.url} · ${brief.note}` : brief.url;
-  return brief.note ? `${brief.name} · ${brief.note}` : brief.name;
-}
+const STEP_COPY: Record<ContentStep, { name: string; title: string }> = {
+  text: { name: 'Testo', title: 'Il testo' },
+  visual: { name: 'Visivo', title: 'Il visivo' },
+  when: { name: 'Quando', title: 'Quando esce' },
+  review: { name: 'Riepilogo', title: 'Ci siamo' },
+};
 
 function nowTime(): string {
   const now = new Date();
@@ -70,8 +80,8 @@ export interface ContentScreenProps {
 }
 
 /**
- * Tutto quello che riguarda un'uscita sta qui: giorno, canali e idea in testa,
- * poi la bozza da preparare, ritoccare e approvare.
+ * Un contenuto si fa in quattro passi: prima il testo, poi il visivo, poi quando esce
+ * (in calendario, subito, o per niente) e infine il riepilogo da confermare.
  */
 export function ContentScreen({ brand, slot, content: loaded, loading }: ContentScreenProps) {
   const router = useRouter();
@@ -80,16 +90,17 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
   const { data: planSlots = [] } = usePlan(brand.id);
   const prepare = usePrepareContent(brand.id);
   const regenerate = useRegenerateContent();
-  const approve = useApproveContent(brand.id);
   const schedule = useScheduleContent(brand.id);
   const reopen = useReopenContent(brand.id);
-  const editVariant = useEditVariant();
   const rewrite = useRewriteVariant();
 
+  // Il passo sta nell'indirizzo, non in uno stato locale: così non si perde se la schermata si rimonta.
+  const { step: stepParam } = useLocalSearchParams<{ step?: string }>();
+  const step = CONTENT_STEPS.includes(stepParam as ContentStep) ? (stepParam as ContentStep) : 'text';
+  const [direction, setDirection] = useState<1 | -1>(1);
   const [selectedChannel, setSelectedChannel] = useState<ChannelId | null>(null);
   const [editing, setEditing] = useState(false);
-  const [draftText, setDraftText] = useState('');
-  const [when, setWhen] = useState<{ date: string; time: string } | null>(null);
+  const [choice, setChoice] = useState<WhenChoice | null>(null);
   const [picking, setPicking] = useState(false);
 
   // Cambiata l'idea, la bozza vecchia resta in cache finché non si ricarica: non va mostrata.
@@ -101,44 +112,51 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
   const empty = slot !== null && slot.ideaId === null && !slot.contentTitle;
   const channels = slot?.channels ?? content?.channels ?? [];
   const channel = selectedChannel ?? channels[0];
-  const variant = content?.variants.find((candidate) => candidate.channel === channel) ?? content?.variants[0] ?? null;
   const format: IdeaFormat = content?.format ?? idea?.formats[0] ?? 'post';
-  const formatOptions = direct ? FORMATS : (idea?.formats ?? []);
+  const formats = direct ? FORMATS : (idea?.formats ?? []);
   const published = slot?.status === 'published';
   const approved = content?.status === 'approved';
   const locked = approved || published;
   const showPicker = slot !== null && !locked && (picking || empty);
   const busy = prepare.isPending || regenerate.isPending;
-  const unconnected = channels.filter((candidate) => !isConnected(brand.channels[candidate]));
-  const missing = content ? channels.filter((candidate) => !content.variants.some((v) => v.channel === candidate)) : [];
-  const text = editing ? draftText : (variant?.text ?? '');
-  const check = checkVoice(text, currentVoiceCard(brand.voice), variant ? CHANNEL_LIMITS[variant.channel] : undefined);
+  /** I passi dell'AI mentre scrive: vengono da chi dei due sta lavorando. */
+  const writingSteps = prepare.isPending ? prepare.steps : regenerate.steps;
   const channelNames = channels.map(channelName).join(' e ');
-  const slotWhen = slot ? `${formatWeekdayShort(slot.date)} alle ${slot.time}` : '';
+  const slotWhen = slot ? `${formatWeekdayShort(slot.date)} alle ${slot.time}` : 'bozza';
   const design = content?.visual.design ?? null;
-  // Instagram e TikTok non pubblicano senza immagine; gli altri canali possono uscire solo testo.
-  const waiting = content ? channelsWaitingForVisual(content.format, channels, design) : [];
+  // Instagram e TikTok non pubblicano senza immagine; gli altri canali possono uscire solo testo, se lo scegli.
+  const waiting = content ? channelsWaitingForVisual(content.format, channels, design, channelsWithoutImage(content)) : [];
   const creatingVisual = design?.status === 'creating';
-  const withoutImage = content !== null && content.format !== 'video' && design?.status !== 'ready' && waiting.length === 0;
-  const approvalBlocked = editing || busy || creatingVisual || waiting.length > 0;
-  const explainBlocked = () =>
-    toast(
-      editing
-        ? 'Salva prima il testo.'
-        : busy
-          ? 'Aspetta che la bozza sia pronta.'
-          : creatingVisual
-            ? 'Aspetta che il visivo sia pronto.'
-            : `${waiting.map(channelName).join(' e ')} non pubblica senza immagine: crea prima il visivo.`,
-    );
+  const unconnected = channels.filter((candidate) => !isConnected(brand.channels[candidate]));
+
+  // Approvato o pubblicato si guarda soltanto: il riepilogo racconta com'è uscito.
+  const current: ContentStep = locked ? 'review' : step;
+  const index = CONTENT_STEPS.indexOf(current);
+  const when: WhenChoice = choice ?? {
+    mode: 'schedule',
+    ...(slot ? { date: slot.date, time: slot.time } : nextFreeDay(planSlots, channels[0], today())),
+  };
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/plan'));
+
+  const goTo = (next: ContentStep) => {
+    setDirection(CONTENT_STEPS.indexOf(next) >= index ? 1 : -1);
+    router.setParams({ step: next });
+  };
+
+  const back = () => {
+    if (index === 0) {
+      close();
+      return;
+    }
+    goTo(CONTENT_STEPS[index - 1]);
+  };
 
   const redo = (nextFormat?: IdeaFormat) => {
     const options = {
       onSuccess: () => {
         setEditing(false);
-        toast(direct ? 'Bozza rifatta con un altro taglio.' : 'Bozza rifatta.');
+        toast(nextFormat ? 'Bozza rifatta con un altro taglio.' : 'Bozza rifatta.');
       },
       onError: () => toast('Non riesco a preparare la bozza. Riprova.'),
     };
@@ -147,48 +165,26 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
     else if (slot) prepare.mutate({ slotId: slot.id, format: nextFormat }, options);
   };
 
-  const saveEdit = () => {
-    if (!content || !variant) return;
-    editVariant.mutate(
-      { contentId: content.id, channel: variant.channel, text: draftText.trim() },
-      {
-        onSuccess: () => {
-          setEditing(false);
-          toast('Testo aggiornato.');
-        },
-        onError: () => toast('Modifica non salvata. Riprova.'),
-      },
-    );
-  };
-
   const manualReminder =
     unconnected.length > 0
       ? ` ${unconnected.map(channelName).join(' e ')} non è collegato: all’orario ti ricordo di pubblicarla a mano.`
       : '';
 
-  const approveInSlot = () => {
+  /** L'ultimo passo: il contenuto entra nel piano, esce subito, o resta com'è. */
+  const confirm = () => {
     if (!content) return;
-    approve.mutate(content.id, {
-      onSuccess: () => {
-        toast(`Programmata per ${slotWhen}.${manualReminder}`);
-        close();
-      },
-      onError: () => toast('Approvazione non riuscita. Riprova.'),
-    });
-  };
-
-  const openScheduling = () => setWhen(nextFreeDay(planSlots, channels[0], today()));
-
-  const confirmSchedule = (publishNow: boolean) => {
-    if (!content) return;
-    const target = publishNow ? { date: today(), time: nowTime() } : when;
-    if (!target) return;
+    if (when.mode === 'draft') {
+      toast(slot ? 'Resta nel piano da approvare.' : 'Salvata tra le bozze da programmare.');
+      close();
+      return;
+    }
+    const target = when.mode === 'now' ? { date: today(), time: nowTime() } : { date: when.date, time: when.time };
     schedule.mutate(
-      { contentId: content.id, ...target, publishNow },
+      { contentId: content.id, ...target, publishNow: when.mode === 'now' },
       {
         onSuccess: () => {
           toast(
-            publishNow
+            when.mode === 'now'
               ? `Pubblicata su ${channelNames}.`
               : `Programmata per ${formatWeekdayShort(target.date)} alle ${target.time}.${manualReminder}`,
           );
@@ -199,11 +195,121 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
     );
   };
 
+  /** Perché il passo non si può lasciare: nulla se si può andare avanti. */
+  const blocked: string | null = busy
+    ? 'Aspetta che la bozza sia pronta.'
+    : current === 'text'
+      ? editing
+        ? 'Salva prima il testo.'
+        : null
+      : current === 'visual'
+        ? creatingVisual
+          ? 'Aspetta che il visivo sia pronto.'
+          : waiting.length > 0
+            ? `${waiting.map(channelName).join(' e ')} non pubblica senza immagine: crea prima il visivo.`
+            : null
+        : null;
+
+  /** L'azione del passo: manca solo mentre si sceglie l'idea e su un'uscita già pubblicata. */
+  const footer = showPicker || loading ? null : current === 'text' ? (
+    content ? (
+      // Un solo pulsante, nello stesso posto in tutti i passi: «Rifai la bozza» sta nella barra dei ritocchi.
+      <Button
+        size="lg"
+        block
+        disabled={blocked !== null}
+        onDisabledPress={() => blocked && toast(blocked)}
+        onPress={() => goTo('visual')}>
+        Continua col visivo
+      </Button>
+    ) : idea ? (
+      <Button size="lg" block busy={prepare.isPending} onPress={() => redo()}>
+        {prepare.isPending ? 'Sto scrivendo…' : 'Prepara la bozza'}
+      </Button>
+    ) : null
+  ) : !content ? null : current === 'visual' ? (
+    <>
+      {waiting.length === 0 && content.format !== 'video' && design?.status !== 'ready' && (
+        <Text variant="caption" align="center">
+          Esce senza immagine: il visivo non è ancora creato.
+        </Text>
+      )}
+      <Button
+        size="lg"
+        block
+        disabled={blocked !== null}
+        onDisabledPress={() => blocked && toast(blocked)}
+        onPress={() => goTo('when')}>
+        {waiting.length > 0 ? 'Crea prima il visivo' : 'Continua'}
+      </Button>
+    </>
+  ) : current === 'when' ? (
+    <Button size="lg" block onPress={() => goTo('review')}>
+      Continua
+    </Button>
+  ) : !locked ? (
+    <Button size="lg" block variant="accent" busy={schedule.isPending} onPress={confirm}>
+      {schedule.isPending
+        ? 'Ci penso io…'
+        : when.mode === 'now'
+          ? 'Pubblica adesso'
+          : when.mode === 'draft'
+            ? 'Salva senza pubblicare'
+            : `Programma per ${formatWeekdayShort(when.date)} alle ${when.time}`}
+    </Button>
+  ) : published ? null : (
+    <Button
+      size="lg"
+      block
+      variant="secondary"
+      busy={reopen.isPending}
+      onPress={() =>
+        reopen.mutate(content.id, {
+          onSuccess: () => {
+            goTo('text');
+            toast('Di nuovo in bozza: la richiudi quando è pronta.');
+          },
+          onError: () => toast('Non riesco a riaprire la bozza. Riprova.'),
+        })
+      }>
+      Riapri la bozza
+    </Button>
+  );
+
+  const stepTitle = STEP_COPY[current].title;
+  const subtitle = busy
+    ? 'Sto rifacendo la bozza: un attimo e torni dov’eri.'
+    : current === 'text'
+      ? content
+        ? 'Ritocca quello che non ti torna: chiedimelo a parole o scrivilo tu.'
+        : `Scrivo il testo per ${channelNames} seguendo la tua scheda voce.`
+      : current === 'visual'
+        ? content?.format === 'video'
+          ? 'Le scene del video, con quelle che genero io e quelle da girare.'
+          : 'La card che accompagna il testo, con i colori e i caratteri del brand.'
+        : current === 'when'
+          ? 'Mettila in calendario, falla uscire adesso, oppure tienila da parte.'
+          : locked
+            ? published
+              ? 'È uscita così.'
+              : 'È in calendario. La riapri quando vuoi.'
+            : 'Un ultimo sguardo, poi la chiudiamo.';
+
   return (
     <KeyboardScreen>
       <TopBar
-        left={<IconButton icon={ChevronLeft} accessibilityLabel="Indietro" onPress={close} />}
-        title="Contenuto"
+        left={
+          locked ? (
+            <IconButton icon={X} accessibilityLabel="Chiudi" onPress={close} />
+          ) : (
+            <IconButton
+              icon={index === 0 ? X : ChevronLeft}
+              accessibilityLabel={index === 0 ? 'Chiudi' : 'Passo precedente'}
+              onPress={back}
+            />
+          )
+        }
+        title={locked ? 'Contenuto' : `Passo ${index + 1} di ${CONTENT_STEPS.length} · ${STEP_COPY[current].name}`}
         right={
           slot ? (
             <Badge tone={SLOT_TONES[slot.status]} size="sm">
@@ -214,311 +320,175 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
               Bozza
             </Badge>
           )
-        }
-      />
+        }>
+        {!locked && <ProgressSegments count={CONTENT_STEPS.length} current={index} />}
+      </TopBar>
 
-      <FormScrollView contentContainerStyle={screenStyles.content}>
-        <Panel gap={10}>
-          {slot ? (
-            <SlotSchedule brand={brand} slot={slot} canMove={!published} canChangeChannels={!locked && !direct} />
-          ) : (
-            <View style={styles.row}>
-              <Text variant="strongSmall" style={styles.flex}>
-                Non ancora programmato
-              </Text>
-              <View style={styles.marks}>
-                {channels.map((candidate) => (
-                  <ChannelMark key={candidate} channel={candidate} active size={24} />
-                ))}
-              </View>
-            </View>
+      <FormScrollView key={current} contentContainerStyle={screenStyles.content}>
+        <Animated.View
+          entering={(direction === 1 ? FadeInRight : FadeInLeft).duration(motion.slow).easing(standardEasing)}
+          style={styles.body}>
+          <ScreenTitle title={stepTitle} subtitle={subtitle} />
+
+          {/* Mentre la bozza si scrive i passi si vedono nel passo in cui sei: il lavoro segue te, non il contrario. */}
+          {busy && !empty && (
+            <Panel gap={12}>
+              <StepList steps={writingSteps} waiting="Rileggo il profilo" />
+            </Panel>
           )}
-          {idea && !showPicker && (
-            <View style={styles.origin}>
-              <Text variant="label">Dall’idea</Text>
-              <Text variant="strong">{idea.title}</Text>
-              <View style={styles.links}>
-                <LinkButton
-                  label="Apri l’idea"
-                  onPress={() => router.push({ pathname: '/idea/[id]', params: { id: idea.id } })}
+
+          {current === 'text' && !busy && (
+            <>
+              <Panel gap={10}>
+                {slot ? (
+                  <SlotSchedule brand={brand} slot={slot} canMove={false} canChangeChannels={!locked && !direct} />
+                ) : (
+                  <View style={styles.row}>
+                    <Text variant="strongSmall" style={styles.flex}>
+                      Non ancora programmato
+                    </Text>
+                    <View style={styles.marks}>
+                      {channels.map((candidate) => (
+                        <ChannelMark key={candidate} channel={candidate} active size={24} />
+                      ))}
+                    </View>
+                  </View>
+                )}
+                {idea && !showPicker && (
+                  <View style={styles.origin}>
+                    <Text variant="label">Dall’idea</Text>
+                    <Text variant="strong">{idea.title}</Text>
+                    <View style={styles.links}>
+                      <LinkButton
+                        label="Apri l’idea"
+                        onPress={() => router.push({ pathname: '/idea/[id]', params: { id: idea.id } })}
+                      />
+                      {slot && !locked && <LinkButton label="Cambia idea" onPress={() => setPicking(true)} />}
+                    </View>
+                  </View>
+                )}
+                {!idea && content?.brief && (
+                  <View style={styles.origin}>
+                    <Text variant="label">Dalla tua richiesta</Text>
+                    <Text variant="body" color={colors.textTitle} numberOfLines={4}>
+                      {describeBrief(content.brief)}
+                    </Text>
+                  </View>
+                )}
+              </Panel>
+
+              {showPicker && slot && (
+                <IdeaPicker
+                  brand={brand}
+                  slot={slot}
+                  hasDraft={content !== null}
+                  onCancel={empty ? undefined : () => setPicking(false)}
+                  onDone={() => setPicking(false)}
                 />
-                {slot && !locked && <LinkButton label="Cambia idea" onPress={() => setPicking(true)} />}
-              </View>
-            </View>
-          )}
-          {!idea && content?.brief && (
-            <View style={styles.origin}>
-              <Text variant="label">Dalla tua richiesta</Text>
-              <Text variant="body" color={colors.textTitle} numberOfLines={4}>
-                {describeBrief(content.brief)}
-              </Text>
-            </View>
-          )}
-        </Panel>
+              )}
 
-        {showPicker && slot && (
-          <IdeaPicker
-            brand={brand}
-            slot={slot}
-            hasDraft={content !== null}
-            onCancel={empty ? undefined : () => setPicking(false)}
-            onDone={() => setPicking(false)}
-          />
-        )}
+              {loading && !empty && (
+                <Panel gap={12}>
+                  <Text variant="strongSmall">Carico la bozza</Text>
+                  <SkeletonLines widths={[96, 88, 100, 72, 60]} />
+                </Panel>
+              )}
 
-        {(loading || busy) && !empty && (
-          <Panel gap={12}>
-            <Text variant="strongSmall">{busy ? `Sto scrivendo per ${channelNames}` : 'Carico la bozza'}</Text>
-            <SkeletonLines widths={[96, 88, 100, 72, 60]} />
-          </Panel>
-        )}
+              {!loading && !busy && !content && idea && !showPicker && (
+                <Panel label="Da preparare" gap={10}>
+                  <Text variant="body" color={colors.textTitle}>
+                    Scrivo il testo per {channelNames} seguendo la tua scheda voce. Il visivo lo vediamo al passo dopo.
+                  </Text>
+                  {formats.length > 1 && (
+                    <Text variant="caption">Formato: {FORMAT_LABELS[format]}. Potrai cambiarlo dopo.</Text>
+                  )}
+                </Panel>
+              )}
 
-        {!loading && !busy && !content && idea && !showPicker && (
-          <Panel label="Da preparare" gap={10}>
-            <Text variant="body" color={colors.textTitle}>
-              Scrivo il testo per {channelNames} seguendo la tua scheda voce e preparo il visivo del formato.
-            </Text>
-            {idea.formats.length > 1 && <Text variant="caption">Formato: {FORMAT_LABELS[format]}. Potrai cambiarlo dopo.</Text>}
-          </Panel>
-        )}
-
-        {content && variant && !busy && (
-          <>
-            {channels.length > 1 && (
-              <SegmentedControl
-                accessibilityLabel="Canale"
-                value={channel}
-                onChange={(next) => {
-                  setEditing(false);
-                  setSelectedChannel(next);
-                }}
-                options={channels.map((candidate) => ({ value: candidate, label: channelName(candidate) }))}
-              />
-            )}
-
-            {missing.length > 0 && !locked && (
-              <Panel gap={6}>
-                <Text variant="caption" color={colors.textTitle}>
-                  La bozza non include {missing.map(channelName).join(' e ')}: rifalla per aggiungerli.
-                </Text>
-                <LinkButton label="Rifai la bozza" onPress={() => redo()} />
-              </Panel>
-            )}
-
-            {editing ? (
-              <Panel label={`Testo per ${channelName(variant.channel)}`} gap={10}>
-                <SunkenInput
-                  multiline
-                  minHeight={220}
-                  value={draftText}
-                  onChangeText={setDraftText}
-                  autoFocus
-                  accessibilityLabel={`Testo per ${channelName(variant.channel)}`}
+              {content && !busy && !showPicker && (
+                <TextStep
+                  brand={brand}
+                  content={content}
+                  channels={channels}
+                  channel={channel}
+                  onChannel={setSelectedChannel}
+                  onRedo={redo}
+                  locked={locked}
+                  editing={editing}
+                  onEditing={setEditing}
+                  when={slotWhen}
+                  rewriting={rewrite.isPending}
+                  steps={rewrite.steps}
                 />
-                <Text
-                  variant="caption"
-                  color={draftText.length > CHANNEL_LIMITS[variant.channel] ? colors.warning : colors.textBody}>
-                  {draftText.length}/{CHANNEL_LIMITS[variant.channel]} caratteri
-                </Text>
-                <View style={styles.actions}>
-                  <Button size="sm" variant="ghost" onPress={() => setEditing(false)}>
-                    Annulla
-                  </Button>
-                  <Button size="sm" busy={editVariant.isPending} disabled={!draftText.trim()} onPress={saveEdit}>
-                    Salva il testo
-                  </Button>
+              )}
+
+              {slot && !published && !loading && (
+                <View style={styles.remove}>
+                  <RemoveFromPlan brand={brand} slot={slot} direct={direct} onRemoved={close} />
                 </View>
-              </Panel>
-            ) : (
-              <PostPreview
-                brand={brand}
-                variant={variant}
-                format={content.format}
-                visual={content.visual}
-                when={slot ? slotWhen : 'bozza'}
-              />
-            )}
+              )}
+            </>
+          )}
 
-            {!locked && !editing && (
-              <Panel label="Ritocca" gap={10}>
-                <ChipGroup>
-                  {REWRITE_INSTRUCTIONS.map((instruction) => (
-                    <Chip
-                      key={instruction}
-                      size="sm"
-                      label={instruction}
-                      onPress={() =>
-                        !rewrite.isPending &&
-                        rewrite.mutate(
-                          { contentId: content.id, channel: variant.channel, instruction },
-                          {
-                            onSuccess: () => toast(`Riscritto: ${instruction.toLowerCase()}.`),
-                            onError: () => toast('Riscrittura non riuscita. Riprova.'),
-                          },
-                        )
-                      }
-                    />
-                  ))}
-                </ChipGroup>
-                <View style={styles.links}>
-                  <LinkButton
-                    label="Modifica il testo a mano"
-                    onPress={() => {
-                      setDraftText(variant.text);
-                      setEditing(true);
-                    }}
-                  />
-                  {rewrite.isPending && <Text variant="caption">Riscrivo…</Text>}
-                </View>
-              </Panel>
-            )}
+          {current === 'visual' && content && !busy && (
+            <VisualStep
+              brand={brand}
+              content={content}
+              channels={channels}
+              channel={channel}
+              onChannel={setSelectedChannel}
+              locked={locked}
+            />
+          )}
 
-            <VisualPanel brand={brand} content={content} locked={locked} />
+          {current === 'when' && content && (
+            <WhenStep brand={brand} content={content} channels={channels} slot={slot} choice={when} onChoice={setChoice} />
+          )}
 
-            <VoicePanel check={check} />
-
-            {content.format === 'video' && <ScenesPanel scenes={content.visual.scenes} />}
-
-            {!locked && formatOptions.length > 1 && (
-              <Panel label="Formato" gap={8}>
-                <ChipGroup>
-                  {formatOptions.map((candidate) => (
-                    <Chip
-                      key={candidate}
-                      size="sm"
-                      label={FORMAT_LABELS[candidate]}
-                      selected={candidate === content.format}
-                      onPress={() => candidate !== content.format && redo(candidate)}
-                    />
-                  ))}
-                </ChipGroup>
-                <Text variant="caption">Cambiare formato rifà la bozza.</Text>
-              </Panel>
-            )}
-
-            {when && !content.slotId && !locked && (
-              <Panel label="Quando esce" gap={10}>
-                <DayTimePicker date={when.date} time={when.time} channel={channels[0]} onChange={setWhen} />
-                <Text variant="caption">
-                  Ti propongo il primo giorno libero adatto a {channelName(channels[0])}. Entra nel piano come le altre uscite.
-                </Text>
-              </Panel>
-            )}
-
-            {locked && slot && (
-              <Panel label={published ? 'Pubblicata' : 'Programmata'} gap={6}>
-                <Text variant="body" color={colors.textTitle}>
-                  {published ? `Uscita ${slotWhen} su ${channelNames}.` : `Esce ${slotWhen} su ${channelNames}.`}
-                </Text>
-                {!published && manualReminder ? <Text variant="caption">{manualReminder.trim()}</Text> : null}
-              </Panel>
-            )}
-          </>
-        )}
-
-        {slot && !published && !loading && (
-          <View style={styles.remove}>
-            <RemoveFromPlan brand={brand} slot={slot} direct={direct} onRemoved={close} />
-          </View>
-        )}
+          {current === 'review' && content && (
+            <ReviewStep
+              brand={brand}
+              content={content}
+              channels={channels}
+              slot={slot}
+              channel={channel}
+              choice={when}
+              locked={locked}
+              onEdit={goTo}
+            />
+          )}
+        </Animated.View>
       </FormScrollView>
 
-      {!published && !loading && !showPicker && (idea || content) && (
-        <ScreenFooter>
-          {!content && (
-            <Button size="lg" block busy={prepare.isPending} onPress={() => redo()}>
-              {prepare.isPending ? 'Sto preparando la bozza…' : 'Prepara la bozza'}
-            </Button>
-          )}
-
-          {content && !approved && content.slotId && (
-            <>
-              {withoutImage && (
-                <Text variant="caption" align="center">
-                  Esce senza immagine: il visivo non è ancora creato.
-                </Text>
-              )}
-              <Button
-                size="lg"
-                block
-                variant="accent"
-                disabled={approvalBlocked}
-                busy={approve.isPending}
-                onDisabledPress={explainBlocked}
-                onPress={approveInSlot}>
-                {approve.isPending ? 'Programmo…' : waiting.length > 0 ? 'Crea prima il visivo' : 'Approva e programma'}
-              </Button>
-              <Button variant="ghost" block busy={busy} onPress={() => redo()}>
-                Rifai la bozza
-              </Button>
-            </>
-          )}
-
-          {content && !approved && !content.slotId && !when && (
-            <>
-              {withoutImage && (
-                <Text variant="caption" align="center">
-                  Esce senza immagine: il visivo non è ancora creato.
-                </Text>
-              )}
-              <Button
-                size="lg"
-                block
-                variant="accent"
-                disabled={approvalBlocked}
-                onDisabledPress={explainBlocked}
-                onPress={openScheduling}>
-                {waiting.length > 0 ? 'Crea prima il visivo' : 'Approva e scegli quando'}
-              </Button>
-              <Button variant="ghost" block busy={busy} onPress={() => redo()}>
-                Rifai la bozza
-              </Button>
-            </>
-          )}
-
-          {content && !approved && !content.slotId && when && (
-            <>
-              <Button size="lg" block variant="accent" busy={schedule.isPending} onPress={() => confirmSchedule(false)}>
-                {schedule.isPending ? 'Programmo…' : `Programma per ${formatWeekdayShort(when.date)} alle ${when.time}`}
-              </Button>
-              <View style={styles.actions}>
-                <Button variant="ghost" onPress={() => setWhen(null)}>
-                  Annulla
-                </Button>
-                <Button variant="secondary" busy={schedule.isPending} onPress={() => confirmSchedule(true)}>
-                  Pubblica adesso
-                </Button>
-              </View>
-            </>
-          )}
-
-          {content && approved && (
-            <Button
-              size="lg"
-              block
-              variant="secondary"
-              busy={reopen.isPending}
-              onPress={() =>
-                reopen.mutate(content.id, {
-                  onSuccess: () => toast('Di nuovo in bozza: approvala quando è pronta.'),
-                  onError: () => toast('Non riesco a riaprire la bozza. Riprova.'),
-                })
-              }>
-              Riapri la bozza
-            </Button>
-          )}
-        </ScreenFooter>
+      {current === 'text' && content && !showPicker && !busy && !locked && (
+        <RetouchBar
+          busy={rewrite.isPending}
+          editing={editing}
+          onManual={() => setEditing(true)}
+          onRedo={() => redo()}
+          onAsk={(instruction) =>
+            rewrite.mutate(
+              { contentId: content.id, channel, instruction },
+              {
+                onSuccess: () => toast('Testo rivisto.'),
+                onError: () => toast('Non riesco a rivedere il testo. Riprova.'),
+              },
+            )
+          }
+        />
       )}
+
+      {footer && <ScreenFooter>{footer}</ScreenFooter>}
     </KeyboardScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  body: { gap: 14 },
   flex: { flex: 1, minWidth: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   marks: { flexDirection: 'row', gap: 4 },
   origin: { gap: 4, borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingTop: 10 },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
   links: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 18 },
   remove: { alignItems: 'center' },
 });

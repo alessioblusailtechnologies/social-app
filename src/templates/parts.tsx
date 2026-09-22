@@ -9,36 +9,29 @@ import {
   type ReactNode,
 } from 'react';
 
-import { SAFE_AREAS, contrastRatio, isDark, type Aspect, type BrandKit } from '@/domain/visual';
+import { mixHex, type Aspect, type BrandKit, type KitFace } from '@/domain/visual';
 
 import { useFontsReady } from './fonts';
+
+/**
+ * I pezzi della tavola, come nel generatore delle card di assieme: un fondo solo, la rubrica in alto a sinistra in
+ * maiuscole spaziate, il blocco del testo, il piede con il filetto, la firma a sinistra e la pagina o l'indirizzo a
+ * destra. Colori e caratteri vengono tutti dalla linea del brand (`kit.line`).
+ */
 
 /** Le immagini: `img` nell'app, `Img` di Remotion sul server, che aspetta il caricamento prima dello scatto. */
 export const ImageElement = createContext<ElementType>('img');
 
-const SERIF = /serif|playfair|fraunces/i;
-
-function family(face: BrandKit['heading']): string {
-  return `"${face.family}", ${SERIF.test(face.family) ? 'Georgia, serif' : 'system-ui, sans-serif'}`;
+export function faceStyle(face: KitFace): CSSProperties {
+  return { fontFamily: face.stack, fontWeight: face.weight, fontStyle: face.italic ? 'italic' : 'normal' };
 }
 
-export function headingFont(kit: BrandKit): CSSProperties {
-  return {
-    fontFamily: family(kit.heading),
-    fontWeight: kit.heading.weight,
-    letterSpacing: SERIF.test(kit.heading.family) ? '-0.01em' : '-0.025em',
-  };
-}
+const SERIF = /Georgia, serif$/;
 
-export function bodyFont(kit: BrandKit): CSSProperties {
-  return { fontFamily: family(kit.body), fontWeight: 400 };
-}
-
-/** I testi si disegnano a 1080 px di larghezza; in orizzontale la card è bassa e scala tutto. */
-export function textScale(aspect: Aspect): number {
-  if (aspect === '1.91:1') return 0.6;
-  if (aspect === '1:1') return 0.9;
-  return 1;
+/** La voce: le frasi grandi. Il serif respira un po' di più, il bastone si stringe. */
+export function voiceStyle(face: KitFace): CSSProperties {
+  const serif = SERIF.test(face.stack);
+  return { ...faceStyle(face), lineHeight: serif ? 1.14 : 1.08, letterSpacing: serif ? '-0.005em' : '-0.022em', margin: 0 };
 }
 
 export function alpha(hex: string, opacity: number): string {
@@ -46,18 +39,42 @@ export function alpha(hex: string, opacity: number): string {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
-/** Un colore del brand che si distingue dal fondo, per le forme. */
-export function shapeColor(kit: BrandKit, background: string, order: (keyof BrandKit['colors'])[]): string {
-  for (const key of order) {
-    if (contrastRatio(kit.colors[key], background) >= 1.35) return kit.colors[key];
+/** La griglia della tavola sul formato vero: margini, dove sta la rubrica, dove si chiude il piede. */
+export interface Grid {
+  /** Scala dei corpi: i testi sono pensati a 1080 px, il formato orizzontale è basso. */
+  k: number;
+  side: number;
+  top: number;
+  bottom: number;
+  /** Testo e immagine affiancati invece che uno sopra l'altro. */
+  wide: boolean;
+}
+
+export function gridFor(aspect: Aspect): Grid {
+  switch (aspect) {
+    case '1:1':
+      return { k: 1, side: 90, top: 84, bottom: 62, wide: false };
+    case '9:16':
+      // In alto e in basso l'interfaccia di TikTok e delle storie copre la card.
+      return { k: 1, side: 96, top: 250, bottom: 380, wide: false };
+    case '1.91:1':
+      return { k: 0.6, side: 64, top: 44, bottom: 36, wide: true };
+    default:
+      return { k: 1, side: 90, top: 96, bottom: 74, wide: false };
   }
-  return isDark(background) ? '#FFFFFF' : '#15171F';
+}
+
+/** Il corpo della frase dalla sua lunghezza, come i punti scelti a mano per ogni tavola; poi `FitBlock` la fa entrare. */
+export function voiceSize(text: string, k: number, cap = 108): number {
+  const n = text.trim().length;
+  const size = n <= 20 ? 108 : n <= 36 ? 94 : n <= 60 ? 78 : n <= 90 ? 66 : n <= 130 ? 56 : 48;
+  return Math.min(size, cap) * k;
 }
 
 /**
- * Testo che si adatta al suo riquadro: parte dal corpo massimo e scende finché non entra,
- * fino al minimo. Il riquadro deve avere un'altezza (flex o misura), altrimenti cresce col testo.
- * Dentro i figli le misure in `em` seguono il corpo scelto.
+ * Testo che si adatta al suo riquadro: parte dal corpo massimo e scende finché non entra, fino al minimo. Il
+ * riquadro deve avere un'altezza (flex o misura), altrimenti cresce col testo. Dentro, le misure in `em` seguono il
+ * corpo scelto.
  */
 export function FitBlock({
   max,
@@ -115,65 +132,55 @@ export function FitBlock({
   );
 }
 
-export type ShapeKind = 'circle' | 'half' | 'quarter' | 'leaf' | 'donut' | 'dot';
-
-/** Le forme del sistema geometrico, come nel PatternGrid dell'app. Mai un simbolo con un significato. */
-export function Shape({
-  kind,
-  color,
+/** Rubrica, numeri, pagina: il carattere delle etichette, in maiuscolo, spaziato lettera per lettera se la linea lo vuole. */
+export function Label({
+  text,
+  kit,
   size,
-  rotate = 0,
+  color,
+  upper = true,
   style,
 }: {
-  kind: ShapeKind;
-  color: string;
-  size: number | string;
-  rotate?: number;
+  text: string;
+  kit: BrandKit;
+  size: number;
+  color?: string;
+  upper?: boolean;
   style?: CSSProperties;
 }) {
-  let shape: ReactNode;
-  switch (kind) {
-    case 'circle':
-      shape = <circle cx={50} cy={50} r={50} fill={color} />;
-      break;
-    case 'dot':
-      shape = <circle cx={50} cy={50} r={20} fill={color} />;
-      break;
-    case 'donut':
-      shape = <path fillRule="evenodd" fill={color} d="M50 0a50 50 0 1 1 0 100a50 50 0 1 1 0-100zm0 27a23 23 0 1 0 0 46a23 23 0 1 0 0-46z" />;
-      break;
-    case 'quarter':
-      shape = <path fill={color} d="M0 100A100 100 0 0 1 100 0V100Z" />;
-      break;
-    case 'leaf':
-      shape = <path fill={color} d="M0 100A100 100 0 0 1 100 0A100 100 0 0 1 0 100Z" />;
-      break;
-    case 'half':
-      shape = <path fill={color} d="M0 100V50A50 50 0 0 1 100 50V100Z" />;
-      break;
-  }
+  if (!text) return null;
+  const { label, tones } = kit.line;
   return (
-    <svg
-      viewBox="0 0 100 100"
-      width={size}
-      height={size}
-      aria-hidden
-      style={{ display: 'block', flex: 'none', transform: rotate ? `rotate(${rotate}deg)` : undefined, ...style }}>
-      {shape}
-    </svg>
+    <div
+      style={{
+        ...faceStyle(label),
+        flex: 'none',
+        fontSize: size,
+        lineHeight: 1.2,
+        letterSpacing: upper ? (label.spaced ? '0.42em' : '0.14em') : '0.04em',
+        textTransform: upper ? 'uppercase' : 'none',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        color: color ?? tones.accent,
+        ...style,
+      }}>
+      {text}
+    </div>
   );
 }
 
-/** Una foto a tutto riquadro, con il trattamento del brand. Senza foto, un fondo neutro coi colori del brand. */
+/** Una foto a tutto riquadro, con il trattamento del brand. Senza foto, una luce morbida nei colori della linea. */
 export function Photo({ url, kit, position = 'center' }: { url: string | null; kit: BrandKit; position?: string }) {
   const Img = useContext(ImageElement);
+  const { tones } = kit.line;
   if (!url) {
     return (
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          background: `linear-gradient(145deg, ${alpha(kit.colors.secondary, 0.55)}, ${alpha(kit.colors.primary, 0.85)})`,
+          background: `radial-gradient(120% 90% at 70% 30%, ${mixHex(tones.accent, tones.ground, 0.35)}, ${mixHex(tones.ink, tones.ground, 0.9)} 70%)`,
         }}
       />
     );
@@ -190,17 +197,42 @@ export function Photo({ url, kit, position = 'center' }: { url: string | null; k
           display: 'block',
           objectFit: 'cover',
           objectPosition: position,
-          filter: desaturated ? 'grayscale(1) contrast(1.08)' : 'saturate(0.96)',
+          filter: desaturated ? 'grayscale(1) contrast(1.08)' : 'saturate(0.94)',
         }}
       />
       {desaturated && (
-        <div style={{ position: 'absolute', inset: 0, background: kit.colors.primary, mixBlendMode: 'soft-light', opacity: 0.6 }} />
+        <div style={{ position: 'absolute', inset: 0, background: tones.ground, mixBlendMode: 'soft-light', opacity: 0.55 }} />
       )}
     </div>
   );
 }
 
-/** Il soggetto scontornato, appoggiato al bordo in basso. */
+/**
+ * La fascia fotografica delle aperture: la foto nasce dal fondo, piena in alto e velata in basso. In orizzontale sta
+ * a destra e nasce dal fondo a sinistra.
+ */
+export function Band({ url, kit, size, side = false }: { url: string | null; kit: BrandKit; size: string; side?: boolean }) {
+  const { ground } = kit.line.tones;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        ...(side ? { top: 0, right: 0, bottom: 0, width: size } : { left: 0, right: 0, bottom: 0, height: size }),
+        overflow: 'hidden',
+      }}>
+      <Photo url={url} kit={kit} position={side ? 'center' : 'center 62%'} />
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: `linear-gradient(to ${side ? 'right' : 'bottom'}, ${ground} 0%, ${alpha(ground, 0.62)} 30%, ${alpha(ground, 0.28)} 100%)`,
+        }}
+      />
+    </div>
+  );
+}
+
+/** Il soggetto scontornato, appoggiato al piede. */
 export function Cutout({ url, kit, style }: { url: string | null; kit: BrandKit; style: CSSProperties }) {
   const Img = useContext(ImageElement);
   if (!url) return null;
@@ -210,29 +242,20 @@ export function Cutout({ url, kit, style }: { url: string | null; kit: BrandKit;
       alt=""
       style={{
         position: 'absolute',
-        bottom: 0,
         objectFit: 'contain',
         objectPosition: 'right bottom',
-        filter: `${kit.treatment === 'desaturated' ? 'grayscale(1) contrast(1.06) ' : ''}drop-shadow(0 28px 44px rgba(0, 0, 0, 0.28))`,
+        filter: `${kit.treatment === 'desaturated' ? 'grayscale(1) contrast(1.06) ' : ''}drop-shadow(0 24px 40px rgba(0, 0, 0, 0.26))`,
         ...style,
       }}
     />
   );
 }
 
-/** Il riquadro della card, con i margini di sicurezza del formato. */
-export function Frame({
-  aspect,
-  background,
-  children,
-  style,
-}: {
-  aspect: Aspect;
-  background: string;
-  children: ReactNode;
-  style?: CSSProperties;
-}) {
-  const safe = SAFE_AREAS[aspect];
+/**
+ * Il riquadro della tavola, coi margini del formato. Il fondo lo dipinge la card sotto ogni tavola: il riquadro resta
+ * trasparente e lascia vedere fascia, foto e soggetto disegnati prima.
+ */
+export function Frame({ grid, children, style }: { grid: Grid; kit: BrandKit; children: ReactNode; style?: CSSProperties }) {
   return (
     <div
       style={{
@@ -241,8 +264,7 @@ export function Frame({
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
-        padding: `${safe.top}px ${safe.right}px ${safe.bottom}px ${safe.left}px`,
-        background,
+        padding: `${grid.top}px ${grid.side}px ${grid.bottom}px`,
         ...style,
       }}>
       {children}
@@ -250,89 +272,135 @@ export function Frame({
   );
 }
 
-export function Kicker({ text, color, kit, scale, style }: { text: string; color: string; kit: BrandKit; scale: number; style?: CSSProperties }) {
-  if (!text) return null;
+/** In alto: la rubrica a sinistra, se la linea la mostra, e sulle aperture senza piede la pagina a destra. */
+export function Header({ kit, grid, kicker, page }: { kit: BrandKit; grid: Grid; kicker: string; page?: string }) {
+  const rubric = kit.line.kicker ? kicker : '';
+  if (!rubric && !page) return null;
   return (
-    <div
-      style={{
-        ...bodyFont(kit),
-        flex: 'none',
-        fontWeight: 600,
-        fontSize: 30 * scale,
-        lineHeight: 1.2,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        color,
-        ...style,
-      }}>
-      {text}
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 24, flex: 'none', position: 'relative' }}>
+      <Label text={rubric} kit={kit} size={23 * grid.k} style={{ minWidth: 0 }} />
+      {page ? <Label text={page} kit={kit} size={21 * grid.k} color={kit.line.tones.muted} upper={false} /> : null}
     </div>
   );
 }
 
-/** Il logo del brand: su un fondo scuro sta dentro una capsula chiara, così si legge sempre. */
-export function Logo({ kit, background, height }: { kit: BrandKit; background: string; height: number }) {
+/** Il marchio in basso a destra: il logo, o l'iniziale del brand in un quadrato d'inchiostro. */
+function Mark({ kit, size }: { kit: BrandKit; size: number }) {
+  const { tones, title, monogram } = kit.line;
+  if (kit.signature && kit.logoUrl) return <LogoTile kit={kit} size={size} />;
+  return (
+    <span
+      style={{
+        ...faceStyle(title),
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: 'none',
+        width: size,
+        height: size,
+        borderRadius: size * 0.16,
+        background: tones.ink,
+        color: tones.ground,
+        fontSize: size * 0.62,
+        fontStyle: 'normal',
+        lineHeight: 1,
+      }}>
+      {monogram}
+    </span>
+  );
+}
+
+/** «2/5» nei caroselli, niente nei post singoli. */
+export function pageLabel(pageIndex: number, pageCount: number): string {
+  return pageCount > 1 ? `${pageIndex + 1}/${pageCount}` : '';
+}
+
+/** Il logo in piccolo, in una tessera chiara: si legge su ogni fondo, qualunque file sia. */
+function LogoTile({ kit, size }: { kit: BrandKit; size: number }) {
   const Img = useContext(ImageElement);
   if (!kit.signature || !kit.logoUrl) return null;
-  const chip = isDark(background);
   return (
     <span
       style={{
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'center',
         flex: 'none',
-        padding: chip ? `${height * 0.16}px ${height * 0.22}px` : 0,
-        borderRadius: height * 0.26,
-        background: chip ? '#FFFFFF' : 'transparent',
+        width: size,
+        height: size,
+        borderRadius: size * 0.22,
+        background: '#FFFFFF',
+        overflow: 'hidden',
       }}>
-      <Img
-        src={kit.logoUrl}
-        alt=""
-        style={{ display: 'block', height: chip ? height * 0.68 : height, maxWidth: height * 3.6, objectFit: 'contain' }}
-      />
+      <Img src={kit.logoUrl} alt="" style={{ display: 'block', width: size * 0.84, height: size * 0.84, objectFit: 'contain' }} />
     </span>
   );
 }
 
-/** In fondo alla card: a sinistra il contatore del carosello, a destra la firma. */
+/**
+ * Il piede, come lo vuole la linea: il filetto con la firma a sinistra (col logo, se c'è) e la pagina o l'indirizzo
+ * a destra; oppure solo il marchio in basso a destra; oppure niente. La pagina dei caroselli c'è sempre.
+ */
 export function Footer({
   kit,
-  ink,
-  background,
+  grid,
   pageIndex,
   pageCount,
-  scale,
-  logo = true,
+  rule = true,
+  style,
 }: {
   kit: BrandKit;
-  ink: string;
-  background: string;
+  grid: Grid;
   pageIndex: number;
   pageCount: number;
-  scale: number;
-  logo?: boolean;
+  rule?: boolean;
+  style?: CSSProperties;
 }) {
-  const label = pageCount > 1 ? (pageIndex === 0 ? 'Scorri →' : `${pageIndex + 1} / ${pageCount}`) : '';
-  const showLogo = logo && kit.signature && Boolean(kit.logoUrl);
-  if (!label && !showLogo) return null;
+  const { tones, sign, signature, address, footer } = kit.line;
+  const page = pageLabel(pageIndex, pageCount);
+  const k = grid.k;
+  if (footer !== 'rule') {
+    if (footer === 'none' && !page) return null;
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 24,
+          flex: 'none',
+          marginTop: 36 * k,
+          minHeight: 48 * k,
+          position: 'relative',
+          ...style,
+        }}>
+        {page ? <Label text={page} kit={kit} size={21 * k} color={tones.muted} upper={false} /> : <span />}
+        {footer === 'mark' ? <Mark kit={kit} size={48 * k} /> : null}
+      </div>
+    );
+  }
+  const right = page || address;
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 24,
-        flex: 'none',
-        height: 72 * scale,
-        marginTop: 32 * scale,
-      }}>
-      <span style={{ ...bodyFont(kit), fontWeight: 600, fontSize: 28 * scale, color: ink, opacity: 0.72, letterSpacing: '0.02em' }}>
-        {label}
-      </span>
-      {showLogo && <Logo kit={kit} background={background} height={64 * scale} />}
+    <div style={{ flex: 'none', marginTop: 36 * k, position: 'relative', ...style }}>
+      {rule ? <div style={{ height: Math.max(1, 2 * k), background: tones.rule }} /> : null}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, marginTop: 22 * k, minHeight: 40 * k }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 * k, minWidth: 0 }}>
+          <LogoTile kit={kit} size={40 * k} />
+          <span
+            style={{
+              ...faceStyle(sign),
+              fontSize: 28 * k,
+              lineHeight: 1.2,
+              color: tones.ink,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+            {signature}
+          </span>
+        </div>
+        {right ? <Label text={right} kit={kit} size={21 * k} color={tones.muted} upper={false} /> : null}
+      </div>
     </div>
   );
 }

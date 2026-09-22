@@ -11,4 +11,6 @@ export interface CardProps {
   photoUrl: string | null;
   cutoutUrl: string | null;
   aspect: Aspect;
+  /** Chiamata quando la card è disegnata del tutto (caratteri, foto, testi adattati): la usa lo scatto di Remotion. */
+  onReady?: () => void;
 }

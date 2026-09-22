@@ -76,6 +76,7 @@ function RootNavigator() {
           name="create"
           options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }}
         />
+        <Stack.Screen name="writing" />
         <Stack.Screen name="content/[slotId]" />
         <Stack.Screen name="draft/[contentId]" />
       </Stack.Protected>

@@ -62,8 +62,40 @@ export const VISUAL_STEPS = {
     count === 0
       ? 'Parto da palette, sito e indicazioni'
       : `Guardo ${count === 1 ? 'l’immagine' : `le ${count} immagini`} di riferimento`,
-  style: 'Scelgo caratteri e stile delle card',
+  look: 'Studio caratteri, spazi e foto dei riferimenti',
+  line: 'Disegno la linea: fondo, caratteri, firma e rubriche',
+  templates: 'Scrivo i template delle card del brand',
+  thinking: 'Guardo i riferimenti e ragiono: ci vuole qualche minuto',
+  refine: 'Correggo la linea',
+  photos: (count: number) => (count === 1 ? 'Preparo la foto' : `Preparo ${count} foto`),
+  keepPhotos: 'Tengo le foto di prima',
+  editPhotos: 'Ritocco le foto di prima',
   card: (channel: string) => `Compongo la card per ${channel}`,
+} as const;
+
+/** Le parole delle idee proposte dal Brand DNA. */
+export const IDEAS_STEPS = {
+  context: (name: string) => (name.trim() ? `Rileggo il profilo di ${name.trim()}` : 'Rileggo il profilo del brand'),
+  plan: 'Cerco spunti su temi, date e notizie',
+  reflect: 'Ragiono su quello che ho trovato',
+  write: (count: number) => `Scrivo ${count === 1 ? 'l’idea' : `${count} idee`}`,
+} as const;
+
+/** Le parole della scrittura di una bozza: il profilo, la fonte, poi un testo per canale. */
+export const WRITING_STEPS = {
+  context: (name: string) => (name.trim() ? `Rileggo il profilo di ${name.trim()}` : 'Rileggo il profilo del brand'),
+  basis: (title: string) => `Parto da «${shorten(title.replace(/\s+/g, ' ').trim(), MAX_NAME)}»`,
+  plan: 'Cerco l’appiglio giusto',
+  reflect: 'Ragiono su quello che ho letto',
+  write: (channels: string) => `Scrivo per ${channels}`,
+  visual: 'Penso al visivo che accompagna il testo',
+} as const;
+
+/** Le parole di un ritocco chiesto dall'utente. */
+export const REWRITE_STEPS = {
+  read: (channel: string) => `Rileggo il testo per ${channel}`,
+  ask: (instruction: string) => `Capisco cosa cambiare: «${shorten(instruction.replace(/\s+/g, ' ').trim(), MAX_NAME)}»`,
+  write: 'Riscrivo tenendo la tua voce',
 } as const;
 
 /** Il primo passo dice da cosa parto: il sito letto o la frase scritta. */

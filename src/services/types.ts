@@ -5,6 +5,7 @@
 import type {
   Brand,
   BrandDraft,
+  BrandLine,
   ChannelId,
   Identity,
   ImageStyle,
@@ -57,13 +58,26 @@ export interface VisualStyleRequest {
   visual: Visual;
   /** Un esempio per canale, nel suo formato. */
   channels: ChannelId[];
+  /** Per chi scrive e cosa vuole ottenere: le rubriche e i testi degli esempi partono da qui. */
+  goals?: string[];
+  audiences?: string[];
+  /** La scheda voce, se c'è già: i testi delle card la seguono. */
+  voice?: VoiceCard | null;
+  /** Quello che la lettura del sito ha capito del brand. */
+  siteSummary?: string;
+  /**
+   * Riparte da capo anche se la linea c'è già. Senza, con una linea già fatta e un'indicazione scritta, si corregge
+   * quella linea e il resto (foto compresa) resta.
+   */
+  restart?: boolean;
 }
 
-/** Lo stile scelto dall'AI e le card di esempio che lo mostrano. */
+/** La linea grafica costruita dall'AI e le card di esempio che la mostrano. */
 export interface VisualStyle {
   typography: TypographyId;
   imageStyle: ImageStyle;
   direction: VisualDirection;
+  line: BrandLine;
   examples: VisualExample[];
 }
 
@@ -120,8 +134,8 @@ export interface ChannelService {
 export interface IdeaService {
   /** Tutte le idee del brand, dalla più recente. */
   list(brandId: string): Promise<Idea[]>;
-  /** L'AI propone nuove idee dal contesto del brand: finiscono tra le proposte. */
-  generate(brandId: string, count?: number): Promise<Idea[]>;
+  /** L'AI propone nuove idee dal contesto del brand: finiscono tra le proposte. `onSteps` riceve i passi man mano. */
+  generate(brandId: string, count?: number, onSteps?: OnAiSteps): Promise<Idea[]>;
   /** Spunti da una fonte dell'utente: non si salvano finché non li scegli. */
   draftFromSource(brandId: string, source: IdeaSource, variant?: number): Promise<IdeaDraft[]>;
   save(brandId: string, drafts: IdeaDraft[]): Promise<Idea[]>;
@@ -136,8 +150,8 @@ export interface PlanService {
   /** Scheletro del periodo già riempito con le idee salvate: niente si salva finché non confermi. */
   propose(brandId: string, request: PlanRequest): Promise<SlotDraft[]>;
   confirm(brandId: string, drafts: SlotDraft[]): Promise<PlanSlot[]>;
-  /** "Aggiungi al piano" da un'idea: riempie un'uscita vuota adatta o ne crea una. */
-  addIdea(brandId: string, ideaId: string): Promise<PlanSlot>;
+  /** "Aggiungi al piano" da un'idea: riempie un'uscita vuota adatta o ne crea una, sui canali scelti. */
+  addIdea(brandId: string, ideaId: string, channels?: readonly ChannelId[]): Promise<PlanSlot>;
   addSlot(brandId: string, draft: SlotDraft): Promise<PlanSlot>;
   updateSlot(slotId: string, patch: SlotPatch): Promise<PlanSlot>;
   removeSlot(slotId: string): Promise<void>;
@@ -149,6 +163,12 @@ export interface DirectContentRequest {
   format: IdeaFormat;
 }
 
+/** Come esce il contenuto su un canale: riguarda il visivo, non il testo. */
+export interface VariantLayout {
+  format?: IdeaFormat;
+  withoutImage?: boolean;
+}
+
 export interface ContentService {
   /** Tutti i contenuti del brand, con o senza uscita. */
   list(brandId: string): Promise<Content[]>;
@@ -157,18 +177,21 @@ export interface ContentService {
   /** Contenuti creati direttamente e non ancora programmati. */
   listDrafts(brandId: string): Promise<Content[]>;
   /** Prepara (o rifà) la bozza dall'idea dell'uscita, che passa a "Da approvare". */
-  prepare(slotId: string, format?: IdeaFormat): Promise<{ content: Content; slot: PlanSlot }>;
+  prepare(slotId: string, format?: IdeaFormat, onSteps?: OnAiSteps): Promise<{ content: Content; slot: PlanSlot }>;
   /** Nuovo contenuto senza idea né uscita: la bozza nasce dalla fonte. */
-  createDirect(brandId: string, request: DirectContentRequest): Promise<Content>;
+  createDirect(brandId: string, request: DirectContentRequest, onSteps?: OnAiSteps): Promise<Content>;
   /** Bozza scritta subito da un'idea, senza passare dal piano: entra nel piano quando viene programmata. */
-  createFromIdea(brandId: string, ideaId: string): Promise<Content>;
+  createFromIdea(brandId: string, ideaId: string, channels?: readonly ChannelId[], onSteps?: OnAiSteps): Promise<Content>;
   /**
    * Rifà la bozza di un contenuto che non viene da un'uscita, con un altro taglio o formato:
    * dall'idea se c'è, altrimenti dalla richiesta dell'utente.
    */
-  regenerate(contentId: string, format?: IdeaFormat): Promise<Content>;
+  regenerate(contentId: string, format?: IdeaFormat, onSteps?: OnAiSteps): Promise<Content>;
   updateVariant(contentId: string, channel: ChannelId, text: string): Promise<Content>;
-  rewrite(contentId: string, channel: ChannelId, instruction: RewriteInstruction): Promise<Content>;
+  /** Come esce il contenuto su un canale: formato del visivo e uscita senza immagine. Il testo non si tocca. */
+  setVariantLayout(contentId: string, channel: ChannelId, layout: VariantLayout): Promise<Content>;
+  /** Ritocca il testo di un canale: un suggerimento pronto o una richiesta scritta dall'utente. */
+  rewrite(contentId: string, channel: ChannelId, instruction: RewriteInstruction, onSteps?: OnAiSteps): Promise<Content>;
   /** Approva un contenuto che è già in un'uscita: l'uscita passa a "Programmata". */
   approve(contentId: string): Promise<{ content: Content; slot: PlanSlot }>;
   /** Approva un contenuto creato direttamente e lo mette nel piano; con `publishNow` esce subito. */

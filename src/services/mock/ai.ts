@@ -1,22 +1,7 @@
-import type { BrandKind, Identity, ImageStyle, TypographyId, VisualExample } from '@/domain/brand';
-import {
-  AUDIENCES,
-  channelName,
-  GOALS,
-  IMAGE_STYLES,
-  imageStyleLabel,
-  TYPOGRAPHY_OPTIONS,
-  typographyName,
-} from '@/domain/catalog';
-import {
-  aspectFor,
-  chooseTemplate,
-  clip,
-  emptyCardText,
-  EXAMPLE_TEMPLATES,
-  type CardText,
-  type TemplateId,
-} from '@/domain/visual';
+import type { BrandKind, BrandLine, Identity, ImageStyle, VisualExample } from '@/domain/brand';
+import { AUDIENCES, channelName, GOALS } from '@/domain/catalog';
+import { exampleChannels, sameReferences, templateFallback } from '@/domain/line';
+import { aspectFor, brandKit, cleanCardText, clip, defaultLine } from '@/domain/visual';
 import { delay, latency } from '@/lib/delay';
 import { createRng, pick, sample, seedFromString } from '@/lib/random';
 import { normalizeSite } from '@/lib/site';
@@ -33,6 +18,8 @@ import {
   WEBSITE_STEPS,
 } from '../ai-steps';
 import type { AiService, VoiceAnalysis } from '../types';
+import { samplePhoto } from './sample-images';
+import { MOCK_TEMPLATE_FONTS, MOCK_TEMPLATES } from './templates';
 
 /**
  * Finta AI: risposte plausibili e deterministiche (stesso input, stessa risposta),
@@ -164,36 +151,6 @@ function analyzeTexts(text: string, group: Group): Pick<VoiceAnalysis, 'rhythm' 
   };
 }
 
-/** I testi delle card di esempio del mock, dai temi e dalla frase su cosa fa il brand. */
-function exampleText(templateId: TemplateId, identity: Identity, themes: readonly string[], index: number): CardText {
-  const theme = themes[index % Math.max(1, themes.length)] ?? identity.name;
-  const text = { ...emptyCardText(), kicker: theme };
-  switch (templateId) {
-    case 'stat':
-      return { ...text, value: '[3 ore]', headline: 'risparmiate ogni settimana quando il lavoro ha un metodo' };
-    case 'list':
-      return {
-        ...text,
-        headline: 'Tre cose che non cambiamo mai',
-        items: (themes.length >= 3 ? themes.slice(0, 3) : ['Ascoltare prima', 'Dire i numeri', 'Mantenere le promesse']).map(
-          (title) => ({ title, body: '' }),
-        ),
-      };
-    case 'steps':
-      return {
-        ...text,
-        headline: 'Come lavoriamo, in tre passi',
-        items: [
-          { title: 'Ascoltiamo', body: 'Partiamo da quello che ti serve davvero.' },
-          { title: 'Proponiamo', body: 'Una soluzione chiara, con tempi e costi.' },
-          { title: 'Consegniamo', body: 'E restiamo lì anche dopo.' },
-        ],
-      };
-    default:
-      return { ...text, headline: clip(identity.pitch || `Così lavora ${identity.name || 'il brand'}`, 90) };
-  }
-}
-
 export function createMockAiService(): AiService {
   return {
     async readWebsite(site: string, identity: Identity, onSteps) {
@@ -264,7 +221,7 @@ export function createMockAiService(): AiService {
       return { goals, audiences, picked: { goals: goals.slice(0, 2), audiences: audiences.slice(0, 2) } };
     },
 
-    async proposeVisualStyle({ identity, themes, visual, channels }, onSteps) {
+    async proposeVisualStyle({ identity, themes, visual, channels, restart }, onSteps) {
       const rng = createRng(seedFromString(`${identity.name}|${visual.notes ?? ''}|${visual.references?.length ?? 0}`));
       const notes = (visual.notes ?? '').toLowerCase();
       const log = createStepLog(onSteps);
@@ -272,41 +229,63 @@ export function createMockAiService(): AiService {
       await delay(latency(500, 800));
       log.finish('references');
 
-      log.start('style', VISUAL_STEPS.style);
-      await delay(latency(900, 1300));
-      // Il mock non vede le immagini: legge solo qualche parola delle indicazioni.
-      const typography: TypographyId = /grazie|serif|elegan|classic/.test(notes)
-        ? 'fraunces'
-        : /tecnic|tech/.test(notes)
-          ? 'space-grotesk'
-          : /morbid|rotond/.test(notes)
-            ? 'manrope'
-            : pick(rng, TYPOGRAPHY_OPTIONS).id;
-      const imageStyle: ImageStyle = /minimal|pulit|solo testo/.test(notes)
-        ? 'text-only'
-        : /geometr|forme/.test(notes)
-          ? 'flat-geometric'
-          : pick(rng, IMAGE_STYLES).id;
-      log.finish('style', { detail: `Caratteri «${typographyName(typography)}» · ${imageStyleLabel(imageStyle).toLowerCase()}` });
+      // Il mock non vede le immagini e non ha un direttore artistico: usa tre template fissi.
+      log.start('line', VISUAL_STEPS.templates);
+      await delay(latency(1200, 1800));
+      const imageStyle: ImageStyle = /solo testo/.test(notes) ? 'text-only' : pick(rng, ['natural-photo', 'desaturated-photo'] as ImageStyle[]);
+      const photos = imageStyle !== 'text-only';
+      const names = themes.filter(Boolean).slice(0, 3).map((theme) => theme.toLowerCase());
+      const refs = (visual.references ?? []).map((file) => file.path);
+      const line: BrandLine = {
+        ...defaultLine(identity, visual),
+        templates: MOCK_TEMPLATES,
+        fonts: MOCK_TEMPLATE_FONTS,
+        rubrics: names.map((name) => ({ name, about: `I contenuti su ${name}.` })),
+        from: refs.filter((path): path is string => Boolean(path)),
+      };
+      log.finish('line', { detail: MOCK_TEMPLATES.map((template) => `«${template.name}»`).join(', ') });
 
+      // Con qualche immagine le card sono soprattutto foto, come i riferimenti tipici; senza, un misto.
+      const order = (visual.references?.length ?? 0) > 0 ? ['foto-pura', 'foto-titolo', 'foto-pura'] : ['foto-titolo', 'frase', 'foto-pura'];
+      // In una correzione che non parla delle foto, le foto di prima restano.
+      const keep = Boolean(visual.line && notes && !restart && sameReferences(visual.line, refs) && !/foto|immagine/.test(notes));
+      const kit = brandKit({ identity, visual });
       const examples: VisualExample[] = [];
-      for (const [index, channel] of channels.slice(0, 5).entries()) {
+      for (const [index, channel] of exampleChannels(channels).entries()) {
+        const found = MOCK_TEMPLATES.find((template) => template.id === order[index % order.length]) ?? MOCK_TEMPLATES[0];
+        const template = found.photo && !photos ? MOCK_TEMPLATES[2] : found;
         const aspect = aspectFor(channel, 'post');
-        const preferred = EXAMPLE_TEMPLATES[index % EXAMPLE_TEMPLATES.length];
-        const text = exampleText(preferred, identity, themes, index);
-        log.start(`card-${channel}`, VISUAL_STEPS.card(channelName(channel)), `Formato ${aspect}`);
+        const description = template.photo ? `il mondo di ${identity.name || 'questo brand'}, da vicino` : '';
+        const before = keep ? (visual.examples?.[index]?.photo ?? null) : null;
+        // Il mock non ha un modello d'immagine: la foto è una luce finta nei colori del brand.
+        const photo = template.photo ? (before ?? { path: null, url: samplePhoto(kit, `${description}|${index}`) }) : null;
+        const text = cleanCardText({
+          kicker: names[index % Math.max(1, names.length)] ?? '',
+          headline: index === 0 ? `Ciao, siamo ${identity.name || 'noi'}` : clip(identity.pitch || 'Così lavoriamo', 80),
+        });
+        log.start(`card-${index}`, VISUAL_STEPS.card(channelName(channel)), `Formato ${aspect}`);
         await delay(latency(400, 700));
-        examples.push({ channel, aspect, page: { templateId: chooseTemplate('infographic', text, preferred), text }, file: null });
-        log.finish(`card-${channel}`);
+        examples.push({
+          channel,
+          aspect,
+          page: { templateId: templateFallback(template), custom: template.id, text },
+          file: null,
+          photo,
+          ...(photo && { photoDescription: description }),
+        });
+        log.finish(`card-${index}`);
       }
+      const first = examples.find((example) => example.photo);
+      line.band = first?.photo ? { description: first.photoDescription ?? '', photo: first.photo } : null;
 
       return {
-        typography,
+        typography: visual.typography,
         imageStyle,
         direction: {
-          summary: `Caratteri ${typographyName(typography).toLowerCase()} e ${imageStyleLabel(imageStyle).toLowerCase()}${notes ? ', come hai chiesto' : ''}.`,
+          summary: `Foto grandi e titoli in maiuscolo${notes ? ', come hai chiesto' : ''}.`,
           photoStyle: 'Natural daylight, soft contrast, colors that harmonize with the brand palette.',
         },
+        line,
         examples,
       };
     },

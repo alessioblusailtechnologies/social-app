@@ -1,3 +1,4 @@
+import { unavailableDirector, type ArtDirector } from '../ai/art-director';
 import { unavailableCutout, type CutoutService } from './cutout';
 import { unavailableImages, type ImageGenerator } from './images';
 import { unavailableRenderer, type CardRenderer } from './renderer';
@@ -11,6 +12,8 @@ export interface MediaDeps {
   cutout: CutoutService;
   renderer: CardRenderer;
   vision: VisionService;
+  /** Il direttore artistico della linea grafica: vede le immagini e decide la linea. */
+  director: ArtDirector;
 }
 
 /** Senza configurazione: le card si modificano, crearle risponde 503. */
@@ -20,4 +23,5 @@ export const unavailableMedia: MediaDeps = {
   cutout: unavailableCutout,
   renderer: unavailableRenderer,
   vision: unavailableVision,
+  director: unavailableDirector,
 };

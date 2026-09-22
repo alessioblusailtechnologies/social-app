@@ -26,8 +26,8 @@ export function registerPlanRoutes(app: FastifyInstance, deps: Deps): void {
   });
 
   app.post<BrandParams>('/api/brands/:brandId/plan/ideas', (request) => {
-    const { ideaId } = ideaRefSchema.parse(request.body);
-    return addIdeaToPlan(deps, request.identity, brandId(request.params.brandId), ideaId);
+    const { ideaId, channels } = ideaRefSchema.parse(request.body);
+    return addIdeaToPlan(deps, request.identity, brandId(request.params.brandId), ideaId, channels);
   });
 
   app.post<BrandParams>('/api/brands/:brandId/slots', async (request, reply) => {

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
-import type { Brand, ChannelId, ImageStyle } from '@/domain/brand';
+import type { Brand, BrandTemplate, ChannelId, ImageStyle } from '@/domain/brand';
 import { channelName, imageStyleLabel } from '@/domain/catalog';
+import { withBrandTemplates } from '@/domain/line';
 import {
   CHANNEL_LIMITS,
   type CarouselSlide,
@@ -22,12 +23,16 @@ import {
   type VisualDesign,
 } from '@/domain/visual';
 
+import { REWRITE_STEPS, THINKING_STEP, WRITING_STEPS, createStepLog } from '@/services/ai-steps';
+import type { OnAiSteps } from '@/services/types';
+
 import { ApiError } from '../contract/errors';
 import { channelIdSchema } from '../contract/schemas';
 import { assertPublicUrl } from '../lib/public-url';
 import { APP_CONTEXT, WRITING_RULES, describeBrand } from './brand-context';
 import type { AiEngine, AiMeta } from './engine';
 import { describeSource } from './ideas';
+import { stepsFromTools } from './steps';
 
 /** Le bozze: una variante per canale e il visivo del formato, da un'idea o da una fonte dell'utente. */
 
@@ -71,6 +76,7 @@ const SINGLE_TEMPLATE_IDS = SINGLE_TEMPLATES.map((spec) => spec.id) as [Template
 const proposalSchema = z.object({
   kind: z.enum(['infographic', 'photo', 'mixed']),
   templateId: z.enum(SINGLE_TEMPLATE_IDS),
+  brandTemplate: z.string().optional().describe('L’id del template del brand scelto, se il brand ne ha.'),
   card: z.object({
     kicker: z.string(),
     headline: z.string(),
@@ -103,7 +109,7 @@ const writtenSchema = z.object({
 
 const KIND_FOR_STYLE: Record<ImageStyle, string> = {
   'text-only': '"infographic", perché il brand non usa foto',
-  'flat-geometric': '"infographic", con le forme geometriche del brand',
+  'flat-geometric': '"infographic", con la linea grafica del brand',
   'natural-photo': '"photo" o "mixed", con foto naturali',
   'desaturated-photo': '"mixed" o "photo", con foto desaturate',
 };
@@ -111,6 +117,8 @@ const KIND_FOR_STYLE: Record<ImageStyle, string> = {
 /** Il catalogo dei template per l'AI, generato dal dominio così prompt e app non divergono. */
 function describeVisualGuide(brand: Brand, format: IdeaFormat): string {
   if (format === 'video') return '## Visivo\nPer un video visual è null.';
+  const templates = brand.visual.line?.templates ?? [];
+  if (templates.length > 0) return describeBrandTemplates(templates, format);
   const catalog = VISUAL_KINDS.map((kind) =>
     [
       `${VISUAL_KIND_LABELS[kind]}, kind "${kind}":`,
@@ -132,7 +140,11 @@ function describeVisualGuide(brand: Brand, format: IdeaFormat): string {
     `- lo stile immagini del brand è «${imageStyleLabel(brand.visual.imageStyle)}»: kind ${KIND_FOR_STYLE[brand.visual.imageStyle]};`,
     '- value solo con un numero vero, dato dal brand o già nel testo, oppure tra parentesi quadre da completare, per esempio [3 ore]; altrimenti stringa vuota;',
     '- author solo per una citazione vera, con il nome di chi la dice; altrimenti stringa vuota e niente template "quote";',
-    '- kicker è un’etichetta di due o tre parole, per esempio il tema; i testi che il template non usa restano stringhe vuote;',
+    brand.visual.line && brand.visual.line.rubrics.length > 0
+      ? `- kicker è la rubrica del contenuto, scritta esattamente come nella linea: una tra ${brand.visual.line.rubrics.map((rubric) => `«${rubric.name}»`).join(', ')}; i testi che il template non usa restano stringhe vuote;`
+      : '- kicker è un’etichetta di due o tre parole, per esempio il tema; i testi che il template non usa restano stringhe vuote;',
+    '- headline è una frase della voce del brand che si regge da sola, breve e piena, chiusa dal punto; niente punti esclamativi, emoji, hashtag, trattini lunghi;',
+    ...(brand.visual.line?.copy ?? []).map((rule) => `- ${rule};`),
     '- imageDescription dice cosa si vede nella foto, in concreto: soggetto, luogo, inquadratura, luce. Niente scritte né loghi. Per un personal brand niente volti: oggetti, mani, ambienti. Scrivila anche per l’infografica: serve se l’utente passa a Foto o Mista;',
     format === 'carousel' ? '- nel carosello la card è la copertina: le altre slide sono quelle di slides.' : '',
   ]
@@ -140,20 +152,44 @@ function describeVisualGuide(brand: Brand, format: IdeaFormat): string {
     .join('\n');
 }
 
-/** La proposta dell'AI diventa un visivo da creare; senza proposta, una card fatta con i testi della bozza. */
+/** I template scritti per il brand: la bozza sceglie uno di questi, come li ha pensati il direttore artistico. */
+function describeBrandTemplates(templates: readonly BrandTemplate[], format: IdeaFormat): string {
+  return [
+    '## Visivo: la card del post',
+    'In visual proponi la card che accompagna il testo, con uno dei template del brand: brandTemplate è il suo id. Scrivi i testi dei campi che il template usa; gli altri restano vuoti.',
+    ...templates.map(
+      (template) =>
+        `- "${template.id}" (${template.name}): ${template.use} Campi: ${template.fields.join(', ') || 'nessuno'}.${template.photo ? ' Con la foto.' : ''}`,
+    ),
+    `Limiti in caratteri: kicker ${CARD_LIMITS.kicker}, headline ${CARD_LIMITS.headline}, body ${CARD_LIMITS.body}, value ${CARD_LIMITS.value}, author ${CARD_LIMITS.author}; nei punti title ${CARD_LIMITS.itemTitle} e body ${CARD_LIMITS.itemBody}; al massimo ${CARD_LIMITS.items} punti.`,
+    '- kind: "photo" se il template ha la foto, altrimenti "infographic"; templateId: "photo-cover" se il template ha la foto, altrimenti "statement".',
+    '- imageDescription: cosa si vede nella foto, in concreto (soggetto, luogo, inquadratura, luce), senza scritte né loghi.',
+    format === 'carousel' ? '- nel carosello la card è la copertina: le altre slide sono quelle di slides.' : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * La proposta dell'AI diventa un visivo da creare; senza proposta, una card fatta con i testi della bozza. Con i
+ * template del brand la copertina usa quello scelto e le slide di un carosello un template di testo del brand.
+ */
 export function proposalFromOutput(
   output: ProposalOutput | null,
   format: IdeaFormat,
   headline: string,
   slides: readonly CarouselSlide[],
+  templates: readonly BrandTemplate[] = [],
 ): VisualDesign | null {
   if (format === 'video') return null;
-  if (!output) return fallbackDesign(format, headline, slides);
-  return proposeDesign(
+  if (!output) return withBrandTemplates(fallbackDesign(format, headline, slides), templates);
+  const chosen = output.brandTemplate ? templates.find((template) => template.id === output.brandTemplate) : undefined;
+  const design = proposeDesign(
     { kind: output.kind, templateId: output.templateId, text: output.card, imageDescription: output.imageDescription },
     format,
     slides,
   );
+  return withBrandTemplates(design, templates, chosen?.id);
 }
 
 export type ContentBasis = { kind: 'idea'; idea: Idea } | { kind: 'source'; source: IdeaSource };
@@ -167,6 +203,8 @@ export interface WriteContentInput {
   revision: number;
   previous: Content | null;
   now: Date;
+  /** I passi da far vedere a chi aspetta la bozza. */
+  onSteps?: OnAiSteps;
 }
 
 export interface WrittenContent {
@@ -211,15 +249,34 @@ function describeBasis(brand: Brand, basis: ContentBasis): string {
     .join('\n');
 }
 
+/** Il titolo di partenza, per il passo che dice da cosa nasce la bozza. */
+function basisTitle(basis: ContentBasis): string {
+  if (basis.kind === 'idea') return basis.idea.title;
+  const { source } = basis;
+  return source.kind === 'prompt' ? source.text : source.kind === 'link' ? source.url : source.name;
+}
+
 export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteContentInput): Promise<WrittenContent> {
-  const { brand, basis, channels, format, revision, previous, now } = input;
+  const { brand, basis, channels, format, revision, previous, now, onSteps } = input;
   const source = basis.kind === 'source' ? basis.source : basis.idea.source;
   if (source?.kind === 'link') await assertPublicUrl(source.url);
+
+  // I passi che chi aspetta vede: il profilo, da cosa parto, l'eventuale pagina letta, il testo, il visivo.
+  const log = createStepLog(onSteps);
+  const channelNames = channels.map(channelName).join(' e ');
+  log.start('context', WRITING_STEPS.context(brand.identity.name), channelNames);
+  log.finish('context');
+  log.start('basis', WRITING_STEPS.basis(basisTitle(basis)));
+  log.finish('basis');
+  const reading = source?.kind === 'link';
+  const writingLabel = WRITING_STEPS.write(channelNames);
+  if (!reading) log.start('write', writingLabel);
 
   const result = await engine.run({
     ...meta,
     task: 'content',
-    tools: source?.kind === 'link' ? ['WebFetch'] : [],
+    tools: reading ? ['WebFetch'] : [],
+    ...(reading && { onTool: stepsFromTools(log, { first: WRITING_STEPS.plan, next: WRITING_STEPS.reflect }) }),
     schema: writtenSchema,
     system: SYSTEM,
     prompt: [
@@ -243,6 +300,10 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
       .filter(Boolean)
       .join('\n\n'),
   });
+
+  log.drop(THINKING_STEP);
+  if (reading) log.start('write', writingLabel);
+  log.finish('write');
 
   const byChannel = new Map(result.variants.map((variant) => [variant.channel, variant]));
   const variants: ChannelVariant[] = [];
@@ -279,16 +340,22 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
         }))
       : [];
 
+  if (format !== 'video') {
+    log.start('visual', WRITING_STEPS.visual, headline || title);
+    log.finish('visual');
+  }
+
   return {
     title,
     themeId,
     format,
     variants,
-    visual: { headline, slides, scenes, design: proposalFromOutput(result.visual, format, headline || title, slides) },
+    visual: { headline, slides, scenes, design: proposalFromOutput(result.visual, format, headline || title, slides, brand.visual.line?.templates) },
   };
 }
 
-const INSTRUCTION_GUIDE: Record<RewriteInstruction, string> = {
+/** I suggerimenti pronti hanno una guida scritta; una richiesta a mano arriva al modello com'è. */
+const INSTRUCTION_GUIDE: Record<string, string> = {
   'Più corto': 'accorcialo a circa metà, tenendo l’aggancio e il punto principale.',
   'Più diretto': 'togli giri di parole, premesse e formule prudenti come «forse» o «in un certo senso»: frasi attive e dirette.',
   'Aggiungi un numero':
@@ -302,11 +369,25 @@ const rewriteSchema = z.object({ text: z.string() });
 export async function rewriteVariant(
   engine: AiEngine,
   meta: AiMeta,
-  input: { brand: Brand; content: Content; channel: ChannelId; instruction: RewriteInstruction; now: Date },
+  input: {
+    brand: Brand;
+    content: Content;
+    channel: ChannelId;
+    instruction: RewriteInstruction;
+    now: Date;
+    onSteps?: OnAiSteps;
+  },
 ): Promise<string> {
-  const { brand, content, channel, instruction, now } = input;
+  const { brand, content, channel, instruction, now, onSteps } = input;
   const variant = content.variants.find((candidate) => candidate.channel === channel);
   if (!variant) throw ApiError.notFound('Il contenuto non esce su questo canale.');
+
+  const log = createStepLog(onSteps);
+  log.start('read', REWRITE_STEPS.read(channelName(channel)));
+  log.finish('read');
+  log.start('ask', REWRITE_STEPS.ask(instruction));
+  log.finish('ask');
+  log.start('write', REWRITE_STEPS.write);
 
   const result = await engine.run({
     ...meta,
@@ -315,13 +396,17 @@ export async function rewriteVariant(
     schema: rewriteSchema,
     system: SYSTEM,
     prompt: [
-      `Riscrivi il testo per ${channelName(channel)}: ${INSTRUCTION_GUIDE[instruction]}`,
+      `Riscrivi il testo per ${channelName(channel)}: ${INSTRUCTION_GUIDE[instruction] ?? instruction}`,
       `Resta nella voce del brand, sotto i ${CHANNEL_LIMITS[channel]} caratteri e senza hashtag nel testo. Rispondi con il solo testo riscritto.`,
       ['Testo:', '"""', variant.text, '"""'].join('\n'),
       describeBrand(brand, now),
     ].join('\n\n'),
   });
   const text = result.text.trim();
-  if (!text) throw new ApiError(502, 'AI_FAILED', 'Non sono riuscito a completare la generazione. Riprova.');
+  if (!text) {
+    log.finish('write', { failed: true });
+    throw new ApiError(502, 'AI_FAILED', 'Non sono riuscito a completare la generazione. Riprova.');
+  }
+  log.finish('write');
   return text;
 }

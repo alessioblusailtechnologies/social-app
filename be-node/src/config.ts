@@ -40,6 +40,12 @@ const envSchema = z.object({
   IMAGE_MODEL: z.string().min(1).default('gemini-3.1-flash-image'),
   /** Il modello che guarda le immagini di riferimento dello stile, con la stessa chiave di Gemini. */
   VISION_MODEL: z.string().min(1).default('gemini-3.5-flash'),
+  /**
+   * La linea grafica del passo «Come appare»: un Claude che vede i riferimenti e decide, con ANTHROPIC_API_KEY.
+   * Senza la chiave la fanno Gemini (che guarda) e il modello dei testi (che scrive).
+   */
+  DESIGN_MODEL: z.string().min(1).default('claude-opus-5'),
+  DESIGN_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('high'),
   /** Lo scontorno (fal, BiRefNet). Senza, i layout con soggetto scontornato non si creano. */
   FAL_KEY: optionalString,
   /** Il servizio che compone i PNG delle card (be-render). Su Render arriva come `host:porta` del servizio privato. */

@@ -3,37 +3,44 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { BrandKit } from '@/domain/visual';
 
 /**
- * I caratteri del brand arrivano da Google Fonts: si aspetta il foglio, poi le facce che servono.
+ * I caratteri della linea arrivano da Google Fonts: si aspetta il foglio, poi le facce che servono, corsivi compresi.
  * C'è un tetto di tempo: senza rete la card si disegna lo stesso, con i caratteri di sistema.
  */
 
 const TIMEOUT_MS = 6000;
 const loads = new Map<string, Promise<void>>();
 
-type FontsKit = Pick<BrandKit, 'fontsHref' | 'heading' | 'body'>;
+type FontsKit = Pick<BrandKit, 'fontsHref' | 'faces'> & { fontLinks?: string[] };
+
+/** Un foglio di Google Fonts. Se non si carica (un peso che la famiglia non ha), si riprova con la sola famiglia. */
+function stylesheet(href: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const append = (url: string, retry: boolean) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = url;
+      link.onload = () => resolve();
+      link.onerror = () => {
+        const bare = url.replace(/(family=[^:&]+):[^&]*/g, '$1');
+        if (retry && bare !== url) append(bare, false);
+        else resolve();
+      };
+      document.head.appendChild(link);
+    };
+    append(href, true);
+  });
+}
 
 export function loadBrandFonts(kit: FontsKit): Promise<void> {
   if (typeof document === 'undefined') return Promise.resolve();
-  const known = loads.get(kit.fontsHref);
+  const key = [kit.fontsHref, ...(kit.fontLinks ?? [])].join('|');
+  const known = loads.get(key);
   if (known) return known;
 
-  const sheet = new Promise<void>((resolve) => {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = kit.fontsHref;
-    link.onload = () => resolve();
-    link.onerror = () => resolve();
-    document.head.appendChild(link);
-  });
-  const faces = sheet.then(() =>
-    Promise.all(
-      [`${kit.heading.weight} 48px "${kit.heading.family}"`, `400 48px "${kit.body.family}"`, `600 48px "${kit.body.family}"`].map(
-        (face) => document.fonts.load(face).catch(() => []),
-      ),
-    ),
-  );
+  const sheets = Promise.all([kit.fontsHref, ...(kit.fontLinks ?? [])].map(stylesheet));
+  const faces = sheets.then(() => Promise.all((kit.faces ?? []).map((face) => document.fonts.load(face).catch(() => []))));
   const loaded = Promise.race([faces, new Promise((resolve) => setTimeout(resolve, TIMEOUT_MS))]).then(() => undefined);
-  loads.set(kit.fontsHref, loaded);
+  loads.set(key, loaded);
   return loaded;
 }
 
@@ -51,7 +58,7 @@ export function useFontsKey(kit: FontsKit): string {
       alive = false;
     };
   }, [kit]);
-  return ready === kit.fontsHref ? `${kit.fontsHref}|pronti` : `${kit.fontsHref}|attesa`;
+  return ready === kit.fontsHref ? `${kit.fontsHref}|${(kit.fontLinks ?? []).length}|pronti` : `${kit.fontsHref}|attesa`;
 }
 
 export function useFontsReady(): string {

@@ -9,7 +9,6 @@ import {
   IconButton,
   LinkButton,
   Panel,
-  SkeletonLines,
   StepList,
   SunkenInput,
   Text,
@@ -99,7 +98,7 @@ export function PositioningEditor({ value, onChange, context }: EditorProps<Posi
       <View style={styles.column}>
         <Panel gap={12}>
           <Text variant="strongSmall">Preparo obiettivi e pubblico su misura</Text>
-          {generated.steps.length > 0 ? <StepList steps={generated.steps} /> : <SkeletonLines widths={[72, 88]} />}
+          <StepList steps={generated.steps} waiting="Rileggo quello che so del brand" />
         </Panel>
         <Frequency value={value} onChange={onChange} />
       </View>

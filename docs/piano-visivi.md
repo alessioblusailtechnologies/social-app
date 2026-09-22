@@ -213,6 +213,62 @@ be-render ─ Remotion + Chromium sempre acceso, senza stato: props del template
 - [x] `render.yaml`, `.env.example` e README
 - [ ] primo deploy: dipende dal piano a pagamento e dalla licenza Remotion (vedi «Decisioni aperte»)
 
+### Fase 7 · Linea grafica del brand
+
+Dal 2026-09-22. Gli esempi del passo «Come appare» non bastavano: layout presi a turno, fondi diversi da una card
+all'altra, forme decorative, una capsula col logo. Il modello è il generatore delle card di assieme
+(`assieme/social/genera-contenuti.ps1`): una tavola sola con un fondo, la voce in corsivo, la rubrica in maiuscole
+spaziate, il filetto e la firma in basso; cambia solo il blocco centrale. Qui il generatore lo costruisce l'AI per
+ogni brand.
+
+- [x] `BrandLine` in `Visual.line`: fondo e accento (dalla palette), caratteri per ruolo (voce, titoli, etichette,
+      testo) dal catalogo `LINE_FONTS`, firma, indirizzo, fascia fotografica, rubriche fisse, regole dei testi
+- [x] `brandKit` ricava dalla linea i colori per ruolo (inchiostro, secondario, grigio, filetto) col contrasto
+      controllato; i brand senza linea ne ricevono una da palette e caratteri
+- [x] `src/templates` riscritto sulla tavola: gli stessi 13 id, così bozze e contenuti già salvati restano validi;
+      la copertina dei caroselli porta la fascia del brand, le slide ripetono la rubrica
+- [x] `visual/stream`: Gemini descrive i riferimenti, il modello dei testi fa direttore artistico e redattore
+      (`src/domain/line.ts` offre le scelte e ripulisce la risposta), Gemini fa la foto della fascia
+- [x] le bozze usano rubriche e regole della linea per i testi della card
+- [x] `npm run try` in be-render con tre linee di prova (`TRY_LINE=scura|testata|chiara`, `TRY_PHOTO=foto.jpg`)
+- [x] la composizione fa parte della linea: foto delle aperture (`band` fascia che sfuma, `block` in alto col testo
+      sotto, `full` a tutta card), foto nei margini o a filo, rubrica sì o no, piede (`rule` filetto e firma, `mark`
+      solo il marchio, `none`), testo al centro, in alto o in basso
+- [x] con i riferimenti la parte visiva la decide Gemini guardandoli (e i riferimenti guidano luce e colore della
+      foto d'apertura); il modello dei testi, che non li vede, scrive firma, rubriche, regole e card. Prima un
+      riferimento «da testata» usciva con la struttura di Velia
+- [x] gli esempi in griglia a due colonne e le frecce nel visore: col mouse non si scorre di lato
+- [x] le correzioni partono dal lavoro di prima: con una linea già fatta, un'indicazione la corregge (il modello dei
+      testi riceve linea, testi e foto e cambia solo quello che si chiede); la foto si tiene, si ritocca partendo da
+      quella di prima o si rifà. Senza indicazione «Rifai la linea da capo»
+- [x] la foto d'apertura non riceve più i riferimenti (sono card, ne copiava il riquadro grigio) e il prompt la vuole
+      a tutto campo, senza cornici né bordi
+- [x] l'uscita segue l'ingresso: niente sequenza fissa di card, chi fa la linea sceglie il layout di ogni card
+      d'esempio (`EXAMPLE_LAYOUTS`: sola foto, foto con frase, foto nel riquadro, metà foto, frase, lista, passi,
+      chiusura) guardando riferimenti e brand; ogni card con la foto ha la sua, fatte in parallelo
+- [x] la linea la fa un direttore artistico che vede le immagini: Claude Opus 5 (`DESIGN_MODEL`, `DESIGN_EFFORT`,
+      `ANTHROPIC_API_KEY`) con `@anthropic-ai/sdk`, una chiamata sola con risposta strutturata; nelle correzioni vede
+      le card di prima. Senza chiave: Gemini guarda e il modello dei testi scrive, come prima
+
+### Fase 8 · Template scritti per ogni brand
+
+Dal 2026-09-22. Con la tavola parametrica ogni brand usciva nello stile di Velia: il modello leggeva bene i
+riferimenti (card di moda con titoli enormi in maiuscolo, bollini) ma il motore non sapeva disegnarli. Ora il
+generatore lo scrive il direttore artistico per ogni brand, come quello scritto a mano per assieme.
+
+- [x] `BrandLine.templates` (HTML e CSS con segnaposti mustache: `{{headline}}`, `{{#items}}…{{/items}}`,
+      `<img src="{{photo}}">`…) e `BrandLine.fonts` (famiglie di Google Fonts); `VisualPage.custom` nomina il template,
+      `templateId` resta il layout del motore di riserva
+- [x] `src/templates/custom.tsx`: riempie i segnaposti, ripulisce (tag e attributi ammessi, immagini solo nostre o
+      data:, CSS senza url() esterni), disegna in uno Shadow DOM, adatta i testi `data-fit`, avvisa quando foto e
+      caratteri sono pronti (`onReady`, che lo scatto di Remotion aspetta)
+- [x] `visual/stream`: Opus guarda i riferimenti e scrive da 2 a 6 template, le card d'esempio, foto e firma; il
+      prompt è il compito, il brand e cosa sa fare il motore. Senza chiave Anthropic: Gemini descrive, il modello dei
+      testi scrive
+- [x] le bozze scelgono uno dei template del brand (`brandTemplate`); le slide dei caroselli usano un suo template di
+      testo; il pannello Visivo scorre tra i template del brand
+- [x] `npm run try` in be-render: `TRY_LINE=template` prova i template del mock
+
 ### Dopo
 
 - carosello in PDF per LinkedIn (documento)

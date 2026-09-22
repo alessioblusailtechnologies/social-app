@@ -1,6 +1,7 @@
 import type { Brand, BrandKind, Identity } from '@/domain/brand';
 import { currentVoiceCard, isConnected } from '@/domain/brand';
 import { CHANNELS, imageStyleLabel, kindLabel } from '@/domain/catalog';
+import { describeLineFonts } from '@/domain/line';
 import { themeLevelLabel } from '@/domain/themes';
 import { formatDay, formatWeekdayLong, toDay } from '@/lib/dates';
 import { upcomingAnniversaries } from '@/services/mock/idea-generator';
@@ -76,7 +77,7 @@ export function describeBrand(brand: Brand, now: Date): string {
           `Da evitare: ${card.avoid}`,
         ].join('\n')
       : '## Voce\nNessuna scheda voce: tono sobrio e concreto, niente emoji né punti esclamativi.',
-    `## Stile visivo\nImmagini: ${imageStyleLabel(visual.imageStyle).toLowerCase()}; palette «${visual.palette.name}» (${visual.palette.colors.join(', ')})${visual.direction?.summary ? `\nStile delle card: ${visual.direction.summary}` : ''}`,
+    describeVisual(visual),
     [
       '## Riferimenti',
       `Profili da cui imparare: ${list(references.profiles)}`,
@@ -99,6 +100,29 @@ export function describeBrand(brand: Brand, now: Date): string {
 
   sections.push(`## Oggi\n${formatWeekdayLong(toDay(now))} ${now.getFullYear()}`);
   return sections.join('\n\n');
+}
+
+/** Lo stile visivo e, se c'è, la linea grafica: le rubriche e le regole dei testi valgono per ogni card. */
+function describeVisual(visual: Brand['visual']): string {
+  const lines = [
+    '## Stile visivo',
+    `Immagini: ${imageStyleLabel(visual.imageStyle).toLowerCase()}; palette «${visual.palette.name}» (${visual.palette.colors.join(', ')})`,
+  ];
+  if (visual.direction?.summary) lines.push(`Stile delle card: ${visual.direction.summary}`);
+  const { line } = visual;
+  if (line) {
+    if (line.templates && line.templates.length > 0) {
+      lines.push('Template delle card del brand:', ...line.templates.map((template) => `- «${template.name}»: ${template.use}`));
+    } else {
+      lines.push(`Linea grafica: ${describeLineFonts(line)}`);
+    }
+    lines.push(`Firma «${line.signature}»${line.address ? `, ${line.address}` : ''}`);
+    if (line.rubrics.length > 0) {
+      lines.push('Rubriche fisse del feed (l’etichetta in alto a ogni card):', ...line.rubrics.map((rubric) => `- «${rubric.name}»: ${rubric.about}`));
+    }
+    if (line.copy.length > 0) lines.push('Regole dei testi sulle card:', ...line.copy.map((rule) => `- ${rule}`));
+  }
+  return lines.join('\n');
 }
 
 /** Voci brevi proposte dall'AI (temi, pubblici): pulite, senza doppioni, fino a `max`. */

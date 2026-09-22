@@ -76,7 +76,7 @@ export function NewIdeaScreen({ brand }: { brand: Brand }) {
         return;
       }
       // In fila: ogni idea trova la sua uscita tenendo conto di quelle appena piazzate.
-      for (const idea of created) await addToPlan.mutateAsync(idea.id);
+      for (const idea of created) await addToPlan.mutateAsync({ ideaId: idea.id });
       toast(created.length === 1 ? 'Idea salvata e messa nel piano.' : `${created.length} idee salvate e messe nel piano.`);
       router.dismissTo('/plan');
     } catch {

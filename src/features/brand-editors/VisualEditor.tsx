@@ -2,11 +2,12 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { ArrowUp, ImagePlus, Plus, X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Platform, StyleSheet, View } from 'react-native';
 
 import {
   Button,
   IconButton,
+  ImageViewer,
   LinkButton,
   Panel,
   PressableScale,
@@ -19,9 +20,11 @@ import {
   palette,
   radii,
   useToast,
+  type ViewerItem,
 } from '@/design-system';
-import type { ChannelId, Palette, Visual, VisualExample } from '@/domain/brand';
+import { currentVoiceCard, type BrandLine, type ChannelId, type Palette, type Visual, type VisualExample } from '@/domain/brand';
 import { CHANNELS, channelName, PALETTE_SLOT_LABELS } from '@/domain/catalog';
+import { describeLineFonts, sameReferences } from '@/domain/line';
 import { ASPECT_SIZES, brandKit, type BrandKit, type MediaFile } from '@/domain/visual';
 import { CardView } from '@/features/visual/CardView';
 import { apiErrorMessage } from '@/services';
@@ -35,7 +38,7 @@ const WEB_LOGO_LIMIT = 1_500_000;
 /** Oltre questa misura l'immagine non passa dal corpo della richiesta. */
 const REFERENCE_LIMIT = 3_000_000;
 const MAX_REFERENCES = 6;
-const EXAMPLE_WIDTH = 150;
+const EXAMPLE_GAP = 10;
 
 export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) {
   const toast = useToast();
@@ -43,6 +46,10 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
   const propose = useProposeVisualStyle();
   const [notes, setNotes] = useState(value.notes ?? '');
   const [uploading, setUploading] = useState(0);
+  const [viewer, setViewer] = useState<{ group: 'references' | 'examples'; index: number } | null>(null);
+  // Gli esempi stanno in una griglia a due colonne: si vedono tutti, senza scorrere di lato.
+  const [gridWidth, setGridWidth] = useState(0);
+  const exampleWidth = Math.floor((gridWidth - EXAMPLE_GAP) / 2);
   // Caricamenti ed esempi finiscono dopo secondi: il risultato si aggiunge al profilo com'è adesso, non com'era.
   const latest = useRef(value);
   useEffect(() => {
@@ -110,8 +117,18 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
     if (added.length > 0) onChange({ ...latest.current, references: [...(latest.current.references ?? []), ...added] });
   };
 
-  const generate = () => {
+  // La freccia manda quello che è scritto: con la linea già fatta è una correzione, e il resto (foto compresa)
+  // resta com'è. Il bottone sotto riparte sempre da capo, con le indicazioni scritte se ci sono.
+  const hasLine = Boolean(value.line);
+  // La correzione vale per la linea nata da questi riferimenti: con riferimenti nuovi si rifà da capo.
+  const correctable = hasLine && sameReferences(value.line, references.map((file) => file.path));
+  const written = notes.trim().length > 0;
+  const sendLabel = correctable ? 'Applica le correzioni' : hasLine ? 'Rifai la linea coi riferimenti nuovi' : 'Prepara la linea';
+  const restartLabel = hasLine ? 'Rifai la linea da capo' : 'Prepara la linea';
+
+  const generate = (restart: boolean) => {
     Keyboard.dismiss();
+    const applied = correctable && !restart && written;
     const request: Visual = { ...latest.current, notes: notes.trim() };
     onChange(request);
     propose.mutate(
@@ -120,17 +137,26 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
         themes: context.draft.themes.map((theme) => theme.name).filter(Boolean),
         visual: request,
         channels,
+        goals: context.draft.positioning.goals,
+        audiences: context.draft.positioning.audiences,
+        voice: currentVoiceCard(context.draft.voice),
+        siteSummary: context.insights?.summary || undefined,
+        restart,
       },
       {
-        onSuccess: (style) =>
+        onSuccess: (style) => {
           onChange({
             ...latest.current,
             typography: style.typography,
             imageStyle: style.imageStyle,
             direction: style.direction,
+            line: style.line,
             examples: style.examples,
-          }),
-        onError: (error) => toast(apiErrorMessage(error, 'Non sono riuscito a preparare gli esempi. Riprova.')),
+          });
+          // Applicata la correzione, la casella si svuota per la prossima.
+          if (applied) setNotes('');
+        },
+        onError: (error) => toast(apiErrorMessage(error, 'Non sono riuscito a preparare la linea. Riprova.')),
       },
     );
   };
@@ -159,8 +185,8 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
         {value.logoUri && (
           <View style={styles.switchRow}>
             <View style={styles.flex}>
-              <Text variant="strongSmall">Firma sulle card</Text>
-              <Text variant="caption">Logo piccolo in basso a destra</Text>
+              <Text variant="strongSmall">Logo sulle card</Text>
+              <Text variant="caption">In piccolo accanto alla firma, in basso</Text>
             </View>
             <Switch
               value={value.signature}
@@ -201,7 +227,12 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
         <View style={styles.references}>
           {references.map((file, index) => (
             <View key={file.path ?? file.url} style={styles.reference}>
-              <Image source={{ uri: file.url }} contentFit="cover" style={styles.referenceImage} accessibilityLabel={`Riferimento ${index + 1}`} />
+              <PressableScale
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`Riferimento ${index + 1}: aprilo a tutto schermo`}
+                onPress={() => setViewer({ group: 'references', index })}>
+                <Image source={{ uri: file.url }} contentFit="cover" style={styles.referenceImage} />
+              </PressableScale>
               <IconButton
                 icon={X}
                 variant="solid"
@@ -240,15 +271,23 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
                 {value.direction.summary}
               </Text>
             ) : null}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
-              {examples.map((example) => (
-                <ExampleCard key={example.channel} example={example} kit={kit} />
-              ))}
-            </ScrollView>
+            {value.line ? <LineSummary line={value.line} /> : null}
+            <View style={styles.examples} onLayout={(event) => setGridWidth(Math.floor(event.nativeEvent.layout.width))}>
+              {exampleWidth > 0 &&
+                examples.map((example, index) => (
+                  <ExampleCard
+                    key={`${example.channel}-${index}`}
+                    example={example}
+                    kit={kit}
+                    width={exampleWidth}
+                    onPress={() => setViewer({ group: 'examples', index })}
+                  />
+                ))}
+            </View>
           </>
         ) : (
           <Text variant="caption">
-            Carica qualche immagine che ti piace o scrivi come vuoi apparire: preparo una card di esempio per ogni canale scelto.
+            Carica qualche immagine che ti piace o scrivi come vuoi apparire: preparo la linea delle tue card (fondo, caratteri, firma, rubriche) e le prime card per i tuoi canali.
           </Text>
         )}
 
@@ -257,9 +296,11 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
             style={styles.flex}
             value={notes}
             onChangeText={setNotes}
-            placeholder="Indicazioni, es. più minimal, titoli con le grazie"
+            placeholder={
+              hasLine ? 'Cosa cambio? es. foto a tutta larghezza, titoli più grandi' : 'Indicazioni, es. fondo chiaro, titoli con le grazie'
+            }
             returnKeyType="send"
-            onSubmitEditing={() => !propose.isPending && generate()}
+            onSubmitEditing={() => !propose.isPending && (written || !correctable) && generate(false)}
             accessibilityLabel="Indicazioni sullo stile"
           />
           <IconButton
@@ -267,17 +308,84 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
             variant="solid"
             size={40}
             iconSize={18}
-            accessibilityLabel={examples.length > 0 ? 'Rigenera gli esempi' : 'Genera gli esempi'}
-            disabled={propose.isPending}
-            onPress={generate}
+            accessibilityLabel={sendLabel}
+            disabled={propose.isPending || (correctable && !written)}
+            onPress={() => generate(false)}
           />
         </View>
+        {hasLine && !propose.isPending ? (
+          <Text variant="caption">
+            {correctable
+              ? 'Con la freccia cambio solo quello che scrivi: il resto della linea, i testi e la foto restano. «Rifai la linea da capo» riparte da zero.'
+              : 'Hai cambiato le immagini di riferimento: la linea si rifà da capo con quelle nuove.'}
+          </Text>
+        ) : null}
         {!propose.isPending && (
-          <Button size="sm" variant="secondary" onPress={generate}>
-            {examples.length > 0 ? 'Rigenera gli esempi' : 'Genera gli esempi'}
+          <Button size="sm" variant="secondary" onPress={() => generate(hasLine)}>
+            {restartLabel}
           </Button>
         )}
       </Panel>
+
+      <ImageViewer
+        items={
+          viewer?.group === 'examples'
+            ? examples.map((example, index) => exampleViewerItem(example, kit, index))
+            : references.map((file, index) => ({
+                key: file.path ?? file.url,
+                uri: file.url,
+                label: `Riferimento ${index + 1} di ${references.length}`,
+              }))
+        }
+        index={viewer?.index ?? null}
+        onClose={() => setViewer(null)}
+      />
+    </View>
+  );
+}
+
+/** Nel visore a tutto schermo: il PNG composto, o la stessa card disegnata dal vivo. */
+function exampleViewerItem(example: VisualExample, kit: BrandKit, index: number): ViewerItem {
+  const size = ASPECT_SIZES[example.aspect];
+  return {
+    key: `${example.channel}-${index}`,
+    uri: example.file?.url || null,
+    aspectRatio: size.width / size.height,
+    label: `${channelName(example.channel)} · ${example.aspect}`,
+    fallback: (width) => (
+      <CardView
+        kit={kit}
+        page={example.page}
+        pageIndex={0}
+        pageCount={1}
+        photoUrl={example.photo?.url || null}
+        cutoutUrl={null}
+        aspect={example.aspect}
+        width={width}
+      />
+    ),
+  };
+}
+
+/** La linea a parole: caratteri, firma e rubriche, quello che resta uguale in ogni card. */
+function LineSummary({ line }: { line: BrandLine }) {
+  const rows = [
+    ['Caratteri', describeLineFonts(line)],
+    ['Firma', [line.signature, line.address].filter(Boolean).join(' · ')],
+    ['Rubriche', line.rubrics.map((rubric) => rubric.name).join(' · ')],
+  ].filter(([, text]) => text);
+  return (
+    <View style={styles.lineRows}>
+      {rows.map(([label, text]) => (
+        <View key={label} style={styles.lineRow}>
+          <Text variant="caption" style={styles.lineLabel}>
+            {label}
+          </Text>
+          <Text variant="strongSmall" style={styles.flex}>
+            {text}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -316,17 +424,21 @@ function PaletteOption({
 }
 
 /** Il PNG composto da be-render; senza (mock, servizio giù o indirizzo scaduto) la stessa card disegnata dal vivo. */
-function ExampleCard({ example, kit }: { example: VisualExample; kit: BrandKit }) {
+function ExampleCard({ example, kit, width, onPress }: { example: VisualExample; kit: BrandKit; width: number; onPress: () => void }) {
   const [broken, setBroken] = useState(false);
   const size = ASPECT_SIZES[example.aspect];
   const url = example.file?.url;
   return (
-    <View style={styles.example}>
+    <PressableScale
+      accessibilityRole="imagebutton"
+      accessibilityLabel={`Esempio per ${channelName(example.channel)}: aprilo a tutto schermo`}
+      onPress={onPress}
+      style={[styles.example, { width }]}>
       {url && !broken ? (
         <Image
           source={{ uri: url }}
           contentFit="cover"
-          style={[styles.exampleImage, { aspectRatio: size.width / size.height }]}
+          style={[styles.exampleImage, { width, aspectRatio: size.width / size.height }]}
           onError={() => setBroken(true)}
           accessibilityLabel={`Esempio per ${channelName(example.channel)}`}
         />
@@ -336,16 +448,16 @@ function ExampleCard({ example, kit }: { example: VisualExample; kit: BrandKit }
           page={example.page}
           pageIndex={0}
           pageCount={1}
-          photoUrl={null}
+          photoUrl={example.photo?.url || null}
           cutoutUrl={null}
           aspect={example.aspect}
-          width={EXAMPLE_WIDTH}
+          width={width}
         />
       )}
       <Text variant="caption">
         {channelName(example.channel)} · {example.aspect}
       </Text>
-    </View>
+    </PressableScale>
   );
 }
 
@@ -442,8 +554,11 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   referenceRemove: { position: 'absolute', top: 4, right: 4 },
-  examples: { gap: 10 },
-  example: { width: EXAMPLE_WIDTH, gap: 6 },
-  exampleImage: { width: EXAMPLE_WIDTH, borderRadius: radii.sm, backgroundColor: colors.surfaceSunken },
+  examples: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: EXAMPLE_GAP },
+  example: { gap: 6 },
+  exampleImage: { borderRadius: radii.sm, backgroundColor: colors.surfaceSunken },
   notesRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lineRows: { gap: 6 },
+  lineRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
+  lineLabel: { width: 72 },
 });

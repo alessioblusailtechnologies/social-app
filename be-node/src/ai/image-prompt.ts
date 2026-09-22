@@ -44,9 +44,10 @@ export function photoPrompt({ description, role, aspectRatio, brand, references 
       ? 'No faces at all: show objects, hands, workspaces or environments. If a person appears, frame only hands and arms, with the head completely outside the frame.'
       : 'No faces at all: if people appear, frame them so the head is completely outside the frame (hands, arms, torso), or show them from behind.',
     references > 0
-      ? `${references === 1 ? 'The attached image is an earlier photo' : `The ${references} attached images are earlier photos`} of this brand: match their lighting, color grading and photographic rendering, but do not copy their subjects or composition.`
+      ? `${references === 1 ? 'The attached image is a reference' : `The ${references} attached images are references`} for this brand's photographic look: match their lighting, color grading, contrast and photographic rendering, but do not copy their subjects, composition, text or logos.`
       : '',
-    'No text, no letters, no numbers, no logos, no watermarks, no frames or borders.',
+    'One single full-bleed photograph that fills the whole image edge to edge: no borders, frames, mats, margins, panels, cards or backgrounds around it, no collage, no interface.',
+    'No text, no letters, no numbers, no logos, no watermarks.',
   ]
     .filter(Boolean)
     .join('\n');

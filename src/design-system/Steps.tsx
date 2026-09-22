@@ -34,11 +34,15 @@ function StepMark({ status }: { status: StepItem['status'] }) {
   );
 }
 
-/** I passi di un lavoro dell'AI mentre succede: quelli fatti, quello in corso, quelli non riusciti. */
-export function StepList({ steps }: { steps: StepItem[] }) {
+/**
+ * I passi di un lavoro dell'AI mentre succede: quelli fatti, quello in corso, quelli non riusciti. Prima che arrivi il
+ * primo passo si vede `waiting` come passo in corso, così non serve uno skeleton.
+ */
+export function StepList({ steps, waiting = 'Mi preparo' }: { steps: StepItem[]; waiting?: string }) {
+  const shown: StepItem[] = steps.length > 0 ? steps : [{ id: 'waiting', label: waiting, status: 'running' }];
   return (
     <View style={styles.list} accessibilityLiveRegion="polite">
-      {steps.map((step) => {
+      {shown.map((step) => {
         const running = step.status === 'running';
         return (
           <Animated.View key={step.id} entering={FadeIn.duration(motion.base)} style={styles.row}>

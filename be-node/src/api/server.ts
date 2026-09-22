@@ -1,5 +1,6 @@
 import '../env';
 
+import { anthropicDirector, unavailableDirector } from '../ai/art-director';
 import { AgentSdkEngine, unavailableEngine, type AiUsage } from '../ai/engine';
 import { modelTarget } from '../ai/providers';
 import { config } from '../config';
@@ -51,6 +52,17 @@ const app = buildApp({
     vision: settings.GEMINI_API_KEY
       ? geminiVision({ apiKey: settings.GEMINI_API_KEY, model: settings.VISION_MODEL, log, recordUsage: storeUsage })
       : unavailableVision,
+    director: settings.ANTHROPIC_API_KEY
+      ? anthropicDirector({
+          apiKey: settings.ANTHROPIC_API_KEY,
+          model: settings.DESIGN_MODEL,
+          effort: settings.DESIGN_EFFORT,
+          // Scrive HTML e CSS di più template: serve più tempo di una risposta di testo.
+          timeoutMs: Math.max(settings.AI_TIMEOUT_MS, 600_000),
+          log,
+          recordUsage: storeUsage,
+        })
+      : unavailableDirector,
   }),
 });
 

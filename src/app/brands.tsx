@@ -18,6 +18,7 @@ import {
 } from '@/design-system';
 import { kindLabel } from '@/domain/catalog';
 import { BrandAvatar } from '@/features/brand-editors';
+import { useOnboardingStore } from '@/features/onboarding/store';
 import { useActiveBrand, useSetActiveBrand } from '@/services/queries';
 
 export default function BrandsScreen() {
@@ -26,6 +27,7 @@ export default function BrandsScreen() {
   const insets = useSafeAreaInsets();
   const { brand: active, brands } = useActiveBrand();
   const setActive = useSetActiveBrand();
+  const resetOnboarding = useOnboardingStore((state) => state.reset);
 
   return (
     <View style={screenStyles.screen}>
@@ -74,7 +76,11 @@ export default function BrandsScreen() {
         <Button
           variant="secondary"
           block
-          onPress={() => router.replace({ pathname: '/onboarding', params: { mode: 'new' } })}>
+          onPress={() => {
+            // Un brand nuovo parte da una bozza vuota: niente di un onboarding lasciato a metà per un altro brand.
+            resetOnboarding();
+            router.replace({ pathname: '/onboarding', params: { mode: 'new' } });
+          }}>
           Aggiungi un brand
         </Button>
       </ScrollView>

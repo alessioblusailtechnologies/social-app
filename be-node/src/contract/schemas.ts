@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type {
   BrandDraft,
+  BrandLine,
   ChannelId,
   Channels,
   Identity,
@@ -13,7 +14,7 @@ import type {
   VisualExample,
   Voice,
 } from '@/domain/brand';
-import { REWRITE_INSTRUCTIONS } from '@/domain/content';
+import { REWRITE_LIMIT } from '@/domain/content';
 import type { IdeaDraft, IdeaSource } from '@/domain/idea';
 import type { PlanRequest, SlotDraft } from '@/domain/plan';
 import { TEMPLATE_IDS, type MediaFile, type VisualEdit } from '@/domain/visual';
@@ -97,14 +98,60 @@ const cardTextSchema = z.object({
   author: text(200),
 });
 
+/** Una pagina di card: il layout del motore e, se c'è, il template scritto per il brand. */
+const pageSchema = z.object({ templateId: z.enum(TEMPLATE_IDS), custom: text(60).optional(), text: cardTextSchema });
+
 const mediaFileSchema = z.object({ path: text(500).nullable(), url: text(4000) }) satisfies z.ZodType<MediaFile>;
 
 const visualExampleSchema = z.object({
   channel: channelIdSchema,
   aspect: z.enum(['4:5', '1:1', '9:16', '1.91:1']),
-  page: z.object({ templateId: z.enum(TEMPLATE_IDS), text: cardTextSchema }),
+  page: pageSchema,
   file: mediaFileSchema.nullable(),
+  photo: mediaFileSchema.nullable().optional(),
+  photoDescription: text(1000).optional(),
 }) satisfies z.ZodType<VisualExample>;
+
+const lineFontSchema = z.object({ font: text(60), weight: z.number().int().min(100).max(1000), italic: z.boolean() });
+
+const lineSchema = z.object({
+  // La composizione e i riferimenti d'origine mancano nelle prime linee.
+  from: z.array(text(500)).max(6).optional(),
+  templates: z
+    .array(
+      z.object({
+        id: text(60),
+        name: text(120),
+        use: text(600),
+        fields: z.array(text(20)).max(8),
+        photo: z.boolean(),
+        html: text(20_000),
+        css: text(30_000),
+      }),
+    )
+    .max(8)
+    .optional(),
+  fonts: z
+    .array(z.object({ family: text(80), weights: z.array(z.number().int().min(100).max(900)).max(9), italic: z.boolean() }))
+    .max(6)
+    .optional(),
+  photo: z.enum(['band', 'block', 'full']).optional(),
+  inset: z.boolean().optional(),
+  kicker: z.boolean().optional(),
+  footer: z.enum(['rule', 'mark', 'none']).optional(),
+  anchor: z.enum(['center', 'top', 'bottom']).optional(),
+  ground: text(20),
+  accent: text(20),
+  voice: lineFontSchema,
+  title: lineFontSchema,
+  label: lineFontSchema.extend({ spaced: z.boolean() }),
+  text: lineFontSchema,
+  signature: text(200),
+  address: text(200),
+  band: z.object({ description: text(1000), photo: mediaFileSchema.nullable() }).nullable(),
+  rubrics: z.array(z.object({ name: text(100), about: text(400) })).max(6),
+  copy: z.array(text(400)).max(8),
+}) satisfies z.ZodType<BrandLine>;
 
 const visualSchema = z.object({
   // Sul web il logo può arrivare come data URI: il tetto sta sotto il limite del corpo.
@@ -125,6 +172,8 @@ const visualSchema = z.object({
   references: z.array(mediaFileSchema).max(6).optional(),
   notes: text(2000).optional(),
   direction: z.object({ summary: text(600), photoStyle: text(1500) }).nullable().optional(),
+  // La linea grafica manca nei brand salvati prima del motore delle card.
+  line: lineSchema.nullable().optional(),
   examples: z.array(visualExampleSchema).max(5).optional(),
 }) satisfies z.ZodType<Visual>;
 
@@ -170,6 +219,11 @@ export const visualStyleRequestSchema = z.object({
   themes: z.array(text(120)).max(6),
   visual: visualSchema,
   channels: channelList.min(1),
+  goals: z.array(text(200)).max(10).optional(),
+  audiences: z.array(text(200)).max(10).optional(),
+  voice: voiceSchema.shape.cards.element.nullable().optional(),
+  siteSummary: text(2000).optional(),
+  restart: z.boolean().optional(),
 });
 
 /** Un'immagine di riferimento come data URI: tipo e misura li controlla il servizio, come per le foto. */
@@ -239,7 +293,8 @@ export const slotDraftSchema = z.object({
 }) satisfies z.ZodType<SlotDraft>;
 
 export const confirmPlanSchema = z.object({ drafts: z.array(slotDraftSchema).max(120) });
-export const ideaRefSchema = z.object({ ideaId: z.uuid() });
+// I canali li sceglie chi guarda l'idea; senza scelta valgono quelli dell'idea.
+export const ideaRefSchema = z.object({ ideaId: z.uuid(), channels: channelList.min(1).optional() });
 
 export const slotPatchSchema = z.object({
   date: day.optional(),
@@ -263,7 +318,10 @@ export const directContentSchema = z.object({
 });
 
 export const variantTextSchema = z.object({ text: text(10_000) });
-export const rewriteSchema = z.object({ instruction: z.enum(REWRITE_INSTRUCTIONS) });
+// Come esce su un canale: riguarda il visivo, non il testo.
+export const variantLayoutSchema = z.object({ format: formatSchema.optional(), withoutImage: z.boolean().optional() });
+// Un ritocco: uno dei suggerimenti pronti o una richiesta scritta dall'utente.
+export const rewriteSchema = z.object({ instruction: z.string().trim().min(1).max(REWRITE_LIMIT) });
 export const scheduleSchema = z.object({ date: day, time: hourMinute, publishNow: z.boolean().optional() });
 
 // ---------------------------------------------------------------------------
@@ -273,7 +331,7 @@ export const scheduleSchema = z.object({ date: day, time: hourMinute, publishNow
 /** Le modifiche senza AI. I testi li taglia il dominio: qui si ferma solo quello che è fuori misura. */
 export const visualEditSchema = z.object({
   kind: z.enum(['infographic', 'photo', 'mixed']),
-  pages: z.array(z.object({ templateId: z.enum(TEMPLATE_IDS), text: cardTextSchema })).max(20),
+  pages: z.array(pageSchema).max(20),
   description: text(2000),
   source: z.enum(['generated', 'upload']),
   reopen: z.boolean().default(false),

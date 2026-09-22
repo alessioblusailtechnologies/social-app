@@ -1,14 +1,18 @@
 import { z } from 'zod';
 
 import type { Brand, ChannelId } from '@/domain/brand';
+import { channelName } from '@/domain/catalog';
 import { ideaPreferences, SIGNAL_LABELS, type Idea, type IdeaDraft, type IdeaFormat, type IdeaSource } from '@/domain/idea';
 import { selectedChannels } from '@/domain/plan';
+import { createStepLog, IDEAS_STEPS, THINKING_STEP } from '@/services/ai-steps';
 import { describeLink } from '@/services/mock/idea-generator';
+import type { OnAiSteps } from '@/services/types';
 
 import { channelIdSchema, formatSchema } from '../contract/schemas';
 import { assertPublicUrl } from '../lib/public-url';
 import { APP_CONTEXT, WRITING_RULES, describeBrand } from './brand-context';
 import type { AiEngine, AiMeta } from './engine';
+import { stepsFromTools } from './steps';
 
 /** Le idee: proposte dal Brand DNA e dalle scelte passate, oppure spunti da una fonte dell'utente. */
 
@@ -37,7 +41,7 @@ const SYSTEM = [
   '- title: l’idea in una frase specifica, massimo 110 caratteri, con la voce del brand (vedi la persona grammaticale);',
   '- angleLabel: il nome del taglio in 2-4 parole, per esempio «Il caso con i numeri», «La tesi controcorrente», «Il dietro le quinte», «La domanda frequente», «Prima e dopo», «La ricorrenza», «Il commento», «Il momento giusto»;',
   '- angle: come svilupparla, in due o tre frasi pratiche (quali dati o esempi mostrare, come aprire, come chiudere);',
-  '- rationale: perché ha senso adesso, in una frase che cita il segnale (il peso del tema nel piano, la data, la notizia, il periodo);',
+  '- rationale: perché ha senso adesso, in una frase che cita il segnale (quanto spesso esce il tema nel piano, la data, la notizia, il periodo), senza percentuali;',
   '- themeId: l’id di uno dei temi del brand, come scritto nell’elenco; null solo se non ne tocca nessuno;',
   '- formats: 1 o 2 formati adatti tra post, carousel, video, article;',
   '- channels: gli id dei canali del brand adatti ai formati (carousel: linkedin e instagram; video: instagram, tiktok e linkedin; article: linkedin; post: tutti).',
@@ -89,7 +93,16 @@ export async function generateIdeas(
   existing: readonly Idea[],
   count: number,
   now: Date,
+  onSteps?: OnAiSteps,
 ): Promise<IdeaDraft[]> {
+  const log = createStepLog(onSteps);
+  const channels = selectedChannels(brand).map(channelName);
+  log.start(
+    'context',
+    IDEAS_STEPS.context(brand.identity.name),
+    [`${brand.themes.length} ${brand.themes.length === 1 ? 'tema' : 'temi'}`, channels.join(', ')].filter(Boolean).join(' · '),
+  );
+  log.finish('context');
   const preferences = ideaPreferences(existing);
   const themeName = (id: string) => brand.themes.find((theme) => theme.id === id)?.name ?? id;
   const score = (value: number) => `${value > 0 ? '+' : ''}${String(value).replace('.', ',')}`;
@@ -107,6 +120,7 @@ export async function generateIdeas(
     tools: ['WebSearch', 'WebFetch'],
     schema: generatedSchema,
     system: SYSTEM,
+    onTool: stepsFromTools(log, { first: IDEAS_STEPS.plan, next: IDEAS_STEPS.reflect }),
     prompt: [
       `Proponi ${count} idee nuove per questo brand.`,
       [
@@ -115,7 +129,7 @@ export async function generateIdeas(
         '- kind «trend»: una notizia o una discussione di queste settimane che riguarda il pubblico del brand; label è la fonte o l’argomento seguito da « · questa settimana». Cercala sul web partendo dalle fonti attive: al massimo due idee da trend, e solo se hai trovato davvero la notizia;',
         '- kind «recurrence»: una delle ricorrenze vicine; label è il nome della data seguito da « · » e il giorno. Se ce n’è una, almeno un’idea è su quella;',
         '- kind «season»: il periodo dell’anno; label è il mese seguito da « · calendario».',
-        'Distribuisci le idee sui temi in proporzione al peso, corretto dalle scelte passate: più spazio ai temi e ai segnali con punteggio alto, meno a quelli con punteggio negativo. Niente idee uguali o quasi uguali a quelle già proposte.',
+        'Distribuisci le idee sui temi secondo quanto spesso escono nel piano, corretto dalle scelte passate: più spazio ai temi e ai segnali con punteggio alto, meno a quelli con punteggio negativo. Niente idee uguali o quasi uguali a quelle già proposte.',
       ].join('\n'),
       describeBrand(brand, now),
       [
@@ -148,6 +162,9 @@ export async function generateIdeas(
     drafts.push(draft);
     if (drafts.length === count) break;
   }
+  log.drop(THINKING_STEP);
+  log.start('write', IDEAS_STEPS.write(drafts.length), drafts[0]?.title);
+  log.finish('write');
   return drafts;
 }
 
@@ -205,7 +222,7 @@ export async function draftIdeasFromSource(
     prompt: [
       'Da questa fonte proponi 3 idee di contenuto per il brand, con tre tagli diversi fra loro.',
       variant > 0 ? `È la richiesta numero ${variant + 1} sulla stessa fonte: scegli tagli diversi da quelli più ovvi.` : '',
-      'Nel rationale di ogni idea di’ da dove nasce e a quale tema si lega, per esempio «Dal link che hai condiviso. Si lega a «Numeri e prezzi», che nel piano pesa 20%.»',
+      'Nel rationale di ogni idea di’ da dove nasce e a quale tema si lega, per esempio «Dal link che hai condiviso. Si lega a «Numeri e prezzi», che nel piano esce ogni tanto.»',
       describeSource(source),
       describeBrand(brand, now),
     ]

@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
+import { useState } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
@@ -20,16 +21,15 @@ import {
   screenStyles,
   useToast,
 } from '@/design-system';
-import type { Brand } from '@/domain/brand';
+import type { Brand, ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
-import { FORMAT_LABELS, type Idea, type IdeaStatus } from '@/domain/idea';
+import type { Idea, IdeaStatus } from '@/domain/idea';
+import { selectedChannels } from '@/domain/plan';
 import { themeLevelLabel } from '@/domain/themes';
-import { ChannelMark } from '@/features/brand-editors';
 import { formatWeekdayLong, formatWeekdayShort } from '@/lib/dates';
 import {
   useAddIdeaToPlan,
   useContentDrafts,
-  useCreateContentFromIdea,
   usePlan,
   useSetIdeaStatus,
 } from '@/services/queries';
@@ -53,7 +53,12 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
   const { data: slots = [] } = usePlan(brand.id);
   const { data: drafts = [] } = useContentDrafts(brand.id);
   const addToPlan = useAddIdeaToPlan(brand.id);
-  const createContent = useCreateContentFromIdea(brand.id);
+  // Dove esce: parte dai canali dell'idea, ma lo decide chi guarda.
+  const available = selectedChannels(brand);
+  const [channels, setChannels] = useState<ChannelId[]>(() => {
+    const fitting = idea.channels.filter((channel) => available.includes(channel));
+    return fitting.length > 0 ? fitting : available;
+  });
   const plannedSlot = slots.find((slot) => slot.ideaId === idea.id);
   /** Una bozza già scritta da questa idea e non ancora programmata. */
   const draft = drafts.find((candidate) => candidate.ideaId === idea.id);
@@ -64,6 +69,18 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
   const change = (status: IdeaStatus, message: string) => {
     setStatus.mutate({ ideaId: idea.id, status });
     toast(message);
+  };
+
+  const toggleChannel = (channel: ChannelId) => {
+    if (!channels.includes(channel)) {
+      setChannels([...channels, channel]);
+      return;
+    }
+    if (channels.length === 1) {
+      toast('Serve almeno un canale.');
+      return;
+    }
+    setChannels(channels.filter((entry) => entry !== channel));
   };
 
   return (
@@ -90,6 +107,21 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
             </View>
           </View>
         </Card>
+
+        <Panel label="Dove esce">
+          <ChipGroup>
+            {available.map((channel) => (
+              <Chip
+                key={channel}
+                label={channelName(channel)}
+                selected={channels.includes(channel)}
+                onPress={() => toggleChannel(channel)}
+              />
+            ))}
+          </ChipGroup>
+          <Text variant="caption">Lo stesso contenuto esce su tutti i canali scelti, adattato a ognuno.</Text>
+        </Panel>
+
 
         <Panel label="Perché adesso">
           <Text variant="body" color={colors.textTitle}>
@@ -135,24 +167,6 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
           )}
         </Panel>
 
-        <Panel label="Formati e canali">
-          <ChipGroup>
-            {idea.formats.map((format) => (
-              <Chip key={format} size="sm" label={FORMAT_LABELS[format]} />
-            ))}
-          </ChipGroup>
-          {idea.channels.length > 0 && (
-            <View style={styles.row}>
-              {idea.channels.map((channel) => (
-                <ChannelMark key={channel} channel={channel} active size={30} />
-              ))}
-              <Text variant="caption" style={styles.flex}>
-                {idea.channels.map(channelName).join(' · ')}
-              </Text>
-            </View>
-          )}
-        </Panel>
-
         {theme && (
           <Panel label="Tema">
             <View style={styles.row}>
@@ -184,36 +198,32 @@ export function IdeaDetailScreen({ brand, idea }: { brand: Brand; idea: Idea }) 
           </Button>
         ) : (
           <>
+            {/* Si va subito al primo passo del contenuto: i passi dell'AI si vedono là, mentre scrive. */}
             <Button
               size="lg"
               block
-              busy={createContent.isPending}
               disabled={addToPlan.isPending}
               onPress={() =>
-                createContent.mutate(idea.id, {
-                  onSuccess: (content) => {
-                    if (idea.status !== 'saved') setStatus.mutate({ ideaId: idea.id, status: 'saved' });
-                    router.push({ pathname: '/draft/[contentId]', params: { contentId: content.id } });
-                  },
-                  onError: () => toast('Non riesco a preparare la bozza. Riprova.'),
-                })
+                router.push({ pathname: '/writing', params: { ideaId: idea.id, channels: channels.join(',') } })
               }>
-              {createContent.isPending ? 'Sto scrivendo la bozza…' : 'Genera contenuto'}
+              Genera contenuto
             </Button>
             <Button
               block
               variant="secondary"
               busy={addToPlan.isPending}
-              disabled={createContent.isPending}
               onPress={() =>
-                addToPlan.mutate(idea.id, {
-                  onSuccess: (slot) => {
-                    if (idea.status !== 'saved') setStatus.mutate({ ideaId: idea.id, status: 'saved' });
-                    toast(`Nel piano: ${formatWeekdayLong(slot.date)} alle ${slot.time}.`);
-                    router.push({ pathname: '/content/[slotId]', params: { slotId: slot.id } });
+                addToPlan.mutate(
+                  { ideaId: idea.id, channels },
+                  {
+                    onSuccess: (slot) => {
+                      if (idea.status !== 'saved') setStatus.mutate({ ideaId: idea.id, status: 'saved' });
+                      toast(`Nel piano: ${formatWeekdayLong(slot.date)} alle ${slot.time}.`);
+                      router.push({ pathname: '/content/[slotId]', params: { slotId: slot.id } });
+                    },
+                    onError: () => toast('Non riesco ad aggiungerla al piano. Riprova.'),
                   },
-                  onError: () => toast('Non riesco ad aggiungerla al piano. Riprova.'),
-                })
+                )
               }>
               {addToPlan.isPending ? 'Cerco il giorno giusto…' : 'Aggiungi al piano'}
             </Button>

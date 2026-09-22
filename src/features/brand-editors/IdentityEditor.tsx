@@ -1,6 +1,6 @@
 import { Keyboard, StyleSheet, View } from 'react-native';
 
-import { Badge, Button, FieldCard, Panel, SkeletonLines, StepList, Text, colors, useToast } from '@/design-system';
+import { Badge, Button, FieldCard, Panel, StepList, Text, colors, useToast } from '@/design-system';
 import type { BrandKind, Identity } from '@/domain/brand';
 import { normalizeSite } from '@/lib/site';
 import { apiErrorMessage } from '@/services';
@@ -103,7 +103,7 @@ export function IdentityEditor({ value, onChange, context }: EditorProps<Identit
       {readWebsite.isPending && (
         <Panel gap={12}>
           <Text variant="strongSmall">Sto leggendo {site}</Text>
-          {readWebsite.steps.length > 0 ? <StepList steps={readWebsite.steps} /> : <SkeletonLines widths={[88, 64]} />}
+          <StepList steps={readWebsite.steps} waiting="Mi collego al sito" />
         </Panel>
       )}
       {alreadyRead && context.insights && !readWebsite.isPending && (

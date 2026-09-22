@@ -164,7 +164,10 @@ export function createVisualRunner({ pool, media, log, concurrency = 2, pollMs =
   async function renderAll(identity: Identity, { content, brand, design }: Loaded): Promise<VisualRender[]> {
     const photoPath = design.image.photo?.path ?? null;
     const cutoutPath = design.image.cutout?.path ?? null;
-    const urls = await media.storage.sign([photoPath, cutoutPath].filter((path): path is string => Boolean(path)));
+    // La fascia della linea va sulla copertina dei caroselli: il brand letto dal database non ha indirizzi firmati.
+    const band = brand.visual.line?.band ?? null;
+    const bandPath = band?.photo?.path ?? null;
+    const urls = await media.storage.sign([photoPath, cutoutPath, bandPath].filter((path): path is string => Boolean(path)));
     const signed = (path: string | null) => {
       if (!path) return null;
       const url = urls.get(path);
@@ -173,8 +176,13 @@ export function createVisualRunner({ pool, media, log, concurrency = 2, pollMs =
     };
     const photoUrl = signed(photoPath);
     const cutoutUrl = signed(cutoutPath);
+    const bandUrl = bandPath ? (urls.get(bandPath) ?? null) : null;
 
-    const kit = brandKit(brand);
+    const kit = brandKit(
+      band?.photo && brand.visual.line
+        ? { ...brand, visual: { ...brand.visual, line: { ...brand.visual.line, band: { ...band, photo: { ...band.photo, url: bandUrl ?? '' } } } } }
+        : brand,
+    );
     // Il logo passa solo se be-render lo può aprire: un percorso del telefono non si vede dal server.
     const logoUrl = kit.logoUrl && /^(https:|data:image\/)/.test(kit.logoUrl) ? kit.logoUrl : null;
     const renderKit = { ...kit, logoUrl, signature: kit.signature && logoUrl !== null };

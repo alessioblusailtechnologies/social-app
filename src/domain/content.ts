@@ -12,6 +12,10 @@ export interface ChannelVariant {
   channel: ChannelId;
   text: string;
   hashtags: string[];
+  /** Con che formato esce su questo canale: cambia solo il visivo, non il testo. Assente: quello del contenuto. */
+  format?: IdeaFormat;
+  /** Su questo canale esce senza immagine, solo dove il canale lo permette. */
+  withoutImage?: boolean;
 }
 
 export interface CarouselSlide {
@@ -64,6 +68,29 @@ export interface Content {
   approvedAt: string | null;
 }
 
+/** Il formato con cui il contenuto esce su un canale: quello scelto per il canale, o quello del contenuto. */
+export function variantFormat(content: Content, channel: ChannelId): IdeaFormat {
+  const variant = content.variants.find((candidate) => candidate.channel === channel);
+  return variant?.format ?? content.format;
+}
+
+/**
+ * I formati che si possono dare a un canale senza rifare la bozza: cambiano solo il visivo.
+ * Un video ha bisogno delle scene e un carosello delle slide, che nascono col testo: quelli
+ * si ottengono rifacendo la bozza, non da qui.
+ */
+export function renderableFormats(format: IdeaFormat): IdeaFormat[] {
+  if (format === 'video') return ['video'];
+  if (format === 'carousel') return ['carousel', 'post', 'article'];
+  return ['post', 'article'];
+}
+
+/** I canali che escono senza immagine per scelta. */
+export function channelsWithoutImage(content: Content): ChannelId[] {
+  return content.variants.filter((variant) => variant.withoutImage).map((variant) => variant.channel);
+}
+
+/** I ritocchi pronti, che stanno nella barra sotto il testo come suggerimenti. */
 export const REWRITE_INSTRUCTIONS = [
   'Più corto',
   'Più diretto',
@@ -72,7 +99,11 @@ export const REWRITE_INSTRUCTIONS = [
   'Meno formale',
 ] as const;
 
-export type RewriteInstruction = (typeof REWRITE_INSTRUCTIONS)[number];
+/** Un ritocco: un suggerimento pronto oppure la richiesta scritta dall'utente com'è. */
+export type RewriteInstruction = string;
+
+/** Quanto può essere lunga una richiesta di ritocco scritta a mano. */
+export const REWRITE_LIMIT = 240;
 
 export const CHANNEL_LIMITS: Record<ChannelId, number> = {
   linkedin: 3000,

@@ -12,6 +12,7 @@ import type { AiEngine, AiRequest } from '../src/ai/engine';
 import type { MediaDeps } from '../src/media';
 import { buildApp } from '../src/api/app';
 import { unavailableVision } from '../src/media/vision';
+import { unavailableDirector } from '../src/ai/art-director';
 import { supabaseVerifier } from '../src/api/plugins/auth';
 import { config } from '../src/config';
 import { closeDb, db } from '../src/db/pool';
@@ -127,6 +128,7 @@ const fakeMedia: MediaDeps = {
     },
   },
   vision: unavailableVision,
+  director: unavailableDirector,
 };
 
 describe.skipIf(!enabled)('API contro il database', () => {

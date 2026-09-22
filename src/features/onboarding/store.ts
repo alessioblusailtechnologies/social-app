@@ -66,17 +66,26 @@ export const useOnboardingStore = create<OnboardingState>()(
         ),
       applyInsights: (insights) =>
         set((state) => {
-          const { draft } = state;
-          if (!draft) return {};
+          const current = state.draft;
+          if (!current) return {};
+          // Il sito di un altro brand: quello che veniva dal brand di prima (temi, obiettivi, voce, logo, linea,
+          // esempi, riferimenti) si butta. Restano il tipo, i dati che l'utente sta scrivendo e i canali.
+          const otherBrand = state.insights !== null && state.insights.site !== insights.site;
+          const draft = otherBrand
+            ? { ...createEmptyDraft(current.identity.kind), identity: current.identity, channels: current.channels }
+            : current;
+          const themesEdited = otherBrand ? false : state.themesEdited;
           // La frase letta dal sito entra solo al posto di un campo vuoto o della proposta precedente.
           const { pitch } = draft.identity;
           const pitchFree = !pitch.trim() || pitch === state.insights?.pitch;
           return {
             insights,
+            themesEdited,
+            positioningIdeas: otherBrand ? null : state.positioningIdeas,
             draft: {
               ...draft,
               identity: pitchFree && insights.pitch ? { ...draft.identity, pitch: insights.pitch } : draft.identity,
-              themes: state.themesEdited ? draft.themes : createThemes(insights.themes),
+              themes: themesEdited ? draft.themes : createThemes(insights.themes),
               visual:
                 draft.visual.palette.origin === 'custom' ? draft.visual : { ...draft.visual, palette: insights.palette },
             },

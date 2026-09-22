@@ -12,7 +12,9 @@ import { services } from './index';
 import type {
   AiStep,
   DirectContentRequest,
+  OnAiSteps,
   SlotPatch,
+  VariantLayout,
   VisualStyleRequest,
   VoiceSample,
   WebsiteInsights,
@@ -73,47 +75,70 @@ export function useContentDrafts(brandId: string | undefined) {
 }
 
 /** Le operazioni sul contenuto aggiornano insieme la bozza, lo stato dell'uscita e le bozze da programmare. */
-function useContentWithSlot<V>(brandId: string, run: (variables: V) => Promise<{ content: Content; slot: PlanSlot }>) {
+function useContentWithSlot<V>(
+  brandId: string,
+  run: (variables: V, onSteps: OnAiSteps) => Promise<{ content: Content; slot: PlanSlot }>,
+) {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: run,
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: (variables: V) => {
+      setSteps([]);
+      return run(variables, setSteps);
+    },
     onSuccess: ({ content, slot }) => {
       cacheContent(client, content);
       client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => upsertSlot(slots, slot));
       client.invalidateQueries({ queryKey: draftsKey(brandId) });
     },
   });
+  return { ...mutation, steps };
 }
 
+/** Scrivere una bozza richiede tempo: la mutazione porta con sé i passi dell'AI mentre la scrive. */
 export function useCreateContent(brandId: string) {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: (request: DirectContentRequest) => services.contents.createDirect(brandId, request),
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: (request: DirectContentRequest) => {
+      setSteps([]);
+      return services.contents.createDirect(brandId, request, setSteps);
+    },
     onSuccess: (content) => {
       cacheContent(client, content);
       client.invalidateQueries({ queryKey: draftsKey(brandId) });
     },
   });
+  return { ...mutation, steps };
 }
 
 export function useCreateContentFromIdea(brandId: string) {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: (ideaId: string) => services.contents.createFromIdea(brandId, ideaId),
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: ({ ideaId, channels }: { ideaId: string; channels?: ChannelId[] }) => {
+      setSteps([]);
+      return services.contents.createFromIdea(brandId, ideaId, channels, setSteps);
+    },
     onSuccess: (content) => {
       cacheContent(client, content);
       client.invalidateQueries({ queryKey: draftsKey(brandId) });
     },
   });
+  return { ...mutation, steps };
 }
 
 export function useRegenerateContent() {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({ contentId, format }: { contentId: string; format?: IdeaFormat }) =>
-      services.contents.regenerate(contentId, format),
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: ({ contentId, format }: { contentId: string; format?: IdeaFormat }) => {
+      setSteps([]);
+      return services.contents.regenerate(contentId, format, setSteps);
+    },
     onSuccess: (content) => cacheContent(client, content),
   });
+  return { ...mutation, steps };
 }
 
 export function useScheduleContent(brandId: string) {
@@ -125,8 +150,8 @@ export function useScheduleContent(brandId: string) {
 }
 
 export function usePrepareContent(brandId: string) {
-  return useContentWithSlot(brandId, ({ slotId, format }: { slotId: string; format?: IdeaFormat }) =>
-    services.contents.prepare(slotId, format),
+  return useContentWithSlot(brandId, ({ slotId, format }: { slotId: string; format?: IdeaFormat }, onSteps) =>
+    services.contents.prepare(slotId, format, onSteps),
   );
 }
 
@@ -147,13 +172,40 @@ export function useEditVariant() {
   });
 }
 
-export function useRewriteVariant() {
+/** Formato e «senza immagine» di un canale: la card cambia subito, senza aspettare la risposta. */
+export function useSetVariantLayout() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ contentId, channel, instruction }: { contentId: string; channel: ChannelId; instruction: RewriteInstruction }) =>
-      services.contents.rewrite(contentId, channel, instruction),
+    mutationFn: ({ content, channel, layout }: { content: Content; channel: ChannelId; layout: VariantLayout }) =>
+      services.contents.setVariantLayout(content.id, channel, layout),
+    onMutate: ({ content, channel, layout }) =>
+      cacheContent(client, {
+        ...content,
+        variants: content.variants.map((variant) => (variant.channel === channel ? { ...variant, ...layout } : variant)),
+      }),
     onSuccess: (content) => cacheContent(client, content),
   });
+}
+
+export function useRewriteVariant() {
+  const client = useQueryClient();
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: ({
+      contentId,
+      channel,
+      instruction,
+    }: {
+      contentId: string;
+      channel: ChannelId;
+      instruction: RewriteInstruction;
+    }) => {
+      setSteps([]);
+      return services.contents.rewrite(contentId, channel, instruction, setSteps);
+    },
+    onSuccess: (content) => cacheContent(client, content),
+  });
+  return { ...mutation, steps };
 }
 
 /** Cambiare layout o tipo deve sembrare istantaneo: la card cambia prima della risposta. */
@@ -250,7 +302,8 @@ export function useConfirmPlan(brandId: string) {
 export function useAddIdeaToPlan(brandId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (ideaId: string) => services.plan.addIdea(brandId, ideaId),
+    mutationFn: ({ ideaId, channels }: { ideaId: string; channels?: ChannelId[] }) =>
+      services.plan.addIdea(brandId, ideaId, channels),
     onSuccess: (slot) => client.setQueryData<PlanSlot[]>(planKey(brandId), (slots) => upsertSlot(slots, slot)),
   });
 }
@@ -302,13 +355,34 @@ export function useIdeas(brandId: string | undefined) {
   });
 }
 
+/** Nuove idee dal Brand DNA, con i passi dell'AI mentre le prepara: `steps` riparte vuoto ogni volta. */
 export function useGenerateIdeas(brandId: string) {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: (count?: number) => services.ideas.generate(brandId, count),
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: (count?: number) => {
+      setSteps([]);
+      return services.ideas.generate(brandId, count, setSteps);
+    },
     onSuccess: (created) =>
       client.setQueryData<Idea[]>(ideasKey(brandId), (ideas) => [...created, ...(ideas ?? [])]),
   });
+  return { ...mutation, steps };
+}
+
+/** Le prime idee del brand appena creato, a fine onboarding: il brand si conosce solo dopo. */
+export function useFirstIdeas() {
+  const client = useQueryClient();
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: ({ brandId, count }: { brandId: string; count: number }) => {
+      setSteps([]);
+      return services.ideas.generate(brandId, count, setSteps);
+    },
+    onSuccess: (created, { brandId }) =>
+      client.setQueryData<Idea[]>(ideasKey(brandId), (ideas) => [...created, ...(ideas ?? [])]),
+  });
+  return { ...mutation, steps };
 }
 
 export function useDraftIdeas(brandId: string) {

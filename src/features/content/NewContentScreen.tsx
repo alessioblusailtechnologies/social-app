@@ -13,7 +13,7 @@ import {
   Panel,
   ScreenFooter,
   ScreenTitle,
-  SkeletonLines,
+  StepList,
   Text,
   TopBar,
   radii,
@@ -77,8 +77,7 @@ export function NewContentScreen({ brand }: { brand: Brand }) {
           <>
             <ScreenTitle title="Un attimo" subtitle="Scelgo il taglio, lo lego ai temi del profilo e scrivo seguendo la tua voce." />
             <Panel gap={12} style={{ borderRadius: radii.card }}>
-              <Text variant="strongSmall">Sto scrivendo per {channels.map(channelName).join(' e ')}</Text>
-              <SkeletonLines widths={[96, 84, 100, 70, 58]} />
+              <StepList steps={create.steps} waiting="Rileggo il profilo" />
             </Panel>
           </>
         ) : (
