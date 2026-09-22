@@ -43,7 +43,6 @@ import {
   useCreateVisual,
   useDesignVisual,
   useEditVisual,
-  useProposeVisual,
   useRefreshVisual,
   useRegenerateImage,
   useUploadPhoto,
@@ -90,7 +89,6 @@ export interface VisualPanelProps {
 export function VisualPanel({ brand, content, channel, locked }: VisualPanelProps) {
   const toast = useToast();
   const editVisual = useEditVisual();
-  const propose = useProposeVisual();
   const create = useCreateVisual();
   const regenerate = useRegenerateImage();
   const upload = useUploadPhoto();
@@ -105,19 +103,66 @@ export function VisualPanel({ brand, content, channel, locked }: VisualPanelProp
   const design = content.visual.design;
   if (content.format === 'video') return null;
 
+  /** Disegna la card da capo. Canali vuoti = deve reggere in tutti i formati del contenuto. */
+  const startDesign = (channels: ChannelId[]) => {
+    setAsking(false);
+    const asked = instruction.trim();
+    setInstruction('');
+    draw.mutate(
+      { contentId: content.id, channels, ...(asked && { instruction: asked }) },
+      { onError: () => toast('Non riesco a disegnare la card. Riprova.') },
+    );
+  };
+
+  /** Coi canali multipli si chiede: un layout per il verticale in quadrato raramente regge. */
+  const askOrDesign = () => (content.channels.length > 1 ? setAsking(true) : startDesign([]));
+
+  /** La domanda dei formati: sale dal basso, si risponde e si chiude. */
+  const channelSheet = (
+    <Sheet
+      visible={asking}
+      onClose={() => setAsking(false)}
+      title="Per quali formati?"
+      hint="Lo stesso layout esce nei formati dei canali che scegli: più ne metti, più deve reggere.">
+      <Button block variant="secondary" onPress={() => startDesign([channel])}>
+        {`Solo ${channelName(channel)}`}
+      </Button>
+      <Button block onPress={() => startDesign([])}>
+        {`Tutti e ${content.channels.length} i canali`}
+      </Button>
+    </Sheet>
+  );
+
+  // Nessuna card: è lo stato normale di una bozza appena scritta, perché il visivo non nasce
+  // col testo. Da qui si chiede il disegno, dicendo come la si vuole.
   if (!design) {
     if (locked) return null;
+    if (draw.isPending) {
+      return (
+        <Panel label="Visivo" gap={10}>
+          <StepList steps={draw.steps} waiting="Guardo le card che hai approvato" />
+        </Panel>
+      );
+    }
     return (
       <Panel label="Visivo" gap={10}>
+        {channelSheet}
         <Text variant="body" color={colors.textTitle}>
-          Questa bozza è nata prima dei visivi. Ti propongo una card fatta con i suoi testi, nei colori del brand.
+          La card la disegno guardando le card che hai approvato nel profilo e il testo qui sopra. Dimmi come la vuoi, o lascia fare a me.
         </Text>
-        <Button
-          size="sm"
-          variant="secondary"
-          busy={propose.isPending}
-          onPress={() => propose.mutate(content.id, { onError: () => toast('Non riesco a proporre il visivo. Riprova.') })}>
-          Proponi il visivo
+        <View style={styles.askRow}>
+          <SunkenInput
+            style={styles.flex}
+            value={instruction}
+            onChangeText={setInstruction}
+            placeholder="Come la vuoi? es. senza foto, titolo grande"
+            returnKeyType="send"
+            onSubmitEditing={askOrDesign}
+          />
+          <IconButton icon={ArrowUp} variant="solid" size={40} iconSize={18} accessibilityLabel="Disegna la card" onPress={askOrDesign} />
+        </View>
+        <Button block variant="secondary" onPress={askOrDesign}>
+          Disegna la card
         </Button>
       </Panel>
     );
@@ -147,20 +192,6 @@ export function VisualPanel({ brand, content, channel, locked }: VisualPanelProp
 
   const startCreation = () => create.mutate(content.id, { onError: () => toast('Non riesco a creare il visivo. Riprova.') });
 
-  /** Disegna la card da capo. Canali vuoti = deve reggere in tutti i formati del contenuto. */
-  const startDesign = (channels: ChannelId[]) => {
-    setAsking(false);
-    const asked = instruction.trim();
-    setInstruction('');
-    draw.mutate(
-      { contentId: content.id, channels, ...(asked && { instruction: asked }) },
-      { onError: () => toast('Non riesco a disegnare la card. Riprova.') },
-    );
-  };
-
-  /** Coi canali multipli si chiede: un layout per il verticale in quadrato raramente regge. */
-  const askOrDesign = () => (content.channels.length > 1 ? setAsking(true) : startDesign([]));
-
   /**
    * La barra del disegno, come in «Come appare»: si dice come la si vuole e la freccia disegna.
    * È l'unico modo di cambiare il layout, perché il layout lo scrive l'AI: non ci sono alternative
@@ -185,22 +216,6 @@ export function VisualPanel({ brand, content, channel, locked }: VisualPanelProp
         onPress={askOrDesign}
       />
     </View>
-  );
-
-  /** La domanda dei formati: sale dal basso, si risponde e si chiude. */
-  const channelSheet = (
-    <Sheet
-      visible={asking}
-      onClose={() => setAsking(false)}
-      title="Per quali formati?"
-      hint="Lo stesso layout esce nei formati dei canali che scegli: più ne metti, più deve reggere.">
-      <Button block variant="secondary" onPress={() => startDesign([channel])}>
-        {`Solo ${channelName(channel)}`}
-      </Button>
-      <Button block onPress={() => startDesign([])}>
-        {`Tutti e ${content.channels.length} i canali`}
-      </Button>
-    </Sheet>
   );
 
   const pickPhoto = async () => {

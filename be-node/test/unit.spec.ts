@@ -9,7 +9,8 @@ import { createStepLog } from '@/services/ai-steps';
 import type { AiStep } from '@/services/types';
 
 import { cleanLabels, describeBrand } from '../src/ai/brand-context';
-import { cleanHashtags, proposalFromOutput } from '../src/ai/content';
+import { cleanHashtags } from '../src/ai/content';
+import { fallbackDesign } from '@/domain/visual';
 import { photoPrompt } from '../src/ai/image-prompt';
 import type { MediaStorage } from '../src/media/storage';
 import { parsePhotoDataUri } from '../src/services/visual';
@@ -135,24 +136,6 @@ describe('visivi', () => {
     expect(cutout).toContain('The 2 attached images');
   });
 
-  it('la proposta dell’AI diventa un visivo da creare, con una pagina per slide nel carosello', () => {
-    // Senza numero il «Dato» non regge: resta la «Frase».
-    const post = proposalFromOutput({ kind: 'infographic', templateId: 'stat', card, imageDescription: 'Pane' }, 'post', 'Titolo', []);
-    expect(post).toMatchObject({ status: 'proposed', kind: 'infographic' });
-    expect(post?.pages[0].templateId).toBe('statement');
-
-    const slides = [
-      { title: 'A', body: 'a' },
-      { title: 'B', body: 'b' },
-      { title: 'C', body: 'c' },
-    ];
-    const carousel = proposalFromOutput({ kind: 'photo', templateId: 'photo-cover', card, imageDescription: 'Pane' }, 'carousel', 'Titolo', slides);
-    expect(carousel?.pages.map((page) => page.templateId)).toEqual(['photo-cover', 'point', 'closing']);
-    expect(carousel?.image.description).toBe('Pane');
-
-    expect(proposalFromOutput(null, 'post', 'Titolo', [])?.pages[0].text.headline).toBe('Titolo');
-    expect(proposalFromOutput(null, 'video', 'Titolo', [])).toBeNull();
-  });
 
   it('accetta solo foto vere, fino a 3 MB', () => {
     expect(parsePhotoDataUri(`data:image/png;base64,${PNG}`).mimeType).toBe('image/png');
@@ -163,7 +146,7 @@ describe('visivi', () => {
 
   it('nel database gli indirizzi restano vuoti, in risposta si firmano tutti in una chiamata', async () => {
     const design = {
-      ...proposalFromOutput(null, 'post', 'Titolo', [])!,
+      ...fallbackDesign('post', 'Titolo', [])!,
       status: 'ready' as const,
       image: { description: '', source: 'generated' as const, photo: { path: 'a/b/foto.png', url: 'https://scaduto' }, cutout: null },
       renders: [{ page: 0, aspect: '4:5' as const, file: { path: 'a/b/card.png', url: 'https://scaduto' } }],

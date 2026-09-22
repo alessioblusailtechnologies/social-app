@@ -1,8 +1,7 @@
 import { z } from 'zod';
 
-import type { Brand, BrandTemplate, ChannelId, ImageStyle } from '@/domain/brand';
-import { channelName, imageStyleLabel } from '@/domain/catalog';
-import { withBrandTemplates } from '@/domain/line';
+import type { Brand, ChannelId } from '@/domain/brand';
+import { channelName } from '@/domain/catalog';
 import {
   CHANNEL_LIMITS,
   type CarouselSlide,
@@ -14,12 +13,8 @@ import {
 import type { Idea, IdeaFormat, IdeaSource } from '@/domain/idea';
 import {
   CARD_LIMITS,
-  SINGLE_TEMPLATES,
   VISUAL_KINDS,
   VISUAL_KIND_LABELS,
-  fallbackDesign,
-  proposeDesign,
-  type TemplateId,
   type VisualDesign,
 } from '@/domain/visual';
 
@@ -34,7 +29,7 @@ import type { AiEngine, AiMeta } from './engine';
 import { describeSource } from './ideas';
 import { stepsFromTools } from './steps';
 
-/** Le bozze: una variante per canale e il visivo del formato, da un'idea o da una fonte dell'utente. */
+/** Le bozze: una variante di testo per ogni canale, da un'idea o da una fonte dell'utente. */
 
 const HASHTAG_COUNT: Record<ChannelId, number> = { linkedin: 3, instagram: 6, facebook: 2, tiktok: 4, x: 2 };
 
@@ -60,7 +55,7 @@ const FORMAT_GUIDE: Record<IdeaFormat, string> = {
 
 const SYSTEM = [
   APP_CONTEXT,
-  'Qui scrivi la bozza di un contenuto: una variante di testo per ogni canale richiesto e il visivo del formato. La bozza la rilegge l’utente prima di approvarla.',
+  'Qui scrivi la bozza di un contenuto: una variante di testo per ogni canale richiesto. La bozza la rilegge l’utente prima di approvarla. Il visivo non lo decidi tu: la card la disegna chi se ne occupa, dopo, guardando questo testo.',
   WRITING_RULES,
   '',
   'Regole:',
@@ -70,25 +65,6 @@ const SYSTEM = [
   '- niente virgolette attorno al testo e nessun commento tuo fuori dal contenuto.',
 ].join('\n');
 
-const SINGLE_TEMPLATE_IDS = SINGLE_TEMPLATES.map((spec) => spec.id) as [TemplateId, ...TemplateId[]];
-
-/** La proposta di card che accompagna la bozza: testi per ruolo, il template e cosa si vede nella foto. */
-const proposalSchema = z.object({
-  kind: z.enum(['infographic', 'photo', 'mixed']),
-  templateId: z.enum(SINGLE_TEMPLATE_IDS),
-  brandTemplate: z.string().optional().describe('L’id del template del brand scelto, se il brand ne ha.'),
-  card: z.object({
-    kicker: z.string(),
-    headline: z.string(),
-    body: z.string(),
-    value: z.string(),
-    items: z.array(z.object({ title: z.string(), body: z.string() })),
-    author: z.string(),
-  }),
-  imageDescription: z.string(),
-});
-
-export type ProposalOutput = z.infer<typeof proposalSchema>;
 
 const writtenSchema = z.object({
   title: z.string().describe('Il titolo del contenuto in una frase.'),
@@ -104,93 +80,7 @@ const writtenSchema = z.object({
       source: z.enum(['generated', 'shoot']),
     }),
   ),
-  visual: proposalSchema.nullable().describe('La proposta di card del post; null per un video.'),
 });
-
-const KIND_FOR_STYLE: Record<ImageStyle, string> = {
-  'text-only': '"infographic", perché il brand non usa foto',
-  'flat-geometric': '"infographic", con la linea grafica del brand',
-  'natural-photo': '"photo" o "mixed", con foto naturali',
-  'desaturated-photo': '"mixed" o "photo", con foto desaturate',
-};
-
-/** Il catalogo dei template per l'AI, generato dal dominio così prompt e app non divergono. */
-function describeVisualGuide(brand: Brand, format: IdeaFormat): string {
-  if (format === 'video') return '## Visivo\nPer un video visual è null.';
-  const templates = brand.visual.line?.templates ?? [];
-  if (templates.length > 0) return describeBrandTemplates(templates, format);
-  const catalog = VISUAL_KINDS.map((kind) =>
-    [
-      `${VISUAL_KIND_LABELS[kind]}, kind "${kind}":`,
-      ...SINGLE_TEMPLATES.filter((spec) => spec.kind === kind).map((spec) => {
-        const items =
-          spec.items && spec.items.min > 0
-            ? `; da ${spec.items.min} a ${spec.items.max} punti${spec.items.titled ? ', ognuno con title e body' : ''}`
-            : '';
-        return `- "${spec.id}" (${spec.name}): ${spec.hint}. Testi richiesti: ${spec.requires.join(', ') || 'nessuno'}${items}.`;
-      }),
-    ].join('\n'),
-  );
-  return [
-    '## Visivo: la card del post',
-    'In visual proponi la card che accompagna il testo. Non disegni niente: scegli un template del brand e ne scrivi i testi, brevi, pensati per la card e non copiati dalla prima riga del post.',
-    ...catalog,
-    `Limiti in caratteri: kicker ${CARD_LIMITS.kicker}, headline ${CARD_LIMITS.headline}, body ${CARD_LIMITS.body}, value ${CARD_LIMITS.value}, author ${CARD_LIMITS.author}; nei punti title ${CARD_LIMITS.itemTitle} e body ${CARD_LIMITS.itemBody}; al massimo ${CARD_LIMITS.items} punti.`,
-    'Regole del visivo:',
-    `- lo stile immagini del brand è «${imageStyleLabel(brand.visual.imageStyle)}»: kind ${KIND_FOR_STYLE[brand.visual.imageStyle]};`,
-    '- value solo con un numero vero, dato dal brand o già nel testo, oppure tra parentesi quadre da completare, per esempio [3 ore]; altrimenti stringa vuota;',
-    '- author solo per una citazione vera, con il nome di chi la dice; altrimenti stringa vuota e niente template "quote";',
-    brand.visual.line && brand.visual.line.rubrics.length > 0
-      ? `- kicker è la rubrica del contenuto, scritta esattamente come nella linea: una tra ${brand.visual.line.rubrics.map((rubric) => `«${rubric.name}»`).join(', ')}; i testi che il template non usa restano stringhe vuote;`
-      : '- kicker è un’etichetta di due o tre parole, per esempio il tema; i testi che il template non usa restano stringhe vuote;',
-    '- headline è una frase della voce del brand che si regge da sola, breve e piena, chiusa dal punto; niente punti esclamativi, emoji, hashtag, trattini lunghi;',
-    ...(brand.visual.line?.copy ?? []).map((rule) => `- ${rule};`),
-    '- imageDescription dice cosa si vede nella foto, in concreto: soggetto, luogo, inquadratura, luce. Niente scritte né loghi. Per un personal brand niente volti: oggetti, mani, ambienti. Scrivila anche per l’infografica: serve se l’utente passa a Foto o Mista;',
-    format === 'carousel' ? '- nel carosello la card è la copertina: le altre slide sono quelle di slides.' : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
-/** I template scritti per il brand: la bozza sceglie uno di questi, come li ha pensati il direttore artistico. */
-function describeBrandTemplates(templates: readonly BrandTemplate[], format: IdeaFormat): string {
-  return [
-    '## Visivo: la card del post',
-    'In visual proponi la card che accompagna il testo, con uno dei template del brand: brandTemplate è il suo id. Scrivi i testi dei campi che il template usa; gli altri restano vuoti.',
-    ...templates.map(
-      (template) =>
-        `- "${template.id}" (${template.name}): ${template.use} Campi: ${template.fields.join(', ') || 'nessuno'}.${template.photo ? ' Con la foto.' : ''}`,
-    ),
-    `Limiti in caratteri: kicker ${CARD_LIMITS.kicker}, headline ${CARD_LIMITS.headline}, body ${CARD_LIMITS.body}, value ${CARD_LIMITS.value}, author ${CARD_LIMITS.author}; nei punti title ${CARD_LIMITS.itemTitle} e body ${CARD_LIMITS.itemBody}; al massimo ${CARD_LIMITS.items} punti.`,
-    '- kind: "photo" se il template ha la foto, altrimenti "infographic"; templateId: "photo-cover" se il template ha la foto, altrimenti "statement".',
-    '- imageDescription: cosa si vede nella foto, in concreto (soggetto, luogo, inquadratura, luce), senza scritte né loghi.',
-    format === 'carousel' ? '- nel carosello la card è la copertina: le altre slide sono quelle di slides.' : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
-/**
- * La proposta dell'AI diventa un visivo da creare; senza proposta, una card fatta con i testi della bozza. Con i
- * template del brand la copertina usa quello scelto e le slide di un carosello un template di testo del brand.
- */
-export function proposalFromOutput(
-  output: ProposalOutput | null,
-  format: IdeaFormat,
-  headline: string,
-  slides: readonly CarouselSlide[],
-  templates: readonly BrandTemplate[] = [],
-): VisualDesign | null {
-  if (format === 'video') return null;
-  if (!output) return withBrandTemplates(fallbackDesign(format, headline, slides), templates);
-  const chosen = output.brandTemplate ? templates.find((template) => template.id === output.brandTemplate) : undefined;
-  const design = proposeDesign(
-    { kind: output.kind, templateId: output.templateId, text: output.card, imageDescription: output.imageDescription },
-    format,
-    slides,
-  );
-  return withBrandTemplates(design, templates, chosen?.id);
-}
 
 export type ContentBasis = { kind: 'idea'; idea: Idea } | { kind: 'source'; source: IdeaSource };
 
@@ -287,7 +177,6 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
         '## Canali, in quest’ordine: una variante per ciascuno',
         ...channels.map((channel) => `- "${channel}" (${channelName(channel)}): ${CHANNEL_GUIDE[channel]}`),
       ].join('\n'),
-      describeVisualGuide(brand, format),
       revision > 0 && previous
         ? [
             `## Versione precedente, da non ripetere`,
@@ -340,17 +229,14 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
         }))
       : [];
 
-  if (format !== 'video') {
-    log.start('visual', WRITING_STEPS.visual, headline || title);
-    log.finish('visual');
-  }
-
   return {
     title,
     themeId,
     format,
     variants,
-    visual: { headline, slides, scenes, design: proposalFromOutput(result.visual, format, headline || title, slides, brand.visual.line?.templates) },
+    // Nessun visivo: la card non nasce con la bozza. La disegna `designContentVisual` quando
+    // l'utente lo chiede, guardando questo testo e le card d'esempio del brand.
+    visual: { headline, slides, scenes, design: null },
   };
 }
 

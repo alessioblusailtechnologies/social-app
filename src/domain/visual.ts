@@ -677,7 +677,10 @@ export function withoutPhoto(current: VisualDesign): VisualDesign {
 
 /** La bozza è stata rifatta: un visivo già creato resta e aspetta «Aggiorna il visivo». */
 export function redoDesign(previous: VisualDesign | null | undefined, proposed: VisualDesign | null): VisualDesign | null {
-  if (!previous || !proposed) return proposed;
+  // La bozza non propone più un visivo: rifare il testo non deve cancellare la card già disegnata.
+  // Resta quella, coi suoi testi, finché non si chiede di ridisegnarla o di modificarli.
+  if (!proposed) return previous ?? null;
+  if (!previous) return proposed;
   const created = previous.status === 'ready' || previous.status === 'creating';
   if (created && previous.pages.length === proposed.pages.length) return { ...previous, nextPages: proposed.pages };
   // La foto già fatta non si butta: con un formato diverso serve lo stesso.

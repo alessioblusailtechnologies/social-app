@@ -234,9 +234,8 @@ export function generateContent(
         ].map((scene) => ({ ...scene, description: clean(scene.description) }))
       : [];
 
-  // Coi template scritti per il brand, la card usa quelli.
-  const design = withBrandTemplates(proposeDesign(visualProposal(brand, idea, angle, clean), format, slides), brand.visual.line?.templates ?? []);
-  return { format, variants, visual: { headline: clean(shortHook(idea.title)), slides, scenes, design } };
+  // Nessun visivo con la bozza: la card si disegna dopo, come nel backend vero.
+  return { format, variants, visual: { headline: clean(shortHook(idea.title)), slides, scenes, design: null } };
 }
 
 /**
