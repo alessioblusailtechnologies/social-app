@@ -140,6 +140,12 @@ function createMockBrandService(): BrandService {
       await delay(300);
       await clearDatabase();
     },
+
+    // Nel mock l'immagine resta dov'è: sul telefono o nel browser di chi la carica.
+    async uploadReference(uri) {
+      await delay(300);
+      return { path: null, url: uri };
+    },
   };
 }
 

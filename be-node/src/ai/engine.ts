@@ -17,7 +17,7 @@ import { costAtTariff, type ModelTarget, type TokenCount } from './providers';
  */
 
 /** Anche `image` e `cutout`, che non passano dall'Agent SDK ma finiscono negli stessi consumi. */
-export type AiTask = 'website' | 'themes' | 'positioning' | 'voice' | 'ideas' | 'source-ideas' | 'content' | 'rewrite' | 'image' | 'cutout';
+export type AiTask = 'website' | 'themes' | 'positioning' | 'visual-style' | 'voice' | 'ideas' | 'source-ideas' | 'content' | 'rewrite' | 'image' | 'cutout';
 export type WebTool = 'WebFetch' | 'WebSearch';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 

@@ -397,6 +397,9 @@ export function isTemplateId(value: unknown): value is TemplateId {
 /** I template che fanno un post o la copertina di un carosello. */
 export const SINGLE_TEMPLATES = TEMPLATES.filter((spec) => spec.role === 'single');
 
+/** I layout degli esempi dello stile, uno diverso per canale: si vede come rende ogni tipo di card grafica. */
+export const EXAMPLE_TEMPLATES: TemplateId[] = ['statement', 'stat', 'list', 'steps', 'statement'];
+
 export const CARD_FIELD_LABELS: Record<CardField, string> = {
   kicker: 'Etichetta',
   headline: 'Titolo',

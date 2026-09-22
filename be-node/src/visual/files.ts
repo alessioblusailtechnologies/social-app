@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { Brand, Visual } from '@/domain/brand';
 import type { Content, ContentVisual } from '@/domain/content';
 import type { MediaFile, VisualDesign } from '@/domain/visual';
 
@@ -63,5 +64,65 @@ export async function signContents(storage: MediaStorage, contents: Content[]): 
 
 export async function signContent(storage: MediaStorage, content: Content): Promise<Content> {
   const [signed] = await signContents(storage, [content]);
+  return signed;
+}
+
+// ---------------------------------------------------------------------------
+// Il profilo visivo del brand: immagini di riferimento e card di esempio
+// ---------------------------------------------------------------------------
+
+/** Riferimenti ed esempi di un profilo che non ha ancora un brand: `account/profilo/uuid.ext`. */
+export function profileMediaPath(accountId: string, mimeType: string): string {
+  return mediaPath(accountId, 'profilo', mimeType);
+}
+
+function mapVisualFiles(visual: Visual, change: (file: MediaFile) => MediaFile): Visual {
+  return {
+    ...visual,
+    ...(visual.references && { references: visual.references.map(change) }),
+    ...(visual.examples && {
+      examples: visual.examples.map((example) => ({ ...example, file: example.file && change(example.file) })),
+    }),
+  };
+}
+
+function visualPaths(visual: Visual): string[] {
+  return [...(visual.references ?? []), ...(visual.examples ?? []).map((example) => example.file)]
+    .map((file) => file?.path)
+    .filter((path): path is string => Boolean(path));
+}
+
+/**
+ * Prima di salvare: niente indirizzi firmati, che scadono, e solo file dell'account. Un percorso di un altro account
+ * si firmerebbe alla lettura e ne mostrerebbe i file.
+ */
+export function storableVisual(accountId: string, visual: Visual): Visual {
+  const own = (file: MediaFile | null) => !file?.path || file.path.startsWith(`${accountId}/`);
+  const cleaned: Visual = {
+    ...visual,
+    ...(visual.references && { references: visual.references.filter(own) }),
+    ...(visual.examples && { examples: visual.examples.filter((example) => own(example.file)) }),
+  };
+  return mapVisualFiles(cleaned, (file) => (file.path ? { ...file, url: '' } : file));
+}
+
+/** Firma in un colpo solo riferimenti ed esempi dei brand. Se lo Storage non risponde, i brand si leggono lo stesso. */
+export async function signBrands(storage: MediaStorage, brands: Brand[]): Promise<Brand[]> {
+  const paths = brands.flatMap((brand) => visualPaths(brand.visual));
+  if (paths.length === 0) return brands;
+  let urls: Map<string, string>;
+  try {
+    urls = await storage.sign(paths);
+  } catch {
+    return brands;
+  }
+  return brands.map((brand) => ({
+    ...brand,
+    visual: mapVisualFiles(brand.visual, (file) => (file.path ? { ...file, url: urls.get(file.path) ?? '' } : file)),
+  }));
+}
+
+export async function signBrand(storage: MediaStorage, brand: Brand): Promise<Brand> {
+  const [signed] = await signBrands(storage, [brand]);
   return signed;
 }

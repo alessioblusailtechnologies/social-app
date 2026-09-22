@@ -9,7 +9,15 @@ import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
 
 import { useSignedIn } from './http/session';
 import { services } from './index';
-import type { AiStep, DirectContentRequest, SlotPatch, VoiceSample, WebsiteInsights, Workspace } from './types';
+import type {
+  AiStep,
+  DirectContentRequest,
+  SlotPatch,
+  VisualStyleRequest,
+  VoiceSample,
+  WebsiteInsights,
+  Workspace,
+} from './types';
 
 const planKey = (brandId: string) => ['plan', brandId] as const;
 const slotContentKey = (slotId: string) => ['content', 'slot', slotId] as const;
@@ -416,6 +424,24 @@ export function useReadWebsite() {
     },
   });
   return { ...mutation, steps };
+}
+
+/** Stile delle card ed esempi per canale, con i passi mentre li prepara: `steps` riparte vuoto ogni volta. */
+export function useProposeVisualStyle() {
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: (request: VisualStyleRequest) => {
+      setSteps([]);
+      return services.ai.proposeVisualStyle(request, setSteps);
+    },
+  });
+  return { ...mutation, steps };
+}
+
+export function useUploadReference() {
+  return useMutation({
+    mutationFn: ({ uri, dataUri }: { uri: string; dataUri: string | null }) => services.brands.uploadReference(uri, dataUri),
+  });
 }
 
 /** Da cosa si propongono obiettivi e pubblico: `key` cambia quando cambia quello che si sa del brand. */

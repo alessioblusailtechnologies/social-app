@@ -38,6 +38,8 @@ const envSchema = z.object({
   GEMINI_API_KEY: optionalString,
   /** Nano Banana 2 di base; `gemini-3-pro-image` per il Pro. */
   IMAGE_MODEL: z.string().min(1).default('gemini-3.1-flash-image'),
+  /** Il modello che guarda le immagini di riferimento dello stile, con la stessa chiave di Gemini. */
+  VISION_MODEL: z.string().min(1).default('gemini-3.5-flash'),
   /** Lo scontorno (fal, BiRefNet). Senza, i layout con soggetto scontornato non si creano. */
   FAL_KEY: optionalString,
   /** Il servizio che compone i PNG delle card (be-render). Su Render arriva come `host:porta` del servizio privato. */

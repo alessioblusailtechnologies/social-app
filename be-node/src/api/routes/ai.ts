@@ -7,11 +7,15 @@ import type { AiStreamEvent, OnAiSteps } from '@/services/types';
 import { analyzeVoice, readWebsite, suggestPositioning, suggestThemes } from '../../ai/profile';
 import {
   positioningRequestSchema,
+  referenceUploadSchema,
   themesRequestSchema,
+  visualStyleRequestSchema,
   voiceRequestSchema,
   websiteRequestSchema,
 } from '../../contract/schemas';
 import { aiMeta, type Deps } from '../../services/deps';
+import { parsePhotoDataUri } from '../../services/visual';
+import { proposeVisualStyle, uploadReference } from '../../services/visual-style';
 import { describeError } from '../plugins/errors';
 
 /** Mentre una pagina si fa aspettare, un commento ogni tanto tiene aperta la connessione. */
@@ -75,6 +79,19 @@ export function registerAiRoutes(app: FastifyInstance, deps: Deps): void {
     return sendSteps(request, reply, (onSteps) =>
       suggestPositioning(deps.ai, aiMeta(request.identity), identity, site, onSteps),
     );
+  });
+
+  /** Lo stile delle card: riferimenti e indicazioni, poi un esempio per canale composto da be-render. */
+  app.post('/api/ai/visual/stream', (request, reply) => {
+    const body = visualStyleRequestSchema.parse(request.body);
+    return sendSteps(request, reply, (onSteps) =>
+      proposeVisualStyle(deps, request.identity, body, { log: request.log, onSteps }),
+    );
+  });
+
+  app.post('/api/media/references', (request) => {
+    const { dataUri } = referenceUploadSchema.parse(request.body);
+    return uploadReference(deps, request.identity, parsePhotoDataUri(dataUri));
   });
 
   app.post('/api/ai/voice', (request) => {

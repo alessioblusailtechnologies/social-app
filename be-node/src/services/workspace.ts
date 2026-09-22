@@ -13,33 +13,40 @@ import { insertContent } from '../data/contents';
 import { insertIdea } from '../data/ideas';
 import { insertSlot } from '../data/slots';
 import type { Identity } from '../db/identity';
+import { signBrand, signBrands, storableVisual } from '../visual/files';
 import { inTransaction, type Deps } from './deps';
 
 /** I brand dell'account e quello attivo. */
 
-export function getWorkspace(deps: Deps, identity: Identity): Promise<Workspace> {
-  return inTransaction(deps, identity, async (db) => {
+export async function getWorkspace(deps: Deps, identity: Identity): Promise<Workspace> {
+  const workspace = await inTransaction(deps, identity, async (db) => {
     const brands = await listBrands(db, identity.accountId);
     const account = await findAccount(db, identity.accountId);
     return { brands, activeBrandId: account?.activeBrandId ?? null };
   });
+  return { ...workspace, brands: await signBrands(deps.media.storage, workspace.brands) };
 }
 
 /** Crea il brand e lo rende attivo. */
-export function createBrand(deps: Deps, identity: Identity, draft: BrandDraft): Promise<Brand> {
-  return inTransaction(deps, identity, async (db) => {
-    const brand = await insertBrand(db, identity.accountId, draft);
-    await setActiveBrand(db, identity.accountId, brand.id);
-    return brand;
+export async function createBrand(deps: Deps, identity: Identity, draft: BrandDraft): Promise<Brand> {
+  const stored = { ...draft, visual: storableVisual(identity.accountId, draft.visual) };
+  const brand = await inTransaction(deps, identity, async (db) => {
+    const created = await insertBrand(db, identity.accountId, stored);
+    await setActiveBrand(db, identity.accountId, created.id);
+    return created;
   });
+  return signBrand(deps.media.storage, brand);
 }
 
-export function updateBrandSection(deps: Deps, identity: Identity, brandId: string, patch: SectionPatch): Promise<Brand> {
-  return inTransaction(deps, identity, async (db) => {
-    const brand = await updateSection(db, brandId, patch);
-    if (!brand) throw ApiError.notFound('Brand non trovato.');
-    return brand;
+export async function updateBrandSection(deps: Deps, identity: Identity, brandId: string, patch: SectionPatch): Promise<Brand> {
+  const stored: SectionPatch =
+    patch.key === 'visual' ? { key: 'visual', value: storableVisual(identity.accountId, patch.value) } : patch;
+  const brand = await inTransaction(deps, identity, async (db) => {
+    const updated = await updateSection(db, brandId, stored);
+    if (!updated) throw ApiError.notFound('Brand non trovato.');
+    return updated;
   });
+  return signBrand(deps.media.storage, brand);
 }
 
 export function chooseActiveBrand(deps: Deps, identity: Identity, brandId: string): Promise<void> {

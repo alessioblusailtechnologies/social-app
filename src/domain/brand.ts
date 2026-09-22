@@ -1,3 +1,5 @@
+import type { Aspect, MediaFile, VisualPage } from './visual';
+
 /**
  * Il Brand è l'identità che viene comunicata. Un account può gestirne più di uno
  * (sé stesso, la propria azienda, i clienti).
@@ -79,13 +81,37 @@ export interface Palette {
 /** La coppia di caratteri delle card: titoli e testo, da Google Fonts. */
 export type TypographyId = 'inter' | 'archivo' | 'space-grotesk' | 'manrope' | 'fraunces' | 'dm-serif' | 'playfair' | 'ibm-plex';
 
+/** Quello che l'AI ha ricavato dalle immagini di riferimento e dalle indicazioni. */
+export interface VisualDirection {
+  /** Com'è lo stile, in una frase per l'utente. */
+  summary: string;
+  /** Lo stile delle foto, in inglese, per il modello d'immagine. */
+  photoStyle: string;
+}
+
+/** Una card di esempio per un canale: il PNG composto da be-render e la pagina per ridisegnarla dal vivo. */
+export interface VisualExample {
+  channel: ChannelId;
+  aspect: Aspect;
+  page: VisualPage;
+  /** Nullo nel mock, dove la card si disegna dal vivo. */
+  file: MediaFile | null;
+}
+
 export interface Visual {
   logoUri: string | null;
   palette: Palette;
+  /** Li sceglie l'AI dalle immagini di riferimento; servono alle card e alle foto. */
   imageStyle: ImageStyle;
   typography: TypographyId;
   /** Logo piccolo in basso a destra sulle immagini generate. */
   signature: boolean;
+  /** Le immagini che danno il tono. Mancano nei brand salvati prima dei riferimenti, come i campi sotto. */
+  references?: MediaFile[];
+  /** Le indicazioni dell'utente, in linguaggio naturale: «più minimal, titoli con le grazie». */
+  notes?: string;
+  direction?: VisualDirection | null;
+  examples?: VisualExample[];
 }
 
 export interface SignalSource {

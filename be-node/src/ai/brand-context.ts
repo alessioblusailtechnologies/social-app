@@ -76,7 +76,7 @@ export function describeBrand(brand: Brand, now: Date): string {
           `Da evitare: ${card.avoid}`,
         ].join('\n')
       : '## Voce\nNessuna scheda voce: tono sobrio e concreto, niente emoji né punti esclamativi.',
-    `## Stile visivo\nImmagini: ${imageStyleLabel(visual.imageStyle).toLowerCase()}; palette «${visual.palette.name}» (${visual.palette.colors.join(', ')})`,
+    `## Stile visivo\nImmagini: ${imageStyleLabel(visual.imageStyle).toLowerCase()}; palette «${visual.palette.name}» (${visual.palette.colors.join(', ')})${visual.direction?.summary ? `\nStile delle card: ${visual.direction.summary}` : ''}`,
     [
       '## Riferimenti',
       `Profili da cui imparare: ${list(references.profiles)}`,

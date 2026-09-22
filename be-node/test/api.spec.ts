@@ -11,6 +11,7 @@ import { createThemes } from '@/domain/themes';
 import type { AiEngine, AiRequest } from '../src/ai/engine';
 import type { MediaDeps } from '../src/media';
 import { buildApp } from '../src/api/app';
+import { unavailableVision } from '../src/media/vision';
 import { supabaseVerifier } from '../src/api/plugins/auth';
 import { config } from '../src/config';
 import { closeDb, db } from '../src/db/pool';
@@ -125,6 +126,7 @@ const fakeMedia: MediaDeps = {
       return renderer.down ? Promise.reject(new Error('be-render non risponde')) : Promise.resolve(PNG);
     },
   },
+  vision: unavailableVision,
 };
 
 describe.skipIf(!enabled)('API contro il database', () => {

@@ -10,12 +10,13 @@ import type {
   SectionKey,
   Theme,
   Visual,
+  VisualExample,
   Voice,
 } from '@/domain/brand';
 import { REWRITE_INSTRUCTIONS } from '@/domain/content';
 import type { IdeaDraft, IdeaSource } from '@/domain/idea';
 import type { PlanRequest, SlotDraft } from '@/domain/plan';
-import { TEMPLATE_IDS, type VisualEdit } from '@/domain/visual';
+import { TEMPLATE_IDS, type MediaFile, type VisualEdit } from '@/domain/visual';
 
 /**
  * I corpi delle richieste, validati all'ingresso. Ogni schema dichiara il tipo del dominio
@@ -87,6 +88,24 @@ const voiceSchema = z.object({
     .max(50),
 }) satisfies z.ZodType<Voice>;
 
+const cardTextSchema = z.object({
+  kicker: text(200),
+  headline: text(400),
+  body: text(1000),
+  value: text(60),
+  items: z.array(z.object({ title: text(200), body: text(400) })).max(10),
+  author: text(200),
+});
+
+const mediaFileSchema = z.object({ path: text(500).nullable(), url: text(4000) }) satisfies z.ZodType<MediaFile>;
+
+const visualExampleSchema = z.object({
+  channel: channelIdSchema,
+  aspect: z.enum(['4:5', '1:1', '9:16', '1.91:1']),
+  page: z.object({ templateId: z.enum(TEMPLATE_IDS), text: cardTextSchema }),
+  file: mediaFileSchema.nullable(),
+}) satisfies z.ZodType<VisualExample>;
+
 const visualSchema = z.object({
   // Sul web il logo può arrivare come data URI: il tetto sta sotto il limite del corpo.
   logoUri: text(3_000_000).nullable(),
@@ -102,6 +121,11 @@ const visualSchema = z.object({
     .enum(['inter', 'archivo', 'space-grotesk', 'manrope', 'fraunces', 'dm-serif', 'playfair', 'ibm-plex'])
     .default('inter'),
   signature: z.boolean(),
+  // Riferimenti, indicazioni ed esempi mancano nei brand salvati prima dello stile dai riferimenti.
+  references: z.array(mediaFileSchema).max(6).optional(),
+  notes: text(2000).optional(),
+  direction: z.object({ summary: text(600), photoStyle: text(1500) }).nullable().optional(),
+  examples: z.array(visualExampleSchema).max(5).optional(),
 }) satisfies z.ZodType<Visual>;
 
 const referencesSchema = z.object({
@@ -140,6 +164,16 @@ const siteContextSchema = z.object({
 });
 
 export const positioningRequestSchema = z.object({ identity: identitySchema, site: siteContextSchema.nullable() });
+
+export const visualStyleRequestSchema = z.object({
+  identity: identitySchema,
+  themes: z.array(text(120)).max(6),
+  visual: visualSchema,
+  channels: channelList.min(1),
+});
+
+/** Un'immagine di riferimento come data URI: tipo e misura li controlla il servizio, come per le foto. */
+export const referenceUploadSchema = z.object({ dataUri: z.string().min(1).max(5_000_000) });
 
 export const voiceRequestSchema = z.object({
   sample: z.object({
@@ -235,15 +269,6 @@ export const scheduleSchema = z.object({ date: day, time: hourMinute, publishNow
 // ---------------------------------------------------------------------------
 // Visivi
 // ---------------------------------------------------------------------------
-
-const cardTextSchema = z.object({
-  kicker: text(200),
-  headline: text(400),
-  body: text(1000),
-  value: text(60),
-  items: z.array(z.object({ title: text(200), body: text(400) })).max(10),
-  author: text(200),
-});
 
 /** Le modifiche senza AI. I testi li taglia il dominio: qui si ferma solo quello che è fuori misura. */
 export const visualEditSchema = z.object({

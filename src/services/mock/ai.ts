@@ -1,5 +1,22 @@
-import type { BrandKind, Identity } from '@/domain/brand';
-import { AUDIENCES, channelName, GOALS } from '@/domain/catalog';
+import type { BrandKind, Identity, ImageStyle, TypographyId, VisualExample } from '@/domain/brand';
+import {
+  AUDIENCES,
+  channelName,
+  GOALS,
+  IMAGE_STYLES,
+  imageStyleLabel,
+  TYPOGRAPHY_OPTIONS,
+  typographyName,
+} from '@/domain/catalog';
+import {
+  aspectFor,
+  chooseTemplate,
+  clip,
+  emptyCardText,
+  EXAMPLE_TEMPLATES,
+  type CardText,
+  type TemplateId,
+} from '@/domain/visual';
 import { delay, latency } from '@/lib/delay';
 import { createRng, pick, sample, seedFromString } from '@/lib/random';
 import { normalizeSite } from '@/lib/site';
@@ -12,6 +29,7 @@ import {
   pickedDetail,
   POSITIONING_STEPS,
   THINKING_STEP,
+  VISUAL_STEPS,
   WEBSITE_STEPS,
 } from '../ai-steps';
 import type { AiService, VoiceAnalysis } from '../types';
@@ -146,6 +164,36 @@ function analyzeTexts(text: string, group: Group): Pick<VoiceAnalysis, 'rhythm' 
   };
 }
 
+/** I testi delle card di esempio del mock, dai temi e dalla frase su cosa fa il brand. */
+function exampleText(templateId: TemplateId, identity: Identity, themes: readonly string[], index: number): CardText {
+  const theme = themes[index % Math.max(1, themes.length)] ?? identity.name;
+  const text = { ...emptyCardText(), kicker: theme };
+  switch (templateId) {
+    case 'stat':
+      return { ...text, value: '[3 ore]', headline: 'risparmiate ogni settimana quando il lavoro ha un metodo' };
+    case 'list':
+      return {
+        ...text,
+        headline: 'Tre cose che non cambiamo mai',
+        items: (themes.length >= 3 ? themes.slice(0, 3) : ['Ascoltare prima', 'Dire i numeri', 'Mantenere le promesse']).map(
+          (title) => ({ title, body: '' }),
+        ),
+      };
+    case 'steps':
+      return {
+        ...text,
+        headline: 'Come lavoriamo, in tre passi',
+        items: [
+          { title: 'Ascoltiamo', body: 'Partiamo da quello che ti serve davvero.' },
+          { title: 'Proponiamo', body: 'Una soluzione chiara, con tempi e costi.' },
+          { title: 'Consegniamo', body: 'E restiamo lì anche dopo.' },
+        ],
+      };
+    default:
+      return { ...text, headline: clip(identity.pitch || `Così lavora ${identity.name || 'il brand'}`, 90) };
+  }
+}
+
 export function createMockAiService(): AiService {
   return {
     async readWebsite(site: string, identity: Identity, onSteps) {
@@ -214,6 +262,53 @@ export function createMockAiService(): AiService {
       log.finish('audiences', { detail: pickedDetail(audiences.length, audiences.slice(0, 2)) });
 
       return { goals, audiences, picked: { goals: goals.slice(0, 2), audiences: audiences.slice(0, 2) } };
+    },
+
+    async proposeVisualStyle({ identity, themes, visual, channels }, onSteps) {
+      const rng = createRng(seedFromString(`${identity.name}|${visual.notes ?? ''}|${visual.references?.length ?? 0}`));
+      const notes = (visual.notes ?? '').toLowerCase();
+      const log = createStepLog(onSteps);
+      log.start('references', VISUAL_STEPS.references(visual.references?.length ?? 0), notes ? `Indicazioni: ${clip(visual.notes ?? '', 80)}` : undefined);
+      await delay(latency(500, 800));
+      log.finish('references');
+
+      log.start('style', VISUAL_STEPS.style);
+      await delay(latency(900, 1300));
+      // Il mock non vede le immagini: legge solo qualche parola delle indicazioni.
+      const typography: TypographyId = /grazie|serif|elegan|classic/.test(notes)
+        ? 'fraunces'
+        : /tecnic|tech/.test(notes)
+          ? 'space-grotesk'
+          : /morbid|rotond/.test(notes)
+            ? 'manrope'
+            : pick(rng, TYPOGRAPHY_OPTIONS).id;
+      const imageStyle: ImageStyle = /minimal|pulit|solo testo/.test(notes)
+        ? 'text-only'
+        : /geometr|forme/.test(notes)
+          ? 'flat-geometric'
+          : pick(rng, IMAGE_STYLES).id;
+      log.finish('style', { detail: `Caratteri «${typographyName(typography)}» · ${imageStyleLabel(imageStyle).toLowerCase()}` });
+
+      const examples: VisualExample[] = [];
+      for (const [index, channel] of channels.slice(0, 5).entries()) {
+        const aspect = aspectFor(channel, 'post');
+        const preferred = EXAMPLE_TEMPLATES[index % EXAMPLE_TEMPLATES.length];
+        const text = exampleText(preferred, identity, themes, index);
+        log.start(`card-${channel}`, VISUAL_STEPS.card(channelName(channel)), `Formato ${aspect}`);
+        await delay(latency(400, 700));
+        examples.push({ channel, aspect, page: { templateId: chooseTemplate('infographic', text, preferred), text }, file: null });
+        log.finish(`card-${channel}`);
+      }
+
+      return {
+        typography,
+        imageStyle,
+        direction: {
+          summary: `Caratteri ${typographyName(typography).toLowerCase()} e ${imageStyleLabel(imageStyle).toLowerCase()}${notes ? ', come hai chiesto' : ''}.`,
+          photoStyle: 'Natural daylight, soft contrast, colors that harmonize with the brand palette.',
+        },
+        examples,
+      };
     },
 
     async analyzeVoice(voiceSample, identity) {

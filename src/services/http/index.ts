@@ -2,6 +2,7 @@ import type { Brand } from '@/domain/brand';
 import type { Content } from '@/domain/content';
 import type { Idea, IdeaDraft } from '@/domain/idea';
 import type { PlanSlot, SlotDraft } from '@/domain/plan';
+import type { MediaFile } from '@/domain/visual';
 
 import { createMockChannelService } from '../mock';
 import type {
@@ -12,6 +13,7 @@ import type {
   PlanService,
   PositioningIdeas,
   Services,
+  VisualStyle,
   VoiceAnalysis,
   WebsiteInsights,
   Workspace,
@@ -30,11 +32,16 @@ export function createHttpServices(api: ApiClient): Services {
     setActiveBrand: (brandId) => api.put<void>('/workspace/active-brand', { brandId }),
     loadDemoBrand: () => api.post<Brand>('/demo'),
     resetDemo: () => api.delete('/demo'),
+    uploadReference: (_uri, dataUri) => {
+      if (!dataUri) return Promise.reject(new ApiError(400, 'INVALID_DATA', 'Non riesco a leggere l’immagine: riprova con un’altra.'));
+      return api.post<MediaFile>('/media/references', { dataUri });
+    },
   };
 
   const ai: AiService = {
     readWebsite: (site, identity, onSteps) => api.stream<WebsiteInsights>('/ai/website/stream', { site, identity }, onSteps),
     suggestThemes: (identity) => api.post<string[]>('/ai/themes', { identity }),
+    proposeVisualStyle: (request, onSteps) => api.stream<VisualStyle>('/ai/visual/stream', request, onSteps),
     suggestPositioning: (identity, site, onSteps) =>
       api.stream<PositioningIdeas>(
         '/ai/positioning/stream',

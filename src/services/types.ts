@@ -7,15 +7,20 @@ import type {
   BrandDraft,
   ChannelId,
   Identity,
+  ImageStyle,
   Palette,
   SectionPatch,
+  TypographyId,
+  Visual,
+  VisualDirection,
+  VisualExample,
   VoiceCard,
   VoiceSource,
 } from '@/domain/brand';
 import type { Content, RewriteInstruction } from '@/domain/content';
 import type { Idea, IdeaDraft, IdeaFormat, IdeaSource, IdeaStatus } from '@/domain/idea';
 import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
-import type { VisualEdit } from '@/domain/visual';
+import type { MediaFile, VisualEdit } from '@/domain/visual';
 
 export interface Workspace {
   brands: Brand[];
@@ -30,6 +35,8 @@ export interface BrandService {
   setActiveBrand(brandId: string): Promise<void>;
   loadDemoBrand(): Promise<Brand>;
   resetDemo(): Promise<void>;
+  /** Un'immagine di riferimento (data URI o file locale): torna col percorso nello storage e l'indirizzo firmato. */
+  uploadReference(uri: string, dataUri: string | null): Promise<MediaFile>;
 }
 
 export interface WebsiteInsights {
@@ -41,6 +48,23 @@ export interface WebsiteInsights {
   themes: string[];
   audiences: string[];
   palette: Palette;
+}
+
+/** Da cosa nasce lo stile delle card: chi è il brand, i temi, la palette, i riferimenti e le indicazioni. */
+export interface VisualStyleRequest {
+  identity: Identity;
+  themes: string[];
+  visual: Visual;
+  /** Un esempio per canale, nel suo formato. */
+  channels: ChannelId[];
+}
+
+/** Lo stile scelto dall'AI e le card di esempio che lo mostrano. */
+export interface VisualStyle {
+  typography: TypographyId;
+  imageStyle: ImageStyle;
+  direction: VisualDirection;
+  examples: VisualExample[];
 }
 
 /** Obiettivi e pubblico proposti per il profilo, i più adatti prima. */
@@ -83,6 +107,8 @@ export interface AiService {
   suggestThemes(identity: Identity): Promise<string[]>;
   /** Obiettivi e pubblico su misura: dalla frase su cosa fa il brand e, se c'è, dalla lettura del sito. */
   suggestPositioning(identity: Identity, site: WebsiteInsights | null, onSteps?: OnAiSteps): Promise<PositioningIdeas>;
+  /** Guarda i riferimenti, sceglie caratteri e stile e compone una card di esempio per canale. */
+  proposeVisualStyle(request: VisualStyleRequest, onSteps?: OnAiSteps): Promise<VisualStyle>;
   analyzeVoice(sample: VoiceSample, identity: Identity): Promise<VoiceAnalysis>;
 }
 

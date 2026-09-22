@@ -21,7 +21,7 @@ export interface PhotoPromptInput {
   description: string;
   role: ImageRole;
   aspectRatio: string;
-  brand: { identity: Pick<Brand['identity'], 'kind'>; visual: Pick<Brand['visual'], 'imageStyle' | 'palette'> };
+  brand: { identity: Pick<Brand['identity'], 'kind'>; visual: Pick<Brand['visual'], 'imageStyle' | 'palette' | 'direction'> };
   /** Quante foto del brand arrivano insieme, come riferimento di stile. */
   references: number;
 }
@@ -34,6 +34,8 @@ export function photoPrompt({ description, role, aspectRatio, brand, references 
       : `A photograph for a social media post. Aspect ratio ${aspectRatio}. Keep a calm, uncluttered area where a headline can be placed later.`,
     `What the photo shows (described in Italian): ${description.trim()}`,
     STYLE[brand.visual.imageStyle],
+    // Lo stile ricavato dalle immagini di riferimento del brand, quando c'è.
+    brand.visual.direction?.photoStyle ? `Brand photo style: ${brand.visual.direction.photoStyle}` : '',
     role === 'cutout'
       ? `Light and colors of the subject in harmony with the brand palette ${palette}; keep the background plain and neutral.`
       : `Color grading: tones that harmonize with the brand palette ${palette}, used for light and ambience, not as brightly colored objects or props.`,

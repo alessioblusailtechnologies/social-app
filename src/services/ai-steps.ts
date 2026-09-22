@@ -56,6 +56,16 @@ export const POSITIONING_STEPS: Record<BrandKind, { goals: string; audiences: st
   client: { goals: 'Penso a perché pubblica', audiences: 'Cerco chi vuole raggiungere' },
 };
 
+/** Le parole dello stile delle card: riferimenti, scelta, una card per canale. */
+export const VISUAL_STEPS = {
+  references: (count: number) =>
+    count === 0
+      ? 'Parto da palette, sito e indicazioni'
+      : `Guardo ${count === 1 ? 'l’immagine' : `le ${count} immagini`} di riferimento`,
+  style: 'Scelgo caratteri e stile delle card',
+  card: (channel: string) => `Compongo la card per ${channel}`,
+} as const;
+
 /** Il primo passo dice da cosa parto: il sito letto o la frase scritta. */
 export function contextStep(site: string | null, known: string): { label: string; detail: string } {
   return {

@@ -9,6 +9,7 @@ import { falCutout, unavailableCutout } from '../media/cutout';
 import { geminiImages, unavailableImages } from '../media/images';
 import { httpRenderer } from '../media/renderer';
 import { supabaseStorage } from '../media/storage';
+import { geminiVision, unavailableVision } from '../media/vision';
 import { supabaseAuthGateway } from '../services/auth';
 import { buildApp } from './app';
 import { supabaseVerifier } from './plugins/auth';
@@ -47,6 +48,9 @@ const app = buildApp({
       : unavailableImages,
     cutout: settings.FAL_KEY ? falCutout({ apiKey: settings.FAL_KEY, log, recordUsage: storeUsage }) : unavailableCutout,
     renderer,
+    vision: settings.GEMINI_API_KEY
+      ? geminiVision({ apiKey: settings.GEMINI_API_KEY, model: settings.VISION_MODEL, log, recordUsage: storeUsage })
+      : unavailableVision,
   }),
 });
 

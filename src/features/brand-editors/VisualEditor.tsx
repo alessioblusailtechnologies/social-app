@@ -1,17 +1,17 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { ImagePlus, Plus } from 'lucide-react-native';
-import { useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { ArrowUp, ImagePlus, Plus, X } from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   Button,
-  Chip,
-  ChipGroup,
+  IconButton,
   LinkButton,
   Panel,
   PressableScale,
   RadioMark,
+  StepList,
   SunkenInput,
   Switch,
   Text,
@@ -20,34 +20,46 @@ import {
   radii,
   useToast,
 } from '@/design-system';
-import type { Palette, Visual } from '@/domain/brand';
-import { IMAGE_STYLES, PALETTE_PRESETS, PALETTE_SLOT_LABELS, TYPOGRAPHY_OPTIONS } from '@/domain/catalog';
-import { brandKit, clip, emptyCardText, typographyOption, type VisualPage } from '@/domain/visual';
+import type { ChannelId, Palette, Visual, VisualExample } from '@/domain/brand';
+import { CHANNELS, channelName, PALETTE_SLOT_LABELS } from '@/domain/catalog';
+import { ASPECT_SIZES, brandKit, type BrandKit, type MediaFile } from '@/domain/visual';
 import { CardView } from '@/features/visual/CardView';
+import { apiErrorMessage } from '@/services';
+import { useProposeVisualStyle, useUploadReference } from '@/services/queries';
 
 import { Swatches } from './BrandVisuals';
 import type { EditorProps } from './types';
 
 /** Sul web il logo finisce nello storage locale come data URI: oltre questa soglia lo rifiutiamo. */
 const WEB_LOGO_LIMIT = 1_500_000;
+/** Oltre questa misura l'immagine non passa dal corpo della richiesta. */
+const REFERENCE_LIMIT = 3_000_000;
+const MAX_REFERENCES = 6;
+const EXAMPLE_WIDTH = 150;
 
 export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) {
   const toast = useToast();
-  const set = (patch: Partial<Visual>) => onChange({ ...value, ...patch });
-  const custom = value.palette.origin === 'custom';
+  const upload = useUploadReference();
+  const propose = useProposeVisualStyle();
+  const [notes, setNotes] = useState(value.notes ?? '');
+  const [uploading, setUploading] = useState(0);
+  // Caricamenti ed esempi finiscono dopo secondi: il risultato si aggiunge al profilo com'è adesso, non com'era.
+  const latest = useRef(value);
+  useEffect(() => {
+    latest.current = value;
+  });
 
-  const type = typographyOption(value.typography);
-  const sample: VisualPage = {
-    templateId: 'statement',
-    text: {
-      ...emptyCardText(),
-      kicker: 'Anteprima',
-      headline: clip(context.draft.identity.pitch || 'Così appaiono le card dei tuoi post', 80),
-    },
-  };
+  const set = (patch: Partial<Visual>) => onChange({ ...value, ...patch });
+  const references = value.references ?? [];
+  const examples = value.examples ?? [];
+  const selected = CHANNELS.filter(({ id }) => context.draft.channels[id].selected).map(({ id }) => id);
+  const channels: ChannelId[] = selected.length > 0 ? selected : ['instagram'];
+  const kit = brandKit({ identity: context.draft.identity, visual: value });
 
   const sitePalette = context.insights?.palette ?? (value.palette.origin === 'site' ? value.palette : null);
-  const options: Palette[] = [...(sitePalette ? [sitePalette] : []), ...PALETTE_PRESETS];
+  const custom = value.palette.origin !== 'site';
+  const useCustom = () =>
+    set({ palette: { id: 'custom', name: 'I miei colori', colors: [...value.palette.colors], origin: 'custom' } });
 
   const pickLogo = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -66,6 +78,63 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
     toast('Logo caricato.');
   };
 
+  const pickReferences = async () => {
+    const room = MAX_REFERENCES - references.length;
+    if (room <= 0) {
+      toast(`Al massimo ${MAX_REFERENCES} immagini: togline una per aggiungerne altre.`);
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: room,
+      quality: 0.6,
+      base64: true,
+      exif: false,
+    });
+    if (result.canceled) return;
+    const picked = result.assets.slice(0, room);
+    setUploading(picked.length);
+    const added: MediaFile[] = [];
+    for (const asset of picked) {
+      const dataUri = asset.base64 ? `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}` : null;
+      try {
+        if (dataUri && dataUri.length > REFERENCE_LIMIT) throw new Error('troppo pesante');
+        added.push(await upload.mutateAsync({ uri: asset.uri, dataUri }));
+      } catch (error) {
+        toast(apiErrorMessage(error, 'Un’immagine è troppo pesante o non si legge: l’ho saltata.'));
+      } finally {
+        setUploading((count) => Math.max(0, count - 1));
+      }
+    }
+    if (added.length > 0) onChange({ ...latest.current, references: [...(latest.current.references ?? []), ...added] });
+  };
+
+  const generate = () => {
+    Keyboard.dismiss();
+    const request: Visual = { ...latest.current, notes: notes.trim() };
+    onChange(request);
+    propose.mutate(
+      {
+        identity: context.draft.identity,
+        themes: context.draft.themes.map((theme) => theme.name).filter(Boolean),
+        visual: request,
+        channels,
+      },
+      {
+        onSuccess: (style) =>
+          onChange({
+            ...latest.current,
+            typography: style.typography,
+            imageStyle: style.imageStyle,
+            direction: style.direction,
+            examples: style.examples,
+          }),
+        onError: (error) => toast(apiErrorMessage(error, 'Non sono riuscito a preparare gli esempi. Riprova.')),
+      },
+    );
+  };
+
   return (
     <View style={styles.column}>
       <Panel label="Logo">
@@ -80,118 +149,202 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
           <View style={styles.flex}>
             <Text variant="strongSmall">{value.logoUri ? 'Logo caricato' : 'Nessun logo'}</Text>
             <Text variant="caption">
-              {value.logoUri
-                ? 'Lo uso in piccolo sulle immagini generate.'
-                : 'SVG o PNG con sfondo trasparente, almeno 512px.'}
+              {value.logoUri ? 'Lo uso in piccolo sulle card.' : 'SVG o PNG con sfondo trasparente, almeno 512px.'}
             </Text>
           </View>
           <Button size="sm" variant="secondary" onPress={pickLogo}>
             {value.logoUri ? 'Sostituisci' : 'Carica'}
           </Button>
         </View>
+        {value.logoUri && (
+          <View style={styles.switchRow}>
+            <View style={styles.flex}>
+              <Text variant="strongSmall">Firma sulle card</Text>
+              <Text variant="caption">Logo piccolo in basso a destra</Text>
+            </View>
+            <Switch
+              value={value.signature}
+              onValueChange={(signature) => set({ signature })}
+              accessibilityLabel="Firma sulle card"
+            />
+          </View>
+        )}
         {value.logoUri && <LinkButton label="Rimuovi il logo" tone="muted" onPress={() => set({ logoUri: null })} />}
       </Panel>
 
       <Panel label="Palette" gap={12}>
-        <View style={styles.options}>
-          {options.map((option) => {
-            const selected = !custom && option.id === value.palette.id;
-            return (
-              <PressableScale
-                key={option.id}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                accessibilityLabel={`Palette ${option.name}`}
-                onPress={() => set({ palette: option })}
-                style={[styles.paletteRow, selected && styles.paletteRowSelected]}>
-                <Swatches colors={option.colors} />
-                <Text variant="action" style={styles.flex}>
-                  {option.name}
-                </Text>
-                <RadioMark selected={selected} />
-              </PressableScale>
-            );
-          })}
-          <PressableScale
-            accessibilityRole="radio"
-            accessibilityState={{ selected: custom }}
-            accessibilityLabel="Usa i miei colori"
-            onPress={() =>
-              !custom &&
-              set({
-                palette: {
-                  id: 'custom',
-                  name: 'I miei colori',
-                  colors: [...value.palette.colors],
-                  origin: 'custom',
-                },
-              })
-            }
-            style={[styles.paletteRow, custom && styles.paletteRowSelected]}>
-            {custom ? (
-              <Swatches colors={value.palette.colors} />
-            ) : (
-              <View style={styles.customIcon}>
-                <Plus size={14} color={colors.textTitle} />
-              </View>
-            )}
-            <Text variant="action" style={styles.flex}>
-              Usa i miei colori
-            </Text>
-            <RadioMark selected={custom} />
-          </PressableScale>
-        </View>
-        {custom && <CustomPalette palette={value.palette} onChange={(next) => set({ palette: next })} />}
+        {sitePalette ? (
+          <View style={styles.options}>
+            <PaletteOption
+              label={`Dal sito · ${context.insights?.site ?? 'letto prima'}`}
+              colors={sitePalette.colors}
+              selected={!custom}
+              onPress={() => set({ palette: sitePalette })}
+            />
+            <PaletteOption label="Usa i miei colori" colors={custom ? value.palette.colors : null} selected={custom} onPress={useCustom} />
+          </View>
+        ) : (
+          <Text variant="caption">Scrivi i colori del marchio: li uso su tutte le card.</Text>
+        )}
+        {custom && (
+          <CustomPalette
+            palette={value.palette}
+            onChange={(next) => set({ palette: { ...next, id: 'custom', name: 'I miei colori', origin: 'custom' } })}
+          />
+        )}
       </Panel>
 
-      <Panel label="Caratteri" gap={12}>
-        <ChipGroup>
-          {TYPOGRAPHY_OPTIONS.map((option) => (
-            <Chip key={option.id} label={option.name} selected={type.id === option.id} onPress={() => set({ typography: option.id })} />
-          ))}
-        </ChipGroup>
+      <Panel label="Immagini di riferimento" gap={12}>
         <Text variant="caption">
-          {type.heading.family} per i titoli, {type.body.family} per i testi. Li uso in tutte le card, con la palette qui sopra.
+          Post, foto o grafiche che ti piacciono, anche di altri. Ne ricavo caratteri, forme e stile delle foto.
         </Text>
+        <View style={styles.references}>
+          {references.map((file, index) => (
+            <View key={file.path ?? file.url} style={styles.reference}>
+              <Image source={{ uri: file.url }} contentFit="cover" style={styles.referenceImage} accessibilityLabel={`Riferimento ${index + 1}`} />
+              <IconButton
+                icon={X}
+                variant="solid"
+                size={24}
+                iconSize={12}
+                accessibilityLabel={`Togli il riferimento ${index + 1}`}
+                onPress={() => set({ references: references.filter((_, i) => i !== index) })}
+                style={styles.referenceRemove}
+              />
+            </View>
+          ))}
+          {Array.from({ length: uploading }, (_, i) => (
+            <View key={`uploading-${i}`} style={[styles.reference, styles.referenceEmpty]}>
+              <ActivityIndicator size="small" color={colors.actionPrimary} />
+            </View>
+          ))}
+          {references.length + uploading < MAX_REFERENCES && (
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel="Aggiungi immagini di riferimento"
+              onPress={pickReferences}
+              style={[styles.reference, styles.referenceEmpty]}>
+              <Plus size={18} color={colors.textTitle} />
+            </PressableScale>
+          )}
+        </View>
+      </Panel>
+
+      <Panel label="Come escono le card" gap={12}>
+        {propose.isPending ? (
+          <StepList steps={propose.steps} />
+        ) : examples.length > 0 ? (
+          <>
+            {value.direction?.summary ? (
+              <Text variant="body" color={colors.textTitle}>
+                {value.direction.summary}
+              </Text>
+            ) : null}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
+              {examples.map((example) => (
+                <ExampleCard key={example.channel} example={example} kit={kit} />
+              ))}
+            </ScrollView>
+          </>
+        ) : (
+          <Text variant="caption">
+            Carica qualche immagine che ti piace o scrivi come vuoi apparire: preparo una card di esempio per ogni canale scelto.
+          </Text>
+        )}
+
+        <View style={styles.notesRow}>
+          <SunkenInput
+            style={styles.flex}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Indicazioni, es. più minimal, titoli con le grazie"
+            returnKeyType="send"
+            onSubmitEditing={() => !propose.isPending && generate()}
+            accessibilityLabel="Indicazioni sullo stile"
+          />
+          <IconButton
+            icon={ArrowUp}
+            variant="solid"
+            size={40}
+            iconSize={18}
+            accessibilityLabel={examples.length > 0 ? 'Rigenera gli esempi' : 'Genera gli esempi'}
+            disabled={propose.isPending}
+            onPress={generate}
+          />
+        </View>
+        {!propose.isPending && (
+          <Button size="sm" variant="secondary" onPress={generate}>
+            {examples.length > 0 ? 'Rigenera gli esempi' : 'Genera gli esempi'}
+          </Button>
+        )}
+      </Panel>
+    </View>
+  );
+}
+
+function PaletteOption({
+  label,
+  colors: swatches,
+  selected,
+  onPress,
+}: {
+  label: string;
+  colors: readonly string[] | null;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <PressableScale
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[styles.paletteRow, selected && styles.paletteRowSelected]}>
+      {swatches ? (
+        <Swatches colors={swatches} />
+      ) : (
+        <View style={styles.customIcon}>
+          <Plus size={14} color={colors.textTitle} />
+        </View>
+      )}
+      <Text variant="action" numberOfLines={1} style={styles.flex}>
+        {label}
+      </Text>
+      <RadioMark selected={selected} />
+    </PressableScale>
+  );
+}
+
+/** Il PNG composto da be-render; senza (mock, servizio giù o indirizzo scaduto) la stessa card disegnata dal vivo. */
+function ExampleCard({ example, kit }: { example: VisualExample; kit: BrandKit }) {
+  const [broken, setBroken] = useState(false);
+  const size = ASPECT_SIZES[example.aspect];
+  const url = example.file?.url;
+  return (
+    <View style={styles.example}>
+      {url && !broken ? (
+        <Image
+          source={{ uri: url }}
+          contentFit="cover"
+          style={[styles.exampleImage, { aspectRatio: size.width / size.height }]}
+          onError={() => setBroken(true)}
+          accessibilityLabel={`Esempio per ${channelName(example.channel)}`}
+        />
+      ) : (
         <CardView
-          kit={brandKit({ identity: context.draft.identity, visual: value })}
-          page={sample}
+          kit={kit}
+          page={example.page}
           pageIndex={0}
           pageCount={1}
           photoUrl={null}
           cutoutUrl={null}
-          aspect="4:5"
-          width={180}
-          style={styles.sample}
+          aspect={example.aspect}
+          width={EXAMPLE_WIDTH}
         />
-      </Panel>
-
-      <Panel label="Stile delle immagini">
-        <ChipGroup>
-          {IMAGE_STYLES.map((style) => (
-            <Chip
-              key={style.id}
-              label={style.label}
-              selected={value.imageStyle === style.id}
-              onPress={() => set({ imageStyle: style.id })}
-            />
-          ))}
-        </ChipGroup>
-        <View style={styles.signatureRow}>
-          <View style={styles.flex}>
-            <Text variant="strongSmall">Firma visiva sulle immagini</Text>
-            <Text variant="caption">
-              {value.logoUri ? 'Logo piccolo in basso a destra' : 'Serve un logo: caricalo qui sopra'}
-            </Text>
-          </View>
-          <Switch
-            value={value.signature && Boolean(value.logoUri)}
-            disabled={!value.logoUri}
-            onValueChange={(signature) => set({ signature })}
-            accessibilityLabel="Firma visiva sulle immagini"
-          />
-        </View>
-      </Panel>
+      )}
+      <Text variant="caption">
+        {channelName(example.channel)} · {example.aspect}
+      </Text>
     </View>
   );
 }
@@ -237,6 +390,8 @@ function CustomPalette({ palette: current, onChange }: { palette: Palette; onCha
   );
 }
 
+const REFERENCE_SIZE = 72;
+
 const styles = StyleSheet.create({
   column: { gap: 12 },
   flex: { flex: 1, minWidth: 0, gap: 3 },
@@ -251,6 +406,7 @@ const styles = StyleSheet.create({
   },
   logoEmpty: { borderWidth: 1.5, borderColor: colors.borderField, borderStyle: 'dashed' },
   logoImage: { width: 48, height: 48 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4 },
   options: { gap: 8 },
   paletteRow: {
     flexDirection: 'row',
@@ -275,6 +431,19 @@ const styles = StyleSheet.create({
   slotRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   slotSwatch: { width: 28, height: 28, borderRadius: 8, borderWidth: 1, borderColor: palette.grey100 },
   slotLabel: { width: 72 },
-  signatureRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4 },
-  sample: { alignSelf: 'center' },
+  references: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  reference: { width: REFERENCE_SIZE, height: REFERENCE_SIZE, borderRadius: radii.md, overflow: 'hidden' },
+  referenceImage: { width: REFERENCE_SIZE, height: REFERENCE_SIZE },
+  referenceEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.borderField,
+    borderStyle: 'dashed',
+  },
+  referenceRemove: { position: 'absolute', top: 4, right: 4 },
+  examples: { gap: 10 },
+  example: { width: EXAMPLE_WIDTH, gap: 6 },
+  exampleImage: { width: EXAMPLE_WIDTH, borderRadius: radii.sm, backgroundColor: colors.surfaceSunken },
+  notesRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

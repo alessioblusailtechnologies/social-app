@@ -1,6 +1,6 @@
 import type { BrandDraft, BrandKind, SectionKey } from './brand';
 import { currentVoiceCard, isConnected } from './brand';
-import { CHANNELS, imageStyleLabel, typographyName } from './catalog';
+import { CHANNELS } from './catalog';
 import { themeLevelLabel, totalWeight } from './themes';
 
 export type SectionStatus = 'complete' | 'partial' | 'missing';
@@ -83,7 +83,7 @@ const COPY: Record<SectionKey, { name: ByKind; title: ByKind; subtitle: ByKind }
       client: 'Come appare il cliente',
     },
     subtitle: same(
-      'Logo, palette, caratteri e stile delle immagini. Valgono per tutte le card: post, caroselli e copertine.',
+      'Logo, colori e qualche immagine che ti piace: ne ricavo lo stile delle card e ti mostro un esempio per ogni canale.',
     ),
   },
   references: {
@@ -211,13 +211,13 @@ export function sectionSummary(key: SectionKey, draft: BrandDraft): string {
       return card ? `Scheda v${card.version} da ${card.sourceLabel}` : 'Da completare: nessun testo analizzato';
     }
     case 'visual': {
-      const { logoUri, palette, imageStyle, typography, signature } = draft.visual;
+      const { logoUri, palette, signature, references = [], examples = [] } = draft.visual;
       return [
         logoUri ? 'Logo caricato' : 'Nessun logo',
         palette.name.toLowerCase(),
-        `caratteri ${typographyName(typography).toLowerCase()}`,
-        imageStyleLabel(imageStyle).toLowerCase(),
-        signature && logoUri ? 'firma visiva' : '',
+        references.length > 0 ? `${references.length} ${references.length === 1 ? 'riferimento' : 'riferimenti'}` : '',
+        examples.length > 0 ? 'esempi pronti' : '',
+        signature && logoUri ? 'firma sulle card' : '',
       ]
         .filter(Boolean)
         .join(' · ');
