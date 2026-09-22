@@ -9,6 +9,7 @@ import {
   creationSteps,
   imageRoles,
   photoAspectFor,
+  withDesignTemplates,
   type MediaFile,
   type VisualDesign,
   type VisualRender,
@@ -71,6 +72,8 @@ function renderKey(content: Content, design: VisualDesign): string {
     content.channels,
     design.kind,
     design.pages,
+    // I template disegnati per il contenuto stanno fuori dalle pagine: senza, rifarli non rifà i PNG.
+    design.templates ?? null,
     design.image.photo?.path ?? null,
     design.image.cutout?.path ?? null,
   ]);
@@ -185,7 +188,9 @@ export function createVisualRunner({ pool, media, log, concurrency = 2, pollMs =
     );
     // Il logo passa solo se be-render lo può aprire: un percorso del telefono non si vede dal server.
     const logoUrl = kit.logoUrl && /^(https:|data:image\/)/.test(kit.logoUrl) ? kit.logoUrl : null;
-    const renderKit = { ...kit, logoUrl, signature: kit.signature && logoUrl !== null };
+    // I template disegnati per questo contenuto entrano nel kit come quelli del brand: be-render non
+    // legge il database, quello che non viaggia qui dentro per lui non esiste.
+    const renderKit = withDesignTemplates({ ...kit, logoUrl, signature: kit.signature && logoUrl !== null }, design);
 
     const renders: VisualRender[] = [];
     for (const [index, page] of design.pages.entries()) {

@@ -14,8 +14,7 @@ export function stepsFromTools(log: StepLog, thinking: { first: string; next: st
     if (event.type === 'start') {
       log.drop(THINKING_STEP);
       running.add(event.id);
-      const step =
-        event.tool === 'WebFetch' ? pageStep(String(event.input.url ?? '')) : searchStep(String(event.input.query ?? ''));
+      const step = toolStep(event.tool, event.input);
       log.start(event.id, step.label, step.detail);
       return;
     }
@@ -23,4 +22,55 @@ export function stepsFromTools(log: StepLog, thinking: { first: string; next: st
     log.finish(event.id, { failed: !event.ok });
     if (running.size === 0) log.start(THINKING_STEP, thinking.next);
   };
+}
+
+const MAX_DETAIL = 60;
+
+/** L'ultimo pezzo di un percorso: all'utente interessa il nome del file, non dove sta. */
+function fileName(value: unknown): string {
+  const path = String(value ?? '').replace(/[\\/]+$/, '');
+  return path.split(/[\\/]/).pop() || 'un file';
+}
+
+function shorten(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  return clean.length > MAX_DETAIL ? `${clean.slice(0, MAX_DETAIL - 1).trimEnd()}…` : clean;
+}
+
+/**
+ * Le parole di ogni strumento. Oltre alle pagine e alle ricerche ci sono gli strumenti nativi di Claude Code,
+ * che usa il motore di `be-agent`: legge il profilo del brand dalla sua cartella, guarda i visivi
+ * dell'onboarding, scrive e prova i template.
+ */
+function toolStep(tool: string, input: Record<string, unknown>): { label: string; detail?: string } {
+  switch (tool) {
+    case 'WebFetch':
+      return pageStep(String(input.url ?? ''));
+    case 'WebSearch':
+      return searchStep(String(input.query ?? ''));
+    case 'Read':
+      return { label: `Guardo «${fileName(input.file_path)}»` };
+    case 'Glob':
+      return { label: 'Cerco tra i file', detail: shorten(String(input.pattern ?? '')) };
+    case 'Grep':
+      return { label: `Cerco «${shorten(String(input.pattern ?? ''))}» nei file` };
+    case 'Write':
+      return { label: `Scrivo «${fileName(input.file_path)}»` };
+    case 'Edit':
+    case 'NotebookEdit':
+      return { label: `Correggo «${fileName(input.file_path ?? input.notebook_path)}»` };
+    case 'Bash':
+      return { label: 'Eseguo un comando', detail: shorten(String(input.description ?? input.command ?? '')) };
+    case 'Task':
+      return { label: 'Metto al lavoro un aiutante', detail: shorten(String(input.description ?? '')) };
+    case 'TodoWrite':
+      return { label: 'Rivedo cosa mi manca' };
+    // Gli strumenti del visivo (server MCP «visivo» di be-agent): sono i passi che l'utente aspetta davvero.
+    case 'mcp__visivo__genera_foto':
+      return { label: 'Preparo la foto', detail: shorten(String(input.descrizione ?? '')) };
+    case 'mcp__visivo__componi_card':
+      return { label: 'Compongo la card e me la guardo' };
+    default:
+      return { label: 'Lavoro un momento' };
+  }
 }

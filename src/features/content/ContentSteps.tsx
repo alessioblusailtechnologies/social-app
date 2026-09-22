@@ -362,7 +362,7 @@ export function VisualStep({ brand, content, channels, channel, onChannel, locke
         <VisualPreview brand={brand} format={format} visual={content.visual} channel={channel} />
       )}
 
-      {cardUsed && !withoutImage && format !== 'video' && <VisualPanel brand={brand} content={content} locked={locked} />}
+      {cardUsed && !withoutImage && format !== 'video' && <VisualPanel brand={brand} content={content} channel={channel} locked={locked} />}
 
       {!locked && waiting.length > 0 && (
         <Text variant="caption" color={colors.textTitle}>
@@ -472,6 +472,7 @@ export interface ReviewStepProps {
   channels: ChannelId[];
   slot: PlanSlot | null;
   channel: ChannelId;
+  onChannel: (channel: ChannelId) => void;
   choice: WhenChoice;
   locked: boolean;
   /** Torna a un passo per cambiare qualcosa. */
@@ -479,7 +480,7 @@ export interface ReviewStepProps {
 }
 
 /** L'ultimo sguardo prima di confermare: il post com'è, e le righe da ricontrollare. */
-export function ReviewStep({ brand, content, channels, slot, channel, choice, locked, onEdit }: ReviewStepProps) {
+export function ReviewStep({ brand, content, channels, slot, channel, onChannel, choice, locked, onEdit }: ReviewStepProps) {
   const router = useRouter();
   const variant = content.variants.find((candidate) => candidate.channel === channel) ?? content.variants[0];
   const ideaId = content.ideaId;
@@ -528,6 +529,15 @@ export function ReviewStep({ brand, content, channels, slot, channel, choice, lo
 
   return (
     <>
+      {channels.length > 1 && (
+        <SegmentedControl
+          accessibilityLabel="Canale"
+          value={channel}
+          onChange={onChannel}
+          options={channels.map((candidate) => ({ value: candidate, label: channelName(candidate) }))}
+        />
+      )}
+
       {variant && (
         <PostPreview
           brand={brand}

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowUp } from 'lucide-react-native';
 import { useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 
@@ -11,32 +11,29 @@ import {
   IconButton,
   LinkButton,
   Panel,
-  SegmentedControl,
-  StatusDot,
+  Sheet,
+  StepList,
   SunkenInput,
   Text,
   colors,
   radii,
   useToast,
 } from '@/design-system';
-import type { Brand } from '@/domain/brand';
-import { templateFallback } from '@/domain/line';
+import type { Brand, ChannelId } from '@/domain/brand';
+import { channelName } from '@/domain/catalog';
 import type { Content } from '@/domain/content';
 import {
   CARD_FIELD_LABELS,
   CARD_LIMITS,
-  VISUAL_KINDS,
-  VISUAL_KIND_LABELS,
   VISUAL_STEP_LABELS,
   brandKit,
+  withDesignTemplates,
   imageRoles,
-  layoutOptions,
   templateSpec,
   toEdit,
   type CardField,
   type CardItem,
   type CardText,
-  type TemplateId,
   type VisualDesign,
   type VisualEdit,
   type VisualPage,
@@ -44,6 +41,7 @@ import {
 } from '@/domain/visual';
 import {
   useCreateVisual,
+  useDesignVisual,
   useEditVisual,
   useProposeVisual,
   useRefreshVisual,
@@ -52,21 +50,11 @@ import {
 } from '@/services/queries';
 
 import { CardView } from './CardView';
-import { TemplateSketch } from './TemplateSketch';
 
 /** Oltre questa misura la foto non passa dal corpo della richiesta, né dallo storage del mock sul web. */
 const PHOTO_LIMIT = 3_000_000;
 
 type TextField = Exclude<CardField, 'items'>;
-
-/** Una scelta di layout: un template del brand o un layout del motore. */
-interface LayoutOption {
-  id: string;
-  name: string;
-  templateId: TemplateId;
-  custom?: string;
-  photo: boolean;
-}
 
 const FIELD_LIMITS: Record<TextField, number> = {
   kicker: CARD_LIMITS.kicker,
@@ -89,6 +77,8 @@ function plannedSteps(design: VisualDesign): VisualStep[] {
 export interface VisualPanelProps {
   brand: Brand;
   content: Content;
+  /** Il canale che l'utente sta guardando: decide il formato per cui si disegna. */
+  channel: ChannelId;
   /** Approvato o pubblicato: si guarda e si scarica, non si modifica. */
   locked: boolean;
 }
@@ -97,7 +87,7 @@ export interface VisualPanelProps {
  * Il visivo del contenuto, sotto il testo: la proposta che arriva con la bozza, la creazione
  * a passi e i ritocchi della card pronta. Niente parte senza che l'utente lo chieda.
  */
-export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
+export function VisualPanel({ brand, content, channel, locked }: VisualPanelProps) {
   const toast = useToast();
   const editVisual = useEditVisual();
   const propose = useProposeVisual();
@@ -105,8 +95,12 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
   const regenerate = useRegenerateImage();
   const upload = useUploadPhoto();
   const refresh = useRefreshVisual();
+  const draw = useDesignVisual();
   const [editing, setEditing] = useState<'text' | 'image' | null>(null);
   const [description, setDescription] = useState('');
+  /** Aperto dal tap su «Disegna la card» quando i canali sono più d'uno: per quale formato? */
+  const [asking, setAsking] = useState(false);
+  const [instruction, setInstruction] = useState('');
 
   const design = content.visual.design;
   if (content.format === 'video') return null;
@@ -129,25 +123,13 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
     );
   }
 
-  const kit = brandKit(brand);
+  const kit = withDesignTemplates(brandKit(brand), design);
   const cover = design.pages[0];
   const spec = templateSpec(cover.templateId);
-  // Con i template scritti per il brand si sceglie tra quelli; altrimenti tra i layout del motore adatti ai testi.
-  const brandTemplates = kit.line.templates;
-  const coverTemplate = cover.custom ? brandTemplates.find((template) => template.id === cover.custom) : undefined;
+  // Il layout è quello disegnato per questa card. Non ci sono layout fra cui scegliere: per
+  // cambiarlo si chiede un altro disegno.
+  const coverTemplate = cover.custom ? kit.line.templates.find((template) => template.id === cover.custom) : undefined;
   const layoutName = coverTemplate?.name ?? spec.name;
-  const coverFields = coverTemplate ? coverTemplate.fields : spec.fields;
-  const options: LayoutOption[] =
-    brandTemplates.length > 0
-      ? brandTemplates.map((template) => ({
-          id: template.id,
-          name: template.name,
-          templateId: templateFallback(template),
-          custom: template.id,
-          photo: template.photo,
-        }))
-      : layoutOptions(design.kind, cover.text).map((option) => ({ id: option.id, name: option.name, templateId: option.id, photo: option.image !== null }));
-  const currentLayout = cover.custom ?? cover.templateId;
   const roles = imageRoles(design);
   const usesImage = roles.length > 0;
   const pagesLabel = design.pages.length > 1 ? ` · ${design.pages.length} slide` : '';
@@ -163,23 +145,63 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
       },
     );
 
-  const chooseLayout = (next: LayoutOption) =>
-    apply({
-      // Un template del brand porta con sé la foto: il tipo del visivo lo segue.
-      ...(next.custom && { kind: next.photo ? 'photo' : 'infographic' }),
-      pages: design.pages.map((page, i) => (i === 0 ? { text: page.text, templateId: next.templateId, ...(next.custom && { custom: next.custom }) } : page)),
-    });
+  const startCreation = () => create.mutate(content.id, { onError: () => toast('Non riesco a creare il visivo. Riprova.') });
 
-  const cycleLayout = (step: number) => {
-    if (options.length < 2) return;
-    const current = Math.max(0, options.findIndex((option) => option.id === currentLayout));
-    chooseLayout(options[(current + step + options.length) % options.length]);
+  /** Disegna la card da capo. Canali vuoti = deve reggere in tutti i formati del contenuto. */
+  const startDesign = (channels: ChannelId[]) => {
+    setAsking(false);
+    const asked = instruction.trim();
+    setInstruction('');
+    draw.mutate(
+      { contentId: content.id, channels, ...(asked && { instruction: asked }) },
+      { onError: () => toast('Non riesco a disegnare la card. Riprova.') },
+    );
   };
 
-  /** Coi template del brand, togliere o aggiungere la foto passa al primo template senza foto o con la foto. */
-  const photoSwitch = (photo: boolean) => (brandTemplates.length > 0 ? options.find((option) => option.photo === photo) : undefined);
+  /** Coi canali multipli si chiede: un layout per il verticale in quadrato raramente regge. */
+  const askOrDesign = () => (content.channels.length > 1 ? setAsking(true) : startDesign([]));
 
-  const startCreation = () => create.mutate(content.id, { onError: () => toast('Non riesco a creare il visivo. Riprova.') });
+  /**
+   * La barra del disegno, come in «Come appare»: si dice come la si vuole e la freccia disegna.
+   * È l'unico modo di cambiare il layout, perché il layout lo scrive l'AI: non ci sono alternative
+   * pronte fra cui scegliere.
+   */
+  const drawBar = (
+    <View style={styles.askRow}>
+      <SunkenInput
+        style={styles.flex}
+        value={instruction}
+        onChangeText={setInstruction}
+        placeholder={design.templates?.length ? 'Cosa cambio? es. titolo più grande' : 'Come la vuoi? es. senza foto, titolo grande'}
+        returnKeyType="send"
+        onSubmitEditing={askOrDesign}
+      />
+      <IconButton
+        icon={ArrowUp}
+        variant="solid"
+        size={40}
+        iconSize={18}
+        accessibilityLabel={design.templates?.length ? 'Ridisegna la card' : 'Disegna la card'}
+        onPress={askOrDesign}
+      />
+    </View>
+  );
+
+  /** La domanda dei formati: sale dal basso, si risponde e si chiude. */
+  const channelSheet = (
+    <Sheet
+      visible={asking}
+      onClose={() => setAsking(false)}
+      title="Per quali formati?"
+      hint="Lo stesso layout esce nei formati dei canali che scegli: più ne metti, più deve reggere.">
+      <Button block variant="secondary" onPress={() => startDesign([channel])}>
+        {`Solo ${channelName(channel)}`}
+      </Button>
+      <Button block onPress={() => startDesign([])}>
+        {`Tutti e ${content.channels.length} i canali`}
+      </Button>
+    </Sheet>
+  );
 
   const pickPhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: true, exif: false });
@@ -238,29 +260,36 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
     );
   }
 
+  // Mentre l'AI disegna i passi arrivano dallo stream: si vede cosa sta facendo, non uno skeleton.
+  if (draw.isPending) {
+    return (
+      <Panel label="Visivo" gap={10}>
+        <StepList steps={draw.steps} waiting="Guardo le card che hai approvato" />
+      </Panel>
+    );
+  }
+
   if (design.status === 'creating') {
+    // Qui i passi arrivano dal polling, non da uno stream: si mostra quello che è già successo.
     const steps = plannedSteps(design);
     const current = design.step ? steps.indexOf(design.step) : -1;
     return (
       <Panel label="Visivo" gap={10}>
-        <Text variant="strongSmall">Sto creando il visivo</Text>
-        {steps.map((step, i) => (
-          <View key={step} style={styles.row}>
-            <StatusDot tone={i < current ? 'complete' : i === current ? 'partial' : 'missing'} size={10} />
-            <Text variant="caption" color={i === current ? colors.textTitle : colors.textBody}>
-              {VISUAL_STEP_LABELS[step]}
-            </Text>
-          </View>
-        ))}
+        <StepList
+          steps={steps
+            .slice(0, current < 0 ? steps.length : current + 1)
+            .map((step, i) => ({ id: step, label: VISUAL_STEP_LABELS[step], status: i < current ? ('done' as const) : ('running' as const) }))}
+          waiting="Preparo il visivo"
+        />
         <Text variant="caption">Intanto puoi ritoccare il testo.</Text>
       </Panel>
     );
   }
 
   if (design.status === 'ready') {
-    const position = options.findIndex((option) => option.id === currentLayout);
     return (
       <Panel label="Visivo" gap={12}>
+        {channelSheet}
         {design.nextPages && (
           <View style={styles.notice}>
             <Text variant="strongSmall">Il testo è cambiato</Text>
@@ -278,54 +307,26 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
         )}
 
         <View style={styles.row}>
-          <Text variant="strongSmall" style={styles.flex}>
-            Layout
-          </Text>
-          <IconButton icon={ChevronLeft} size={32} variant="outline" disabled={options.length < 2} accessibilityLabel="Layout precedente" onPress={() => cycleLayout(-1)} />
-          <Text variant="action" style={styles.layoutName} numberOfLines={1}>
+          <Text variant="strongSmall" style={styles.flex} numberOfLines={1}>
             {layoutName}
-            {options.length > 1 && position >= 0 ? ` · ${position + 1} di ${options.length}` : ''}
+            {pagesLabel}
           </Text>
-          <IconButton icon={ChevronRight} size={32} variant="outline" disabled={options.length < 2} accessibilityLabel="Layout successivo" onPress={() => cycleLayout(1)} />
+          <LinkButton label="Modifica i testi" onPress={() => setEditing('text')} />
         </View>
 
-        <View style={styles.row}>
-          <Text variant="strongSmall" style={styles.flex}>
-            Testi della card{pagesLabel}
-          </Text>
-          <LinkButton label="Modifica" onPress={() => setEditing('text')} />
-        </View>
-
-        {usesImage ? (
-          <View style={styles.section}>
-            <Text variant="strongSmall">{design.image.source === 'upload' ? 'La tua foto' : 'Foto generata'}</Text>
-            <View style={styles.links}>
-              {design.image.source === 'generated' && (
-                <LinkButton
-                  label={regenerate.isPending ? 'Rifaccio…' : 'Rigenera'}
-                  onPress={() => regenerate.mutate(content.id, { onError: () => toast('Non riesco a rifare la foto. Riprova.') })}
-                />
-              )}
-              <LinkButton label="Usa una tua foto" onPress={pickPhoto} />
-              {brandTemplates.length === 0 ? (
-                <LinkButton label="Togli la foto" tone="muted" onPress={() => apply({ kind: 'infographic' }, 'Tolta la foto: resta la card.')} />
-              ) : photoSwitch(false) ? (
-                <LinkButton label="Togli la foto" tone="muted" onPress={() => chooseLayout(photoSwitch(false)!)} />
-              ) : null}
-            </View>
-          </View>
-        ) : (
-          <View style={styles.row}>
-            <Text variant="caption" style={styles.flex}>
-              Card senza foto
-            </Text>
-            {brandTemplates.length === 0 ? (
-              <LinkButton label="Aggiungi una foto" onPress={() => apply({ kind: 'mixed' })} />
-            ) : photoSwitch(true) ? (
-              <LinkButton label="Aggiungi una foto" onPress={() => chooseLayout(photoSwitch(true)!)} />
-            ) : null}
+        {usesImage && (
+          <View style={styles.links}>
+            {design.image.source === 'generated' && (
+              <LinkButton
+                label={regenerate.isPending ? 'Rifaccio la foto…' : 'Rifai la foto'}
+                onPress={() => regenerate.mutate(content.id, { onError: () => toast('Non riesco a rifare la foto. Riprova.') })}
+              />
+            )}
+            <LinkButton label="Usa una tua foto" onPress={pickPhoto} />
           </View>
         )}
+
+        {drawBar}
 
         <View style={styles.links}>
           <LinkButton label="Torna alla proposta" tone="muted" onPress={() => apply({ reopen: true })} />
@@ -349,47 +350,30 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
 
   return (
     <Panel label="Visivo" gap={12}>
-      {brandTemplates.length === 0 && (
-        <SegmentedControl
-          accessibilityLabel="Tipo di visivo"
-          value={design.kind}
-          options={VISUAL_KINDS.map((kind) => ({ value: kind, label: VISUAL_KIND_LABELS[kind] }))}
-          onChange={(kind) => kind !== design.kind && apply({ kind })}
-        />
-      )}
+      {channelSheet}
 
+      {/* La card com'è, disegnata dal vivo: non c'è motivo di mostrarne uno schizzo. */}
       <View style={styles.proposal}>
-        {coverTemplate ? (
-          <CardView
-            kit={kit}
-            page={cover}
-            pageIndex={0}
-            pageCount={design.pages.length}
-            photoUrl={design.image.photo?.url || null}
-            cutoutUrl={null}
-            aspect="4:5"
-            width={64}
-          />
-        ) : (
-          <TemplateSketch templateId={cover.templateId} kit={kit} width={64} />
-        )}
+        <CardView
+          kit={kit}
+          page={cover}
+          pageIndex={0}
+          pageCount={design.pages.length}
+          photoUrl={design.image.photo?.url || null}
+          cutoutUrl={null}
+          aspect="4:5"
+          width={72}
+        />
         <View style={[styles.flex, styles.stack]}>
           <Text variant="strongSmall">
             {layoutName}
             {pagesLabel}
           </Text>
-          {cover.text.value && coverFields.includes('value') ? <Text variant="heading">{cover.text.value}</Text> : null}
           <Text variant="body" color={colors.textTitle} numberOfLines={3}>
             {cover.text.headline || cover.text.body || 'Solo la foto, con la firma del brand.'}
           </Text>
-          {coverFields.includes('items') && cover.text.items.length > 0 && (
-            <Text variant="caption" numberOfLines={2}>
-              {cover.text.items.map((item) => item.body || item.title).join(' · ')}
-            </Text>
-          )}
           <View style={styles.links}>
             <LinkButton label="Modifica i testi" onPress={() => setEditing('text')} />
-            {options.length > 1 && <LinkButton label="Cambia layout" onPress={() => cycleLayout(1)} />}
           </View>
         </View>
       </View>
@@ -461,6 +445,8 @@ export function VisualPanel({ brand, content, locked }: VisualPanelProps) {
           {design.error ?? 'La creazione non è riuscita.'}
         </Text>
       )}
+
+      {drawBar}
 
       <Button
         block
@@ -577,6 +563,7 @@ function CardTextEditor({
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
+  askRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stack: { gap: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   links: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 18 },
@@ -585,7 +572,6 @@ const styles = StyleSheet.create({
   section: { gap: 6 },
   divider: { borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingTop: 12 },
   notice: { gap: 2, padding: 12, borderRadius: radii.md, backgroundColor: colors.surfaceSunken },
-  layoutName: { maxWidth: 150, textAlign: 'center' },
   thumb: { width: 48, height: 60, borderRadius: radii.sm },
   field: { gap: 6 },
   item: { gap: 4 },

@@ -17,7 +17,20 @@ import { costAtTariff, type ModelTarget, type TokenCount } from './providers';
  */
 
 /** Anche `image` e `cutout`, che non passano dall'Agent SDK ma finiscono negli stessi consumi. */
-export type AiTask = 'website' | 'themes' | 'positioning' | 'visual-style' | 'voice' | 'ideas' | 'source-ideas' | 'content' | 'rewrite' | 'image' | 'cutout';
+export type AiTask =
+  | 'website'
+  | 'themes'
+  | 'positioning'
+  | 'visual-style'
+  | 'voice'
+  | 'ideas'
+  | 'source-ideas'
+  | 'content'
+  | 'rewrite'
+  /** Il visivo di un contenuto, disegnato da capo: solo `be-agent` lo sa fare. */
+  | 'visual-design'
+  | 'image'
+  | 'cutout';
 export type WebTool = 'WebFetch' | 'WebSearch';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -34,12 +47,16 @@ export interface AiRequest<S extends z.ZodType> {
   /** Chi ha chiesto la generazione: finisce nei consumi. */
   accountId: string;
   brandId?: string | null;
-  /** Gli strumenti web che la sessione apre e chiude, man mano: servono a mostrare i passi. */
+  /** Gli strumenti che la sessione apre e chiude, man mano: servono a mostrare i passi. */
   onTool?: (event: ToolEvent) => void;
 }
 
+/**
+ * Il nome dello strumento è una stringa e non `WebTool`: questo motore apre solo pagine e ricerche,
+ * ma quello di `be-agent` usa anche gli strumenti nativi di Claude Code e passa di qui gli stessi passi.
+ */
 export type ToolEvent =
-  | { type: 'start'; id: string; tool: WebTool; input: Record<string, unknown> }
+  | { type: 'start'; id: string; tool: string; input: Record<string, unknown> }
   | { type: 'end'; id: string; ok: boolean };
 
 /** Chi ha chiesto la generazione, per i consumi: lo passano i servizi a ogni compito. */

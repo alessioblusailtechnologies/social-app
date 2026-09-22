@@ -6,7 +6,7 @@ import type { Brand, ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
 import type { ChannelVariant, ContentVisual, VideoScene, VoiceCheck } from '@/domain/content';
 import type { IdeaFormat } from '@/domain/idea';
-import { ASPECT_SIZES, VISUAL_STEP_LABELS, aspectFor, brandKit, type Aspect, type VisualStep } from '@/domain/visual';
+import { ASPECT_SIZES, VISUAL_STEP_LABELS, aspectFor, brandKit, withDesignTemplates, type Aspect, type VisualStep } from '@/domain/visual';
 import { BrandAvatar } from '@/features/brand-editors';
 import { CardView } from '@/features/visual/CardView';
 
@@ -83,12 +83,17 @@ export function VisualPreview({
   const aspect = aspectFor(channel, format);
   const carousel = (design?.pages.length ?? visual.slides.length) > 1;
 
-  if (!design || design.status !== 'ready') {
+  // Appena c'è un disegno la card si vede: il motore dei template la disegna dal vivo, anche prima
+  // che il PNG sia composto e anche senza foto (al suo posto va una sfumatura nei colori del brand).
+  // Il riquadro vuoto resta solo quando non c'è ancora niente da mostrare.
+  if (!design || design.pages.length === 0) {
     const step = design?.status === 'creating' && design.step ? design.step : 'todo';
     return <VisualPlaceholder aspect={aspect} carousel={carousel} step={step} />;
   }
 
-  const kit = brandKit(brand);
+  // Col template disegnato per questo contenuto: senza, l'anteprima ripiega su un layout del motore
+  // e mostra una card diversa da quella che esce dal render.
+  const kit = withDesignTemplates(brandKit(brand), design);
   const card = {
     kit,
     aspect,

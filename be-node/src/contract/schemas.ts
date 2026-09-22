@@ -337,6 +337,15 @@ export const visualEditSchema = z.object({
   reopen: z.boolean().default(false),
 }) satisfies z.ZodType<VisualEdit>;
 
+/**
+ * Il visivo disegnato da capo. `channels` dice per quali formati la card deve reggere: vuoto
+ * significa tutti quelli del contenuto.
+ */
+export const visualDesignSchema = z.object({
+  channels: channelList.default([]),
+  instruction: text(500).optional(),
+});
+
 /** La foto dell'utente come data URI: il controllo di tipo e misura lo fa il servizio. */
 export const photoUploadSchema = z.object({ dataUri: z.string().min(1).max(5_000_000) });
 

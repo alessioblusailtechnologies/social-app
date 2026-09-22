@@ -15,6 +15,7 @@ export { Switch } from './Switch';
 export { SkeletonLines } from './Skeleton';
 export { StepList, type StepItem } from './Steps';
 export { ImageViewer, type ViewerItem } from './ImageViewer';
+export { Sheet, type SheetProps } from './Sheet';
 export { ToastProvider, useToast } from './Toast';
 export { FieldCard, SunkenInput } from './Inputs';
 export { AppFrame, FormScrollView, KeyboardScreen, ScreenFooter, ScreenTitle, TopBar, screenStyles } from './Layout';

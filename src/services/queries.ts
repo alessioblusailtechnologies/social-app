@@ -512,6 +512,23 @@ export function useProposeVisualStyle() {
   return { ...mutation, steps };
 }
 
+/**
+ * Il visivo disegnato da capo, coi passi mentre l'AI lavora: guarda le card d'esempio, scrive il
+ * layout, lo compone e se lo guarda. `steps` riparte vuoto a ogni richiesta.
+ */
+export function useDesignVisual() {
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const client = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({ contentId, channels, instruction }: { contentId: string; channels: ChannelId[]; instruction?: string }) => {
+      setSteps([]);
+      return services.contents.designVisual(contentId, channels, instruction, setSteps);
+    },
+    onSuccess: (content) => cacheContent(client, content),
+  });
+  return { ...mutation, steps };
+}
+
 export function useUploadReference() {
   return useMutation({
     mutationFn: ({ uri, dataUri }: { uri: string; dataUri: string | null }) => services.brands.uploadReference(uri, dataUri),

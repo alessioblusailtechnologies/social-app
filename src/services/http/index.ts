@@ -116,6 +116,8 @@ export function createHttpServices(api: ApiClient): Services {
     reopen: (contentId) => api.post<ContentWithSlot>(route`/contents/${contentId}/reopen`),
     editVisual: (contentId, edit) => api.put<Content>(route`/contents/${contentId}/visual`, edit),
     proposeVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/propose`),
+    designVisual: (contentId, channels, instruction, onSteps) =>
+      api.stream<Content>(route`/contents/${contentId}/visual/design/stream`, { channels, instruction }, onSteps),
     createVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/create`),
     regenerateImage: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/image`),
     uploadPhoto: (contentId, dataUri) => api.post<Content>(route`/contents/${contentId}/visual/photo`, { dataUri }),

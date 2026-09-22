@@ -540,6 +540,31 @@ function createMockContentService(): ContentService {
       }));
     },
 
+    /**
+     * Nel mock nessuno disegna: si simulano i passi e si torna la proposta fatta dai testi, come
+     * `proposeVisual`. Serve a provare la schermata, non il disegno.
+     */
+    async designVisual(contentId, _channels, _instruction, onSteps) {
+      const log = createStepLog(onSteps);
+      for (const [id, label] of [
+        ['look', 'Guardo le card che hai approvato'],
+        ['think', 'Penso a come dirlo in una card'],
+        ['draw', 'Scrivo il layout'],
+        ['check', 'Compongo la card e me la guardo'],
+      ] as const) {
+        log.start(id, label);
+        await delay(latency(500, 900));
+        log.finish(id);
+      }
+      return updateContent(contentId, (content) => ({
+        ...content,
+        visual: {
+          ...content.visual,
+          design: content.visual.design ?? fallbackDesign(content.format, content.visual.headline || content.title, content.visual.slides),
+        },
+      }));
+    },
+
     async createVisual(contentId) {
       await delay(latency(200, 400));
       return startCreation(contentId);

@@ -1,4 +1,6 @@
+import type { ChannelId } from '@/domain/brand';
 import type { Content } from '@/domain/content';
+import type { OnAiSteps } from '@/services/types';
 import {
   VisualBusyError,
   creationSteps,
@@ -11,7 +13,9 @@ import {
   type VisualEdit,
 } from '@/domain/visual';
 
+import { designFromOutput, designVisual } from '../ai/visual-design';
 import { ApiError } from '../contract/errors';
+import { requireBrand } from '../data/brands';
 import { requireContent, saveContent } from '../data/contents';
 import { enqueueVisualJob, type VisualJobKind } from '../data/visual-jobs';
 import type { Identity } from '../db/identity';
@@ -157,6 +161,44 @@ async function startCreation(
 
 export function createVisual(deps: Deps, identity: Identity, contentId: string): Promise<Content> {
   return startCreation(deps, identity, contentId, (design) => design);
+}
+
+/**
+ * Il visivo disegnato da capo, un canale alla volta. L'agente guarda le card d'esempio e scrive un
+ * template per questo contenuto; poi si mette in coda come sempre per foto e PNG. Il disegno non
+ * passa dalla transazione: ci mette minuti, e tenere aperta una transazione tutto quel tempo
+ * bloccherebbe la riga del contenuto a chiunque altro.
+ */
+export async function designContentVisual(
+  deps: Deps,
+  identity: Identity,
+  contentId: string,
+  channels: readonly ChannelId[],
+  instruction: string | undefined,
+  onSteps?: OnAiSteps,
+): Promise<Content> {
+  const { content, brand } = await inTransaction(deps, identity, async (db) => {
+    const current = await requireContent(db, contentId);
+    assertEditable(current);
+    if (current.format === 'video') throw ApiError.invalid('Un video non ha una card.');
+    return { content: current, brand: await requireBrand(db, current.brandId) };
+  });
+
+  // Un contenuto ha un disegno solo, reso poi in tutti i formati che i suoi canali chiedono: i canali
+  // qui dicono per quali formati deve reggere, non quanti disegni fare.
+  const wanted = channels.length > 0 ? channels : content.channels;
+  const output = await designVisual(
+    deps.ai,
+    { accountId: identity.accountId, brandId: content.brandId },
+    { brand, content, channels: wanted, instruction, onSteps },
+  );
+  const design = designFromOutput(output, content.visual.design ?? null);
+
+  return inTransaction(deps, identity, async (db) => {
+    const fresh = await requireContent(db, contentId);
+    assertEditable(fresh);
+    return saveContent(db, withDesign(fresh, design));
+  });
 }
 
 /** «Rigenera»: via la foto generata, stessa descrizione, stessi layout e testi. */

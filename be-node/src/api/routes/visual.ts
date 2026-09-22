@@ -2,10 +2,11 @@ import type { FastifyInstance } from 'fastify';
 
 import type { Content } from '@/domain/content';
 
-import { photoUploadSchema, visualEditSchema } from '../../contract/schemas';
+import { photoUploadSchema, visualDesignSchema, visualEditSchema } from '../../contract/schemas';
 import type { Deps } from '../../services/deps';
 import {
   createVisual,
+  designContentVisual,
   editVisual,
   proposeVisual,
   refreshVisual,
@@ -13,6 +14,7 @@ import {
   uploadVisualPhoto,
 } from '../../services/visual';
 import { signContent } from '../../visual/files';
+import { sendSteps } from '../steps';
 import { idFrom } from './params';
 
 type ContentParams = { Params: { contentId: string } };
@@ -36,6 +38,18 @@ export function registerVisualRoutes(app: FastifyInstance, deps: Deps): void {
   app.post<ContentParams>('/api/contents/:contentId/visual/create', (request) =>
     signed(createVisual(deps, request.identity, contentId(request.params.contentId))),
   );
+
+  /**
+   * Il visivo disegnato da capo. È a passi perché ci mette minuti: l'agente guarda le card
+   * d'esempio, scrive il layout, lo compone e se lo guarda. Chi aspetta deve vederlo lavorare.
+   */
+  app.post<ContentParams>('/api/contents/:contentId/visual/design/stream', (request, reply) => {
+    const id = contentId(request.params.contentId);
+    const { channels, instruction } = visualDesignSchema.parse(request.body);
+    return sendSteps(request, reply, (onSteps) =>
+      signed(designContentVisual(deps, request.identity, id, channels, instruction, onSteps)),
+    );
+  });
 
   app.post<ContentParams>('/api/contents/:contentId/visual/image', (request) =>
     signed(regenerateVisualImage(deps, request.identity, contentId(request.params.contentId))),

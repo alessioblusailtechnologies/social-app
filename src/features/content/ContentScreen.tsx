@@ -452,6 +452,7 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
               channels={channels}
               slot={slot}
               channel={channel}
+              onChannel={setSelectedChannel}
               choice={when}
               locked={locked}
               onEdit={goTo}

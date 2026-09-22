@@ -84,6 +84,14 @@ export interface VisualDesign {
   kind: VisualKind;
   /** Una pagina per il post, una per slide nel carosello. */
   pages: VisualPage[];
+  /**
+   * I template disegnati per *questo* contenuto, non per il brand: li scrive l'agente guardando le
+   * card d'esempio dell'onboarding, e vivono qui perché valgono solo per questa card. Al render si
+   * uniscono a quelli del brand nel kit; `VisualPage.custom` ne porta l'id.
+   */
+  templates?: BrandTemplate[];
+  /** Le famiglie di Google Fonts che quei template usano: senza, la card esce coi caratteri di sistema. */
+  fonts?: TemplateFont[];
   image: VisualImage;
   status: VisualStatus;
   /** Il passo in corso durante la creazione. */
@@ -555,10 +563,21 @@ export function fallbackDesign(format: IdeaFormat, headline: string, slides: rea
 // Immagini e creazione
 // ---------------------------------------------------------------------------
 
+/**
+ * Un template disegnato per questo contenuto, se la pagina ne porta l'id. Va cercato prima dello
+ * spec del motore: il `templateId` di una pagina così è solo il ripiego per be-render, e guardare
+ * quello direbbe che non serve nessuna foto anche quando il layout ne ha una.
+ */
+export function pageTemplate(design: VisualDesign, page: VisualPage): BrandTemplate | undefined {
+  return page.custom ? design.templates?.find((template) => template.id === page.custom) : undefined;
+}
+
 export function imageRoles(design: VisualDesign): ImageRole[] {
   const roles = new Set<ImageRole>();
   for (const page of design.pages) {
-    const role = templateSpec(page.templateId).image;
+    const drawn = pageTemplate(design, page);
+    // I template disegnati ricevono `{{photo}}` ma non il soggetto scontornato: al massimo una foto.
+    const role = drawn ? (drawn.photo ? ('photo' as const) : null) : templateSpec(page.templateId).image;
     if (role) roles.add(role);
   }
   return [...roles];
@@ -947,6 +966,24 @@ function templateFontFaces(font: TemplateFont): string[] {
 }
 
 const faceCss = (face: KitFace) => `${face.italic ? 'italic ' : ''}${face.weight} 48px "${face.family}"`;
+
+/**
+ * Il kit con dentro anche i template disegnati per questo contenuto e i loro caratteri. Serve in tre
+ * posti che devono vedere la stessa card: il render sul server, l'anteprima dal vivo nell'app e il
+ * riquadro del riepilogo. Senza, `src/templates/index.tsx` non trova l'id di `page.custom` e ripiega
+ * in silenzio su un layout del motore — la card esce diversa e nessuno se ne accorge.
+ */
+export function withDesignTemplates(kit: BrandKit, design: Pick<VisualDesign, 'templates' | 'fonts'>): BrandKit {
+  const templates = design.templates ?? [];
+  if (templates.length === 0) return kit;
+  const fonts = design.fonts ?? [];
+  return {
+    ...kit,
+    line: { ...kit.line, templates: [...kit.line.templates, ...templates] },
+    fontLinks: [...new Set([...kit.fontLinks, ...fonts.flatMap((font) => templateFontHref(font) ?? [])])],
+    faces: [...new Set([...kit.faces, ...fonts.flatMap(templateFontFaces)])],
+  };
+}
 
 export function brandKit(brand: {
   identity: Pick<Brand['identity'], 'name'> & Partial<Pick<Brand['identity'], 'site'>>;

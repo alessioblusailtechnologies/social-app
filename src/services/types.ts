@@ -205,6 +205,16 @@ export interface ContentService {
   editVisual(contentId: string, edit: VisualEdit): Promise<Content>;
   /** Per le bozze nate prima dei visivi: una proposta fatta dai testi della bozza, senza AI. */
   proposeVisual(contentId: string): Promise<Content>;
+  /**
+   * Disegna la card da capo: guarda le card d'esempio del brand e scrive un layout per questo
+   * contenuto. `channels` dice per quali formati deve reggere; vuoto = tutti quelli del contenuto.
+   */
+  designVisual(
+    contentId: string,
+    channels: ChannelId[],
+    instruction?: string,
+    onSteps?: OnAiSteps,
+  ): Promise<Content>;
   /** Crea il visivo proposto (foto se serve, scontorno, composizione). Risponde subito, a creazione avviata. */
   createVisual(contentId: string): Promise<Content>;
   /** Rifà solo la foto con la stessa descrizione, tenendo layout e testi. */
