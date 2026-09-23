@@ -2,6 +2,7 @@ import type pg from 'pg';
 
 import type { AiEngine, AiMeta } from '../ai/engine';
 import { withIdentity, type Identity } from '../db/identity';
+import type { Jobs } from '../jobs/runner';
 import type { MediaDeps } from '../media';
 import type { VisualJobs } from '../visual/runner';
 
@@ -13,6 +14,8 @@ export interface Deps {
   media: MediaDeps;
   /** La coda dei visivi, da svegliare dopo aver messo in coda un lavoro. */
   visualJobs: VisualJobs;
+  /** La coda delle generazioni, svegliata dalle rotte che accodano. */
+  jobs: Jobs;
 }
 
 /**

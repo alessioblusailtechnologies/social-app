@@ -29,8 +29,8 @@ import {
   type WithSlot,
 } from '../../services/contents';
 import type { Deps } from '../../services/deps';
-import { sendSteps } from '../steps';
 import { signContent, signContents } from '../../visual/files';
+import { queueJob } from './jobs';
 import { channelFrom, idFrom } from './params';
 
 type BrandParams = { Params: { brandId: string } };
@@ -71,13 +71,11 @@ export function registerContentRoutes(app: FastifyInstance, deps: Deps): void {
     return withSlot(prepareContent(deps, request.identity, idFrom(request.params.slotId, 'Uscita non trovata.'), format));
   });
 
-  // Le gemelle a passi: scrivere una bozza richiede tempo, e chi aspetta vede cosa sta succedendo.
-  app.post<{ Params: { slotId: string } }>('/api/slots/:slotId/content/prepare/stream', (request, reply) => {
+  // Le gemelle in coda: scrivere una bozza richiede tempo, e il lavoro va avanti anche se l'app se ne va.
+  app.post<{ Params: { slotId: string } }>('/api/slots/:slotId/content/prepare/job', (request, reply) => {
     const { format } = formatOptionSchema.parse(request.body ?? {});
     const slotId = idFrom(request.params.slotId, 'Uscita non trovata.');
-    return sendSteps(request, reply, (onSteps) =>
-      withSlot(prepareContent(deps, request.identity, slotId, format, onSteps)),
-    );
+    return queueJob(deps, request, reply, { kind: 'content-prepare', input: { slotId, format }, ref: slotId });
   });
 
   app.post<BrandParams>('/api/brands/:brandId/contents', async (request, reply) => {
@@ -90,10 +88,10 @@ export function registerContentRoutes(app: FastifyInstance, deps: Deps): void {
     return reply.code(201).send(await signContent(deps.media.storage, content));
   });
 
-  app.post<BrandParams>('/api/brands/:brandId/contents/stream', (request, reply) => {
+  app.post<BrandParams>('/api/brands/:brandId/contents/job', (request, reply) => {
     const direct = directContentSchema.parse(request.body);
     const id = brandId(request.params.brandId);
-    return sendSteps(request, reply, (onSteps) => one(createDirectContent(deps, request.identity, id, direct, onSteps)));
+    return queueJob(deps, request, reply, { kind: 'content-direct', input: { ...direct, brandId: id }, brandId: id, ref: id });
   });
 
   app.post<BrandParams>('/api/brands/:brandId/contents/from-idea', async (request, reply) => {
@@ -102,12 +100,16 @@ export function registerContentRoutes(app: FastifyInstance, deps: Deps): void {
     return reply.code(201).send(await signContent(deps.media.storage, content));
   });
 
-  app.post<BrandParams>('/api/brands/:brandId/contents/from-idea/stream', (request, reply) => {
+  app.post<BrandParams>('/api/brands/:brandId/contents/from-idea/job', (request, reply) => {
     const { ideaId, channels } = ideaRefSchema.parse(request.body);
     const id = brandId(request.params.brandId);
-    return sendSteps(request, reply, (onSteps) =>
-      one(createContentFromIdea(deps, request.identity, id, ideaId, channels, onSteps)),
-    );
+    return queueJob(deps, request, reply, {
+      kind: 'content-from-idea',
+      input: { brandId: id, ideaId, ...(channels ? { channels } : {}) },
+      brandId: id,
+      // Il lavoro si ritrova dall'idea: due idee diverse possono diventare bozze nello stesso momento.
+      ref: ideaId,
+    });
   });
 
   app.post<ContentParams>('/api/contents/:contentId/regenerate', (request) => {
@@ -115,10 +117,10 @@ export function registerContentRoutes(app: FastifyInstance, deps: Deps): void {
     return one(regenerateContent(deps, request.identity, contentId(request.params.contentId), format));
   });
 
-  app.post<ContentParams>('/api/contents/:contentId/regenerate/stream', (request, reply) => {
+  app.post<ContentParams>('/api/contents/:contentId/regenerate/job', (request, reply) => {
     const { format } = formatOptionSchema.parse(request.body ?? {});
     const id = contentId(request.params.contentId);
-    return sendSteps(request, reply, (onSteps) => one(regenerateContent(deps, request.identity, id, format, onSteps)));
+    return queueJob(deps, request, reply, { kind: 'content-regenerate', input: { contentId: id, format }, ref: id });
   });
 
   app.put<VariantParams>('/api/contents/:contentId/variants/:channel', (request) => {
@@ -154,13 +156,11 @@ export function registerContentRoutes(app: FastifyInstance, deps: Deps): void {
     );
   });
 
-  app.post<VariantParams>('/api/contents/:contentId/variants/:channel/rewrite/stream', (request, reply) => {
+  app.post<VariantParams>('/api/contents/:contentId/variants/:channel/rewrite/job', (request, reply) => {
     const { instruction } = rewriteSchema.parse(request.body);
     const id = contentId(request.params.contentId);
     const channel = channelFrom(request.params.channel);
-    return sendSteps(request, reply, (onSteps) =>
-      one(rewriteContentVariant(deps, request.identity, id, channel, instruction, onSteps)),
-    );
+    return queueJob(deps, request, reply, { kind: 'content-rewrite', input: { contentId: id, channel, instruction }, ref: id });
   });
 
   app.post<ContentParams>('/api/contents/:contentId/approve', (request) =>

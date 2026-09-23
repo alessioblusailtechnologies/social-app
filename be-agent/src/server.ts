@@ -90,6 +90,8 @@ if (!settings.FAL_KEY) app.log.warn('scontorno dei visivi spento: manca FAL_KEY'
 try {
   await app.listen({ port: Number(process.env.PORT) || agent.AGENT_PORT, host: '0.0.0.0' });
   await app.visualRunner.start();
+  // Le generazioni le esegue questo processo: è l'unico backend acceso.
+  await app.jobRunner.start();
   if (!(await renderer.health())) {
     app.log.warn({ url: settings.RENDER_URL }, 'be-render non risponde: le card non si compongono finché non parte');
   }

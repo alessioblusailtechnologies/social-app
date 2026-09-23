@@ -9,9 +9,11 @@ import type { PlanRequest, PlanSlot, SlotDraft } from '@/domain/plan';
 
 import { useSignedIn } from './http/session';
 import { services } from './index';
+import { useResumeJob } from './jobs';
 import type {
   AiStep,
   DirectContentRequest,
+  JobKind,
   OnAiSteps,
   SlotPatch,
   VariantLayout,
@@ -345,7 +347,57 @@ export function useRemoveSlot(brandId: string) {
   });
 }
 
+/**
+ * Una generazione del profilo (sito, obiettivi e pubblico, stile delle card) rimasta in corso.
+ * Nell'onboarding il brand non esiste ancora, quindi il lavoro si ritrova per tipo: è comunque
+ * fra i propri, e di quel tipo ce n'è uno solo alla volta.
+ */
+export function useProfileJob<T>(kind: JobKind, onDone: (result: T) => void, enabled = true) {
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const resumed = useResumeJob<T>({ kind, enabled, onSteps: setSteps, onDone });
+  return { steps, ...resumed };
+}
+
+/**
+ * Un contenuto (o l'uscita da cui sta nascendo) su cui l'AI sta ancora lavorando: riaprendo
+ * la schermata ci si rimette a guardare, invece di trovare la bozza com'era prima. `enabled`
+ * resta falso finché lo segue già chi l'ha fatto partire, così non lo si guarda due volte.
+ */
+export function useContentJob(ref: string | undefined, enabled = true) {
+  const client = useQueryClient();
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const resumed = useResumeJob<Content | { content: Content; slot: PlanSlot }>({
+    ...(ref ? { ref } : {}),
+    enabled: enabled && Boolean(ref),
+    onSteps: setSteps,
+    onDone: (result) => {
+      const content = 'content' in result ? result.content : result;
+      cacheContent(client, content);
+      if ('content' in result) {
+        client.setQueryData<PlanSlot[]>(planKey(content.brandId), (slots) => upsertSlot(slots, result.slot));
+      }
+      client.invalidateQueries({ queryKey: draftsKey(content.brandId) });
+    },
+  });
+  return { steps, ...resumed };
+}
+
 const ideasKey = (brandId: string) => ['ideas', brandId] as const;
+
+/** Le idee che l'AI sta ancora preparando, anche se nel frattempo l'app si è chiusa. */
+export function useIdeasJob(brandId: string | undefined, enabled = true) {
+  const client = useQueryClient();
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const resumed = useResumeJob<Idea[]>({
+    kind: 'ideas',
+    ...(brandId ? { ref: brandId } : {}),
+    enabled: enabled && Boolean(brandId),
+    onSteps: setSteps,
+    onDone: (created) =>
+      client.setQueryData<Idea[]>(ideasKey(brandId ?? ''), (ideas) => [...created, ...(ideas ?? [])]),
+  });
+  return { steps, ...resumed };
+}
 
 export function useIdeas(brandId: string | undefined) {
   return useQuery({

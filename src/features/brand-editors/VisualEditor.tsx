@@ -28,7 +28,8 @@ import { describeLineFonts, sameReferences } from '@/domain/line';
 import { ASPECT_SIZES, brandKit, type BrandKit, type MediaFile } from '@/domain/visual';
 import { CardView } from '@/features/visual/CardView';
 import { apiErrorMessage } from '@/services';
-import { useProposeVisualStyle, useUploadReference } from '@/services/queries';
+import { useProfileJob, useProposeVisualStyle, useUploadReference } from '@/services/queries';
+import type { VisualStyle } from '@/services/types';
 
 import { Swatches } from './BrandVisuals';
 import type { EditorProps } from './types';
@@ -126,6 +127,26 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
   const sendLabel = correctable ? 'Applica le correzioni' : hasLine ? 'Rifai la linea coi riferimenti nuovi' : 'Prepara la linea';
   const restartLabel = hasLine ? 'Rifai la linea da capo' : 'Prepara la linea';
 
+  /** La linea arrivata: dalla generazione appena chiesta o da una ripresa da prima. */
+  const applyStyle = (style: VisualStyle) => {
+    onChange({
+      ...latest.current,
+      typography: style.typography,
+      imageStyle: style.imageStyle,
+      direction: style.direction,
+      line: style.line,
+      examples: style.examples,
+    });
+  };
+
+  /**
+   * Disegnare la linea richiede minuti: se il telefono si spegne o si cambia passo, il lavoro
+   * va avanti sul server e tornando qui ci si rimette a guardarlo.
+   */
+  const resumed = useProfileJob<VisualStyle>('visual-style', applyStyle, !propose.isPending);
+  const preparing = propose.isPending || resumed.resuming;
+  const lineSteps = propose.isPending ? propose.steps : resumed.steps;
+
   const generate = (restart: boolean) => {
     Keyboard.dismiss();
     const applied = correctable && !restart && written;
@@ -145,14 +166,7 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
       },
       {
         onSuccess: (style) => {
-          onChange({
-            ...latest.current,
-            typography: style.typography,
-            imageStyle: style.imageStyle,
-            direction: style.direction,
-            line: style.line,
-            examples: style.examples,
-          });
+          applyStyle(style);
           // Applicata la correzione, la casella si svuota per la prossima.
           if (applied) setNotes('');
         },
@@ -262,8 +276,8 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
       </Panel>
 
       <Panel label="Come escono le card" gap={12}>
-        {propose.isPending ? (
-          <StepList steps={propose.steps} />
+        {preparing ? (
+          <StepList steps={lineSteps} />
         ) : examples.length > 0 ? (
           <>
             {value.direction?.summary ? (
@@ -300,7 +314,7 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
               hasLine ? 'Cosa cambio? es. foto a tutta larghezza, titoli più grandi' : 'Indicazioni, es. fondo chiaro, titoli con le grazie'
             }
             returnKeyType="send"
-            onSubmitEditing={() => !propose.isPending && (written || !correctable) && generate(false)}
+            onSubmitEditing={() => !preparing && (written || !correctable) && generate(false)}
             accessibilityLabel="Indicazioni sullo stile"
           />
           <IconButton
@@ -309,18 +323,18 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
             size={40}
             iconSize={18}
             accessibilityLabel={sendLabel}
-            disabled={propose.isPending || (correctable && !written)}
+            disabled={preparing || (correctable && !written)}
             onPress={() => generate(false)}
           />
         </View>
-        {hasLine && !propose.isPending ? (
+        {hasLine && !preparing ? (
           <Text variant="caption">
             {correctable
               ? 'Con la freccia cambio solo quello che scrivi: il resto della linea, i testi e la foto restano. «Rifai la linea da capo» riparte da zero.'
               : 'Hai cambiato le immagini di riferimento: la linea si rifà da capo con quelle nuove.'}
           </Text>
         ) : null}
-        {!propose.isPending && (
+        {!preparing && (
           <Button size="sm" variant="secondary" onPress={() => generate(hasLine)}>
             {restartLabel}
           </Button>

@@ -22,7 +22,7 @@ import {
 } from '@/design-system';
 import type { Brand } from '@/domain/brand';
 import { ideaPreferences, topScore, type Idea } from '@/domain/idea';
-import { useGenerateIdeas, useIdeas, useSetIdeaStatus } from '@/services/queries';
+import { useGenerateIdeas, useIdeas, useIdeasJob, useSetIdeaStatus } from '@/services/queries';
 import type { AiStep } from '@/services/types';
 
 import { IdeaDeck, type IdeaDecision } from './IdeaDeck';
@@ -35,18 +35,22 @@ export function IdeasScreen({ brand }: { brand: Brand }) {
   const { view, setView, themeId, setThemeId } = useIdeasView();
   const ideasQuery = useIdeas(brand.id);
   const generate = useGenerateIdeas(brand.id);
+  /** Idee già in preparazione da prima (app chiusa, telefono in standby): si riprendono da dov'erano. */
+  const running = useIdeasJob(brand.id, !generate.isPending);
   const setStatus = useSetIdeaStatus(brand.id);
   const autoRequested = useRef(false);
   const [lastDecision, setLastDecision] = useState<{ idea: Idea; decision: IdeaDecision } | null>(null);
 
   const ideas = ideasQuery.data ?? [];
 
-  // Al primo accesso l'app propone subito un gruppo di idee leggendo il Brand DNA.
+  // Al primo accesso l'app propone subito un gruppo di idee leggendo il Brand DNA. Prima però
+  // aspetta di sapere se ce n'è già un gruppo in preparazione: altrimenti ne partirebbe un altro.
   useEffect(() => {
     if (!ideasQuery.isSuccess || ideas.length > 0 || autoRequested.current) return;
+    if (!running.checked || running.resuming) return;
     autoRequested.current = true;
     generate.mutate(8, { onError: () => toast('Non riesco a proporre idee adesso. Riprova tra poco.') });
-  }, [ideasQuery.isSuccess, ideas.length, generate, toast]);
+  }, [ideasQuery.isSuccess, ideas.length, generate, toast, running.checked, running.resuming]);
 
   // Un filtro su un tema che non esiste più (brand cambiato, tema rimosso) si azzera.
   useEffect(() => {
@@ -89,7 +93,10 @@ export function IdeasScreen({ brand }: { brand: Brand }) {
       ? `Hai tenuto ${preferences.saved} idee su ${preferences.decided}${favoriteTheme ? `, soprattutto su «${favoriteTheme.name}»` : ''}. Le prossime proposte ne tengono conto.`
       : 'Scorri a destra per salvare, a sinistra per scartare: imparo dalle tue scelte.';
 
-  const firstLoad = ideasQuery.isPending || (generate.isPending && ideas.length === 0);
+  /** Chi sta lavorando: chi ha premuto adesso, o un gruppo di idee ripreso da prima. */
+  const preparing = generate.isPending || running.resuming;
+  const ideaSteps = generate.isPending ? generate.steps : running.steps;
+  const firstLoad = ideasQuery.isPending || (preparing && ideas.length === 0);
 
   return (
     <View style={screenStyles.screen}>
@@ -129,17 +136,17 @@ export function IdeasScreen({ brand }: { brand: Brand }) {
 
       {firstLoad ? (
         <View style={styles.padded}>
-          <Generating steps={generate.steps} />
+          <Generating steps={ideaSteps} />
         </View>
       ) : view === 'proposals' ? (
         <View style={[styles.padded, styles.flex]}>
-          {generate.isPending && proposals.length === 0 ? (
-            <Generating steps={generate.steps} />
+          {preparing && proposals.length === 0 ? (
+            <Generating steps={ideaSteps} />
           ) : proposals.length === 0 ? (
             <EmptyState
               title={themeId ? 'Nessuna proposta su questo tema' : 'Hai visto tutte le proposte'}
               body="Te ne preparo altre dal tuo Brand DNA, oppure scrivi tu da dove partire."
-              primary={{ label: 'Proponi altre idee', onPress: proposeMore, busy: generate.isPending }}
+              primary={{ label: 'Proponi altre idee', onPress: proposeMore, busy: preparing }}
               secondary={{ label: 'Scrivi un’idea tua', onPress: () => router.push('/new-idea') }}
             />
           ) : (
@@ -158,8 +165,8 @@ export function IdeasScreen({ brand }: { brand: Brand }) {
                     />
                   )}
                   <LinkButton
-                    label={generate.isPending ? 'Sto preparando altre idee…' : 'Proponi altre idee'}
-                    onPress={() => !generate.isPending && proposeMore()}
+                    label={preparing ? 'Sto preparando altre idee…' : 'Proponi altre idee'}
+                    onPress={() => !preparing && proposeMore()}
                   />
                 </View>
               </View>

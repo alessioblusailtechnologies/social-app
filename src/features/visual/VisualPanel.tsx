@@ -47,6 +47,7 @@ import {
   useRegenerateImage,
   useUploadPhoto,
 } from '@/services/queries';
+import type { AiStep } from '@/services/types';
 
 import { CardView } from './CardView';
 
@@ -80,13 +81,18 @@ export interface VisualPanelProps {
   channel: ChannelId;
   /** Approvato o pubblicato: si guarda e si scarica, non si modifica. */
   locked: boolean;
+  /**
+   * I passi di un disegno partito prima e ancora in corso, ripreso da chi tiene la schermata:
+   * il lavoro sta sul server, quindi si vede anche se non è questa istanza ad averlo chiesto.
+   */
+  drawingSteps?: AiStep[];
 }
 
 /**
  * Il visivo del contenuto, sotto il testo: la proposta che arriva con la bozza, la creazione
  * a passi e i ritocchi della card pronta. Niente parte senza che l'utente lo chieda.
  */
-export function VisualPanel({ brand, content, channel, locked }: VisualPanelProps) {
+export function VisualPanel({ brand, content, channel, locked, drawingSteps }: VisualPanelProps) {
   const toast = useToast();
   const editVisual = useEditVisual();
   const create = useCreateVisual();
@@ -99,6 +105,8 @@ export function VisualPanel({ brand, content, channel, locked }: VisualPanelProp
   /** Aperto dal tap su «Disegna la card» quando i canali sono più d'uno: per quale formato? */
   const [asking, setAsking] = useState(false);
   const [instruction, setInstruction] = useState('');
+  /** Sta disegnando: l'ha chiesto qui adesso, o è un lavoro ripreso da prima. */
+  const drawing = draw.isPending || drawingSteps !== undefined;
 
   const design = content.visual.design;
   if (content.format === 'video') return null;
@@ -137,10 +145,10 @@ export function VisualPanel({ brand, content, channel, locked }: VisualPanelProp
   // col testo. Da qui si chiede il disegno, dicendo come la si vuole.
   if (!design) {
     if (locked) return null;
-    if (draw.isPending) {
+    if (drawing) {
       return (
         <Panel label="Visivo" gap={10}>
-          <StepList steps={draw.steps} waiting="Guardo le card che hai approvato" />
+          <StepList steps={drawingSteps ?? draw.steps} waiting="Guardo le card che hai approvato" />
         </Panel>
       );
     }
@@ -276,10 +284,10 @@ export function VisualPanel({ brand, content, channel, locked }: VisualPanelProp
   }
 
   // Mentre l'AI disegna i passi arrivano dallo stream: si vede cosa sta facendo, non uno skeleton.
-  if (draw.isPending) {
+  if (drawing) {
     return (
       <Panel label="Visivo" gap={10}>
-        <StepList steps={draw.steps} waiting="Guardo le card che hai approvato" />
+        <StepList steps={drawingSteps ?? draw.steps} waiting="Guardo le card che hai approvato" />
       </Panel>
     );
   }

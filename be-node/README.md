@@ -54,8 +54,38 @@ cambiano indirizzo e chiave del processo di Claude Code (`src/ai/providers.ts`).
 `AI_MAX_BUDGET_USD` non valgono, perché l'SDK conta la spesa al listino di Anthropic: restano i tetti di turni e di
 tempo, e il costo in `ai_usage` si calcola dai token al listino di punta di DeepSeek (fuori punta è la metà).
 
-Le rotte AI rispondono quando la sessione finisce: da qualche secondo per un ritocco a un paio di minuti per
-idee con ricerca sul web.
+Una generazione dura da qualche secondo per un ritocco a qualche minuto per le idee con ricerca sul web o per un
+visivo disegnato da capo. Troppo perché stia dentro una richiesta HTTP: le rotte lunghe **mettono in coda** e
+rispondono subito con l'id del lavoro.
+
+## Lavori dell'AI
+
+`presenza.jobs` è la coda delle generazioni; il runner (`src/jobs/runner.ts`) gira nel processo dell'API, due
+lavori insieme, presi con `for update skip locked`, come quella dei visivi. Le rotte che finiscono per `/job`
+accodano dentro la transazione dell'utente e rispondono `202 { jobId }`; il runner esegue e scrive i passi sulla
+riga man mano (al massimo uno ogni secondo), poi il risultato o l'errore.
+
+Così una generazione non dipende più da chi la sta guardando: il telefono può andare in standby, l'app cambiare
+pagina o chiudersi, e il lavoro va avanti. L'app rilegge il lavoro ogni secondo e mezzo, e riaprendo una schermata
+chiede se ce n'è uno aperto per rimettersi a guardarlo.
+
+| Metodo | Percorso | Corpo | Risposta |
+|---|---|---|---|
+| GET | `/api/jobs/:jobId` | | `{ id, kind, status, steps, result, error }` |
+| GET | `/api/jobs/open?kind=&ref=` | | `{ job }` col lavoro aperto più recente, o `{ job: null }` |
+| POST | `/api/jobs/:jobId/cancel` | | 204 |
+
+`status` è `queued`, `running`, `done`, `failed` o `canceled`; `result` c'è solo a lavoro finito, `error` è
+`{ status, code, message }` come una risposta d'errore normale. Gli indirizzi dei file nel risultato si firmano
+alla lettura, non quando il lavoro finisce: un risultato può restare lì finché l'utente non torna.
+
+`ref` è l'oggetto su cui il lavoro lavora — contenuto, uscita, idea o brand — ed è come l'app ritrova un lavoro
+senza ricordarsene l'id. Le generazioni del profilo non ce l'hanno (il brand non esiste ancora) e si cercano per
+tipo. I tipi stanno in `src/jobs/kinds.ts`: `website`, `positioning`, `visual-style`, `ideas`, `content-prepare`,
+`content-direct`, `content-from-idea`, `content-regenerate`, `content-rewrite`, `visual-design`.
+
+All'avvio i lavori rimasti a metà da più di 15 minuti tornano in coda (una generazione non si riprende dov'era: si
+rifà, al massimo due volte); quelli chiusi da un giorno si cancellano, risultato compreso.
 
 ## Visivi
 
@@ -120,14 +150,14 @@ Tutto JSON. Gli errori sono `{ "code": "NOT_FOUND", "message": "…" }`, con lo 
 | Metodo | Percorso | Corpo | Risposta |
 |---|---|---|---|
 | POST | `/api/ai/website` | `{ site, identity }` | `WebsiteInsights` |
-| POST | `/api/ai/website/stream` | `{ site, identity }` | `text/event-stream` di `AiStreamEvent<WebsiteInsights>` |
+| POST | `/api/ai/website/job` | `{ site, identity }` | 202 `{ jobId }` (lavoro `website`, risultato `WebsiteInsights`) |
 | POST | `/api/ai/themes` | `{ identity }` | `string[]` |
 | POST | `/api/ai/positioning` | `{ identity, site: { site, summary, pitch, themes, audiences } \| null }` | `PositioningIdeas` |
 | POST | `/api/ai/voice` | `{ sample, identity }` | `VoiceAnalysis` |
 | POST | `/api/media/references` | `{ dataUri }` | `MediaFile` (immagine di riferimento, `account/profilo/…`) |
-| POST | `/api/ai/visual/stream` | `VisualStyleRequest` | `text/event-stream` di `AiStreamEvent<VisualStyle>` |
+| POST | `/api/ai/visual/job` | `VisualStyleRequest` | 202 `{ jobId }` (lavoro `visual-style`, risultato `VisualStyle`) |
 
-`visual/stream` costruisce la linea grafica del brand nel passo «Come appare», come il generatore delle card di
+`visual/job` costruisce la linea grafica del brand nel passo «Come appare», come il generatore delle card di
 assieme ma per ogni brand. La fa un direttore artistico che vede le immagini, Claude (`DESIGN_MODEL`, di base
 `claude-opus-5`, con `ANTHROPIC_API_KEY`), in una chiamata sola: fondo e accento dalla palette, caratteri per ruolo
 dal catalogo `LINE_FONTS`, composizione, firma, indirizzo, 3–4 rubriche fisse, regole dei testi e da 3 a 5 card
@@ -138,9 +168,8 @@ be-render compone le card. Se be-render non risponde gli esempi arrivano senza P
 dal vivo. Riferimenti, esempi e foto della fascia si salvano nel brand col solo percorso (dell'account) e si firmano a
 ogni lettura del workspace.
 
-`website/stream` fa la stessa lettura e intanto manda i passi dell'AI (indirizzo, colori, ogni pagina aperta):
-un evento `data:` con `{ type: 'steps', steps }` a ogni cambio, poi `{ type: 'result', result }` oppure
-`{ type: 'error', status, code, message }`. Gli errori di validazione arrivano prima, come risposta normale.
+`website/job` fa la stessa lettura come lavoro in coda, con i passi dell'AI (indirizzo, colori, ogni pagina aperta)
+che si leggono da `GET /api/jobs/:jobId`. Gli errori di validazione arrivano subito, come risposta normale.
 `WebsiteInsights.pitch` è la frase «cosa fai» letta dal sito, vuota se il sito non si apre.
 
 `voice` con `source: 'history'` o `'recording'` risponde 422 `NOT_AVAILABLE`: servono il collegamento vero del
@@ -152,7 +181,7 @@ canale e una registrazione vera.
 |---|---|---|---|
 | GET | `/api/brands/:brandId/ideas` | | `Idea[]`, dalla più recente |
 | POST | `/api/brands/:brandId/ideas/generate` | `{ count? }` | `Idea[]` (nuove proposte) |
-| POST | `/api/brands/:brandId/ideas/generate/stream` | `{ count? }` | `text/event-stream` di `AiStreamEvent<Idea[]>`: i passi (profilo, ricerche, pagine aperte) e le idee |
+| POST | `/api/brands/:brandId/ideas/generate/job` | `{ count? }` | 202 `{ jobId }` (lavoro `ideas`, `ref` = brand, risultato `Idea[]`) |
 | POST | `/api/brands/:brandId/ideas/drafts` | `{ source, variant? }` | `IdeaDraft[]` (non salvate) |
 | POST | `/api/brands/:brandId/ideas` | `{ drafts }` | 201 `Idea[]` (salvate) |
 | PATCH | `/api/ideas/:ideaId` | `{ status }` | `Idea` |
@@ -178,11 +207,16 @@ canale e una registrazione vera.
 | GET | `/api/contents/:contentId` | | `Content` (404 se non c'è) |
 | GET | `/api/slots/:slotId/content` | | `{ content: Content \| null }` |
 | POST | `/api/slots/:slotId/content/prepare` | `{ format? }` | `{ content, slot }` |
+| POST | `/api/slots/:slotId/content/prepare/job` | `{ format? }` | 202 `{ jobId }` (`ref` = uscita, risultato `{ content, slot }`) |
 | POST | `/api/brands/:brandId/contents` | `DirectContentRequest` | 201 `Content` |
+| POST | `/api/brands/:brandId/contents/job` | `DirectContentRequest` | 202 `{ jobId }` (`ref` = brand) |
 | POST | `/api/brands/:brandId/contents/from-idea` | `{ ideaId }` | 201 `Content` |
+| POST | `/api/brands/:brandId/contents/from-idea/job` | `{ ideaId, channels? }` | 202 `{ jobId }` (`ref` = idea) |
 | POST | `/api/contents/:contentId/regenerate` | `{ format? }` | `Content` |
+| POST | `/api/contents/:contentId/regenerate/job` | `{ format? }` | 202 `{ jobId }` (`ref` = contenuto) |
 | PUT | `/api/contents/:contentId/variants/:channel` | `{ text }` | `Content` |
 | POST | `/api/contents/:contentId/variants/:channel/rewrite` | `{ instruction }` | `Content` |
+| POST | `/api/contents/:contentId/variants/:channel/rewrite/job` | `{ instruction }` | 202 `{ jobId }` (`ref` = contenuto) |
 | POST | `/api/contents/:contentId/approve` | | `{ content, slot }` |
 | POST | `/api/contents/:contentId/schedule` | `{ date, time, publishNow? }` | `{ content, slot }` |
 | POST | `/api/contents/:contentId/reopen` | | `{ content, slot }` |
@@ -197,6 +231,7 @@ visivo.
 | PUT | `/api/contents/:contentId/visual` | `VisualEdit` | `Content` |
 | POST | `/api/contents/:contentId/visual/propose` | | `Content` (proposta senza AI per le bozze nate prima) |
 | POST | `/api/contents/:contentId/visual/create` | | `Content` (`creating`, lavoro in coda) |
+| POST | `/api/contents/:contentId/visual/design/job` | `{ channels?, instruction? }` | 202 `{ jobId }` (`ref` = contenuto) |
 | POST | `/api/contents/:contentId/visual/image` | | `Content` (rifà solo la foto) |
 | POST | `/api/contents/:contentId/visual/photo` | `{ dataUri }` | `Content` (PNG, JPEG o WebP fino a 3 MB) |
 | POST | `/api/contents/:contentId/visual/refresh` | | `Content` (testi della bozza rifatta nella card) |
@@ -261,8 +296,8 @@ controlla che un account non veda le righe dell'altro e alla fine cancella le du
   Serve il caricamento su Storage.
 - **Registrazione**: l'email non si verifica, quindi ci si può registrare con un indirizzo non proprio. Va bene per
   lo sviluppo, non per la produzione.
-- **Tempi**: le rotte AI rispondono a generazione finita. Dietro un proxy con timeout di 100 secondi, come
-  Cloudflare, le idee con ricerca sul web vanno spostate su un job con polling.
+- **Lavori annullati**: `POST /api/jobs/:jobId/cancel` dice al server che il risultato non serve più, ma il motore
+  va avanti fino in fondo: l'annullamento smette di aspettare, non spegne la generazione.
 - **File dei visivi**: le versioni vecchie di foto e PNG restano nel bucket; manca la pulizia dei file non più usati.
 - **Logo nei PNG**: passa a be-render solo se è un indirizzo https o un data URI; un percorso del telefono resta fuori
   finché il logo non va su Storage. Cambiare palette o caratteri del brand non ricompone le card già create.

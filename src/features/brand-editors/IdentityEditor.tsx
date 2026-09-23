@@ -4,7 +4,8 @@ import { Badge, Button, FieldCard, Panel, StepList, Text, colors, useToast } fro
 import type { BrandKind, Identity } from '@/domain/brand';
 import { normalizeSite } from '@/lib/site';
 import { apiErrorMessage } from '@/services';
-import { useReadWebsite } from '@/services/queries';
+import { useProfileJob, useReadWebsite } from '@/services/queries';
+import type { WebsiteInsights } from '@/services/types';
 
 import type { EditorProps } from './types';
 
@@ -50,6 +51,21 @@ const SITE_PLACEHOLDER: Record<BrandKind, string> = {
 export function IdentityEditor({ value, onChange, context }: EditorProps<Identity>) {
   const toast = useToast();
   const readWebsite = useReadWebsite();
+  /**
+   * Una lettura può essere partita prima e non essersi ancora conclusa: il lavoro è sul server,
+   * quindi tornando qui (o riaprendo l'app) si ritrova dov'era invece di essere persa.
+   */
+  const applyInsights = (insights: WebsiteInsights) => {
+    context.onInsights?.(insights);
+    toast('Ho letto il sito: temi, pubblico e palette sono già proposti nei prossimi passi.');
+  };
+  const resumed = useProfileJob<WebsiteInsights>(
+    'website',
+    applyInsights,
+    Boolean(context.onInsights) && !readWebsite.isPending,
+  );
+  const reading = readWebsite.isPending || resumed.resuming;
+  const readingSteps = readWebsite.isPending ? readWebsite.steps : resumed.steps;
   const site = normalizeSite(value.site);
   const alreadyRead = context.insights?.site === site;
   const canRead = Boolean(context.onInsights) && site.includes('.') && !alreadyRead;
@@ -61,10 +77,7 @@ export function IdentityEditor({ value, onChange, context }: EditorProps<Identit
     readWebsite.mutate(
       { site: value.site, identity: value },
       {
-        onSuccess: (insights) => {
-          context.onInsights?.(insights);
-          toast('Ho letto il sito: temi, pubblico e palette sono già proposti nei prossimi passi.');
-        },
+        onSuccess: applyInsights,
         onError: (error) => toast(apiErrorMessage(error, 'Non riesco a leggere il sito. Riprova tra poco.')),
       },
     );
@@ -93,20 +106,20 @@ export function IdentityEditor({ value, onChange, context }: EditorProps<Identit
         onChangeText={(text) => onChange({ ...value, site: text })}
         action={
           canRead ? (
-            <Button size="sm" variant="secondary" busy={readWebsite.isPending} onPress={read}>
-              {readWebsite.isPending ? 'Leggo…' : 'Leggi'}
+            <Button size="sm" variant="secondary" busy={reading} onPress={read}>
+              {reading ? 'Leggo…' : 'Leggi'}
             </Button>
           ) : undefined
         }
       />
 
-      {readWebsite.isPending && (
+      {reading && (
         <Panel gap={12}>
           <Text variant="strongSmall">Sto leggendo {site}</Text>
-          <StepList steps={readWebsite.steps} waiting="Mi collego al sito" />
+          <StepList steps={readingSteps} waiting="Mi collego al sito" />
         </Panel>
       )}
-      {alreadyRead && context.insights && !readWebsite.isPending && (
+      {alreadyRead && context.insights && !reading && (
         <Panel gap={8}>
           <Badge tone="mint" size="sm">
             Sito letto
@@ -120,7 +133,7 @@ export function IdentityEditor({ value, onChange, context }: EditorProps<Identit
       <FieldCard
         label={PITCH[value.kind].label}
         value={value.pitch}
-        placeholder={readWebsite.isPending ? 'La scrivo io appena finisco di leggere il sito…' : PITCH[value.kind].placeholder}
+        placeholder={reading ? 'La scrivo io appena finisco di leggere il sito…' : PITCH[value.kind].placeholder}
         hint={pitchFromSite ? 'L’ho scritta leggendo il sito: cambiala come vuoi.' : undefined}
         multiline
         onChangeText={(text) => onChange({ ...value, pitch: text })}

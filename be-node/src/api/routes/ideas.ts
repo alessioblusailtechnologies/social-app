@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { draftIdeasSchema, generateIdeasSchema, ideaStatusSchema, saveIdeasSchema } from '../../contract/schemas';
 import type { Deps } from '../../services/deps';
 import { draftBrandIdeas, generateBrandIdeas, listBrandIdeas, saveBrandIdeas, setIdeaStatus } from '../../services/ideas';
-import { sendSteps } from '../steps';
+import { queueJob } from './jobs';
 import { idFrom } from './params';
 
 type BrandParams = { Params: { brandId: string } };
@@ -20,11 +20,11 @@ export function registerIdeaRoutes(app: FastifyInstance, deps: Deps): void {
     return generateBrandIdeas(deps, request.identity, brandId(request.params.brandId), count);
   });
 
-  /** La stessa generazione, con i passi dell'AI man mano: cosa rilegge, cosa cerca, cosa apre. */
-  app.post<BrandParams>('/api/brands/:brandId/ideas/generate/stream', (request, reply) => {
+  /** La stessa generazione, in coda: i passi dell'AI (cosa rilegge, cosa cerca, cosa apre) si leggono dal lavoro. */
+  app.post<BrandParams>('/api/brands/:brandId/ideas/generate/job', (request, reply) => {
     const { count } = generateIdeasSchema.parse(request.body ?? {});
     const id = brandId(request.params.brandId);
-    return sendSteps(request, reply, (onSteps) => generateBrandIdeas(deps, request.identity, id, count, onSteps));
+    return queueJob(deps, request, reply, { kind: 'ideas', input: { brandId: id, count }, brandId: id, ref: id });
   });
 
   app.post<BrandParams>('/api/brands/:brandId/ideas/drafts', (request) => {

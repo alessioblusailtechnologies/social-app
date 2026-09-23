@@ -11,8 +11,8 @@ import {
 } from '../../contract/schemas';
 import { aiMeta, type Deps } from '../../services/deps';
 import { parsePhotoDataUri } from '../../services/visual';
-import { proposeVisualStyle, uploadReference } from '../../services/visual-style';
-import { sendSteps } from '../steps';
+import { uploadReference } from '../../services/visual-style';
+import { queueJob } from './jobs';
 
 /** L'AI del profilo: lavora sull'identità che l'utente sta scrivendo, prima che il brand esista. */
 export function registerAiRoutes(app: FastifyInstance, deps: Deps): void {
@@ -21,10 +21,10 @@ export function registerAiRoutes(app: FastifyInstance, deps: Deps): void {
     return readWebsite(deps.ai, aiMeta(request.identity), site, identity);
   });
 
-  /** La stessa lettura, con i passi dell'AI man mano che li fa. */
-  app.post('/api/ai/website/stream', (request, reply) => {
+  /** La stessa lettura, messa in coda: risponde con l'id, i passi e il risultato si leggono da lì. */
+  app.post('/api/ai/website/job', (request, reply) => {
     const { site, identity } = websiteRequestSchema.parse(request.body);
-    return sendSteps(request, reply, (onSteps) => readWebsite(deps.ai, aiMeta(request.identity), site, identity, onSteps));
+    return queueJob(deps, request, reply, { kind: 'website', input: { site, identity } });
   });
 
   app.post('/api/ai/themes', (request) => {
@@ -37,19 +37,15 @@ export function registerAiRoutes(app: FastifyInstance, deps: Deps): void {
     return suggestPositioning(deps.ai, aiMeta(request.identity), identity, site);
   });
 
-  app.post('/api/ai/positioning/stream', (request, reply) => {
+  app.post('/api/ai/positioning/job', (request, reply) => {
     const { identity, site } = positioningRequestSchema.parse(request.body);
-    return sendSteps(request, reply, (onSteps) =>
-      suggestPositioning(deps.ai, aiMeta(request.identity), identity, site, onSteps),
-    );
+    return queueJob(deps, request, reply, { kind: 'positioning', input: { identity, site } });
   });
 
   /** Lo stile delle card: riferimenti e indicazioni, poi un esempio per canale composto da be-render. */
-  app.post('/api/ai/visual/stream', (request, reply) => {
+  app.post('/api/ai/visual/job', (request, reply) => {
     const body = visualStyleRequestSchema.parse(request.body);
-    return sendSteps(request, reply, (onSteps) =>
-      proposeVisualStyle(deps, request.identity, body, { log: request.log, onSteps }),
-    );
+    return queueJob(deps, request, reply, { kind: 'visual-style', input: body });
   });
 
   app.post('/api/media/references', (request) => {

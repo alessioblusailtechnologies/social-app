@@ -37,6 +37,7 @@ import type {
   ChannelService,
   ContentService,
   IdeaService,
+  JobService,
   OnAiSteps,
   PlanService,
   Services,
@@ -838,6 +839,19 @@ export function createMockChannelService(): ChannelService {
   };
 }
 
+/**
+ * Nel mock le generazioni sono finte e vivono dentro la schermata: non c'è nessuna coda sul
+ * server, quindi non c'è mai un lavoro da ritrovare. Le schermate chiedono lo stesso, e qui
+ * la risposta è sempre «nessuno».
+ */
+function createMockJobService(): JobService {
+  return {
+    open: () => Promise.resolve(null),
+    follow: () => Promise.reject(new Error('senza backend non ci sono lavori da seguire')),
+    cancel: () => Promise.resolve(),
+  };
+}
+
 export function createMockServices(): Services {
   return {
     brands: createMockBrandService(),
@@ -845,6 +859,7 @@ export function createMockServices(): Services {
     plan: createMockPlanService(),
     contents: createMockContentService(),
     ai: createMockAiService(),
+    jobs: createMockJobService(),
     channels: createMockChannelService(),
   };
 }

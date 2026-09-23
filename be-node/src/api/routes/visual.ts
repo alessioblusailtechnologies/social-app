@@ -14,7 +14,7 @@ import {
   uploadVisualPhoto,
 } from '../../services/visual';
 import { signContent } from '../../visual/files';
-import { sendSteps } from '../steps';
+import { queueJob } from './jobs';
 import { idFrom } from './params';
 
 type ContentParams = { Params: { contentId: string } };
@@ -40,15 +40,18 @@ export function registerVisualRoutes(app: FastifyInstance, deps: Deps): void {
   );
 
   /**
-   * Il visivo disegnato da capo. È a passi perché ci mette minuti: l'agente guarda le card
-   * d'esempio, scrive il layout, lo compone e se lo guarda. Chi aspetta deve vederlo lavorare.
+   * Il visivo disegnato da capo. Va in coda perché ci mette minuti: l'agente guarda le card
+   * d'esempio, scrive il layout, lo compone e se lo guarda. Chi aspetta lo vede lavorare
+   * rileggendo il lavoro, e può anche andarsene nel frattempo.
    */
-  app.post<ContentParams>('/api/contents/:contentId/visual/design/stream', (request, reply) => {
+  app.post<ContentParams>('/api/contents/:contentId/visual/design/job', (request, reply) => {
     const id = contentId(request.params.contentId);
     const { channels, instruction } = visualDesignSchema.parse(request.body);
-    return sendSteps(request, reply, (onSteps) =>
-      signed(designContentVisual(deps, request.identity, id, channels, instruction, onSteps)),
-    );
+    return queueJob(deps, request, reply, {
+      kind: 'visual-design',
+      input: { contentId: id, channels, ...(instruction ? { instruction } : {}) },
+      ref: id,
+    });
   });
 
   app.post<ContentParams>('/api/contents/:contentId/visual/image', (request) =>

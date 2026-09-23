@@ -102,11 +102,46 @@ export interface AiStep {
 /** Chi guarda una generazione a passi: riceve ogni volta la lista intera. */
 export type OnAiSteps = (steps: AiStep[]) => void;
 
-/** Gli eventi di una risposta a passi del backend: i passi man mano, poi il risultato o l'errore. */
-export type AiStreamEvent<T> =
-  | { type: 'steps'; steps: AiStep[] }
-  | { type: 'result'; result: T }
-  | { type: 'error'; status: number; code: string; message: string };
+/**
+ * Le generazioni lunghe non stanno dentro una richiesta: il backend le mette in coda e l'app
+ * rilegge il lavoro finché è in corso. Così standby del telefono, cambio pagina o app chiusa
+ * non fermano niente, e tornando si ritrova il lavoro dov'era.
+ */
+export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'canceled';
+
+/** I tipi di generazione che il backend sa mettere in coda (`be-node/src/jobs/kinds.ts`). */
+export type JobKind =
+  | 'website'
+  | 'positioning'
+  | 'visual-style'
+  | 'ideas'
+  | 'content-prepare'
+  | 'content-direct'
+  | 'content-from-idea'
+  | 'content-regenerate'
+  | 'content-rewrite'
+  | 'visual-design';
+
+export interface JobView<T> {
+  id: string;
+  kind: JobKind;
+  status: JobStatus;
+  steps: AiStep[];
+  result: T | null;
+  error: { status: number; code: string; message: string } | null;
+}
+
+export interface JobService {
+  /**
+   * Il lavoro aperto, se c'è: per tipo (l'onboarding, che non ha ancora un brand), per oggetto
+   * (`ref`: contenuto, uscita, brand, idea), o per tutti e due.
+   */
+  open(query: { kind?: JobKind; ref?: string }): Promise<{ id: string; kind: JobKind; steps: AiStep[] } | null>;
+  /** Si rimette a guardare un lavoro già in corso, fino al risultato. */
+  follow<T>(jobId: string, onSteps?: OnAiSteps): Promise<T>;
+  /** Non interessa più: il backend smette di aggiornarlo. */
+  cancel(jobId: string): Promise<void>;
+}
 
 export interface VoiceSample {
   source: VoiceSource;
@@ -232,4 +267,6 @@ export interface Services {
   contents: ContentService;
   ai: AiService;
   channels: ChannelService;
+  /** I lavori dell'AI in corso: servono a ritrovarli, non a farli partire. */
+  jobs: JobService;
 }

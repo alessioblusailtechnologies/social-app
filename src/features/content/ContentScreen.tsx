@@ -35,7 +35,9 @@ import { ChannelMark } from '@/features/brand-editors';
 import { SLOT_TONES } from '@/features/plan/PlanParts';
 import { IdeaPicker, RemoveFromPlan, SlotSchedule } from '@/features/plan/SlotPanels';
 import { formatWeekdayShort, today } from '@/lib/dates';
+import type { JobKind } from '@/services/types';
 import {
+  useContentJob,
   useIdeas,
   usePlan,
   usePrepareContent,
@@ -79,6 +81,9 @@ export interface ContentScreenProps {
   loading: boolean;
 }
 
+/** I lavori che scrivono la bozza: i loro passi vanno nel corpo della schermata, al posto del testo. */
+const WRITING_JOBS: JobKind[] = ['content-prepare', 'content-direct', 'content-from-idea', 'content-regenerate'];
+
 /**
  * Un contenuto si fa in quattro passi: prima il testo, poi il visivo, poi quando esce
  * (in calendario, subito, o per niente) e infine il riepilogo da confermare.
@@ -93,6 +98,15 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
   const schedule = useScheduleContent(brand.id);
   const reopen = useReopenContent(brand.id);
   const rewrite = useRewriteVariant();
+  /**
+   * Una generazione può essere partita prima (altra schermata, app chiusa, telefono in standby):
+   * se è ancora in corso ci si rimette a guardarla da dov'è arrivata. Senza bozza il lavoro si
+   * cerca dall'uscita, perché è quello che sta scrivendo la bozza che ancora non c'è.
+   */
+  const running = useContentJob(
+    (loaded && slot && loaded.ideaId !== slot.ideaId ? undefined : loaded?.id) ?? slot?.id,
+    !prepare.isPending && !regenerate.isPending && !rewrite.isPending,
+  );
 
   // Il passo sta nell'indirizzo, non in uno stato locale: così non si perde se la schermata si rimonta.
   const { step: stepParam } = useLocalSearchParams<{ step?: string }>();
@@ -118,9 +132,14 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
   const approved = content?.status === 'approved';
   const locked = approved || published;
   const showPicker = slot !== null && !locked && (picking || empty);
-  const busy = prepare.isPending || regenerate.isPending;
-  /** I passi dell'AI mentre scrive: vengono da chi dei due sta lavorando. */
-  const writingSteps = prepare.isPending ? prepare.steps : regenerate.steps;
+  /**
+   * Un lavoro ripreso ha i suoi passi nel punto giusto: la riscrittura accanto al testo del
+   * canale, il visivo nel pannello della card. Qui si aspetta solo chi scrive la bozza.
+   */
+  const resumingWrite = running.resuming && WRITING_JOBS.includes(running.kind ?? 'website');
+  const busy = prepare.isPending || regenerate.isPending || resumingWrite;
+  /** I passi dell'AI mentre scrive: vengono da chi dei tre sta lavorando. */
+  const writingSteps = prepare.isPending ? prepare.steps : resumingWrite ? running.steps : regenerate.steps;
   const channelNames = channels.map(channelName).join(' e ');
   const slotWhen = slot ? `${formatWeekdayShort(slot.date)} alle ${slot.time}` : 'bozza';
   const design = content?.visual.design ?? null;
@@ -417,8 +436,8 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
                   editing={editing}
                   onEditing={setEditing}
                   when={slotWhen}
-                  rewriting={rewrite.isPending}
-                  steps={rewrite.steps}
+                  rewriting={rewrite.isPending || running.kind === 'content-rewrite'}
+                  steps={running.kind === 'content-rewrite' ? running.steps : rewrite.steps}
                 />
               )}
 
@@ -438,6 +457,7 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
               channel={channel}
               onChannel={setSelectedChannel}
               locked={locked}
+              drawingSteps={running.kind === 'visual-design' ? running.steps : undefined}
             />
           )}
 

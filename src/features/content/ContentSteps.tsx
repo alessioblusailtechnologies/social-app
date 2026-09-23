@@ -272,13 +272,15 @@ export interface VisualStepProps {
   channel: ChannelId;
   onChannel: (channel: ChannelId) => void;
   locked: boolean;
+  /** I passi di un disegno della card ripreso da prima: senza, li mostra chi l'ha chiesto. */
+  drawingSteps?: AiStep[];
 }
 
 /**
  * Il visivo, canale per canale: il formato con cui esce lì e, dove il canale lo permette, nessuna immagine.
  * Il testo non si tocca: qui si decide solo come si vede.
  */
-export function VisualStep({ brand, content, channels, channel, onChannel, locked }: VisualStepProps) {
+export function VisualStep({ brand, content, channels, channel, onChannel, locked, drawingSteps }: VisualStepProps) {
   const toast = useToast();
   const setLayout = useSetVariantLayout();
 
@@ -362,7 +364,7 @@ export function VisualStep({ brand, content, channels, channel, onChannel, locke
         <VisualPreview brand={brand} format={format} visual={content.visual} channel={channel} />
       )}
 
-      {cardUsed && !withoutImage && format !== 'video' && <VisualPanel brand={brand} content={content} channel={channel} locked={locked} />}
+      {cardUsed && !withoutImage && format !== 'video' && <VisualPanel brand={brand} content={content} channel={channel} locked={locked} drawingSteps={drawingSteps} />}
 
       {!locked && waiting.length > 0 && (
         <Text variant="caption" color={colors.textTitle}>

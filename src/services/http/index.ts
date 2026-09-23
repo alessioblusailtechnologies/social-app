@@ -10,6 +10,7 @@ import type {
   BrandService,
   ContentService,
   IdeaService,
+  JobService,
   PlanService,
   PositioningIdeas,
   Services,
@@ -21,6 +22,7 @@ import type {
 import { ApiError, route, type ApiClient } from './client';
 
 type ContentWithSlot = { content: Content; slot: PlanSlot };
+type OpenJob = Awaited<ReturnType<JobService['open']>>;
 
 /** I servizi sopra il backend: una rotta per metodo, con le forme di `be-node/README.md`. */
 export function createHttpServices(api: ApiClient): Services {
@@ -39,12 +41,12 @@ export function createHttpServices(api: ApiClient): Services {
   };
 
   const ai: AiService = {
-    readWebsite: (site, identity, onSteps) => api.stream<WebsiteInsights>('/ai/website/stream', { site, identity }, onSteps),
+    readWebsite: (site, identity, onSteps) => api.job<WebsiteInsights>('/ai/website/job', { site, identity }, onSteps),
     suggestThemes: (identity) => api.post<string[]>('/ai/themes', { identity }),
-    proposeVisualStyle: (request, onSteps) => api.stream<VisualStyle>('/ai/visual/stream', request, onSteps),
+    proposeVisualStyle: (request, onSteps) => api.job<VisualStyle>('/ai/visual/job', request, onSteps),
     suggestPositioning: (identity, site, onSteps) =>
-      api.stream<PositioningIdeas>(
-        '/ai/positioning/stream',
+      api.job<PositioningIdeas>(
+        '/ai/positioning/job',
         {
           identity,
           site: site && {
@@ -63,7 +65,7 @@ export function createHttpServices(api: ApiClient): Services {
   const ideas: IdeaService = {
     list: (brandId) => api.get<Idea[]>(route`/brands/${brandId}/ideas`),
     generate: (brandId, count, onSteps) =>
-      api.stream<Idea[]>(route`/brands/${brandId}/ideas/generate/stream`, { count }, onSteps),
+      api.job<Idea[]>(route`/brands/${brandId}/ideas/generate/job`, { count }, onSteps),
     draftFromSource: (brandId, source, variant) =>
       api.post<IdeaDraft[]>(route`/brands/${brandId}/ideas/drafts`, { source, variant }),
     save: (brandId, drafts) => api.post<Idea[]>(route`/brands/${brandId}/ideas`, { drafts }),
@@ -98,32 +100,47 @@ export function createHttpServices(api: ApiClient): Services {
     listDrafts: (brandId) => api.get<Content[]>(route`/brands/${brandId}/contents/drafts`),
     // Scrivere una bozza richiede tempo: si passa dalle rotte a passi, così si vede cosa sta facendo.
     prepare: (slotId, format, onSteps) =>
-      api.stream<ContentWithSlot>(route`/slots/${slotId}/content/prepare/stream`, { format }, onSteps),
+      api.job<ContentWithSlot>(route`/slots/${slotId}/content/prepare/job`, { format }, onSteps),
     createDirect: (brandId, request, onSteps) =>
-      api.stream<Content>(route`/brands/${brandId}/contents/stream`, request, onSteps),
+      api.job<Content>(route`/brands/${brandId}/contents/job`, request, onSteps),
     createFromIdea: (brandId, ideaId, channels, onSteps) =>
-      api.stream<Content>(route`/brands/${brandId}/contents/from-idea/stream`, { ideaId, channels }, onSteps),
+      api.job<Content>(route`/brands/${brandId}/contents/from-idea/job`, { ideaId, channels }, onSteps),
     regenerate: (contentId, format, onSteps) =>
-      api.stream<Content>(route`/contents/${contentId}/regenerate/stream`, { format }, onSteps),
+      api.job<Content>(route`/contents/${contentId}/regenerate/job`, { format }, onSteps),
     updateVariant: (contentId, channel, text) =>
       api.put<Content>(route`/contents/${contentId}/variants/${channel}`, { text }),
     setVariantLayout: (contentId, channel, layout) =>
       api.patch<Content>(route`/contents/${contentId}/variants/${channel}`, layout),
     rewrite: (contentId, channel, instruction, onSteps) =>
-      api.stream<Content>(route`/contents/${contentId}/variants/${channel}/rewrite/stream`, { instruction }, onSteps),
+      api.job<Content>(route`/contents/${contentId}/variants/${channel}/rewrite/job`, { instruction }, onSteps),
     approve: (contentId) => api.post<ContentWithSlot>(route`/contents/${contentId}/approve`),
     schedule: (contentId, when) => api.post<ContentWithSlot>(route`/contents/${contentId}/schedule`, when),
     reopen: (contentId) => api.post<ContentWithSlot>(route`/contents/${contentId}/reopen`),
     editVisual: (contentId, edit) => api.put<Content>(route`/contents/${contentId}/visual`, edit),
     proposeVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/propose`),
     designVisual: (contentId, channels, instruction, onSteps) =>
-      api.stream<Content>(route`/contents/${contentId}/visual/design/stream`, { channels, instruction }, onSteps),
+      api.job<Content>(route`/contents/${contentId}/visual/design/job`, { channels, instruction }, onSteps),
     createVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/create`),
     regenerateImage: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/image`),
     uploadPhoto: (contentId, dataUri) => api.post<Content>(route`/contents/${contentId}/visual/photo`, { dataUri }),
     refreshVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/refresh`),
   };
 
+  /**
+   * I lavori dell'AI: non li fa partire (li fanno partire le rotte qui sopra), servono a
+   * ritrovarne uno rimasto in corso quando si riapre una schermata.
+   */
+  const jobs: JobService = {
+    open: async ({ kind, ref }) => {
+      const query = new URLSearchParams();
+      if (kind) query.set('kind', kind);
+      if (ref) query.set('ref', ref);
+      return (await api.get<{ job: OpenJob }>(`/jobs/open?${query.toString()}`)).job;
+    },
+    follow: (jobId, onSteps) => api.follow(jobId, onSteps),
+    cancel: (jobId) => api.post<void>(route`/jobs/${jobId}/cancel`),
+  };
+
   // Il collegamento dei canali resta simulato: nel prodotto vero è un flusso OAuth per canale.
-  return { brands, ideas, plan, contents, ai, channels: createMockChannelService() };
+  return { brands, ideas, plan, contents, ai, jobs, channels: createMockChannelService() };
 }

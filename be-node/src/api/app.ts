@@ -3,6 +3,7 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type pg from 'pg';
 
 import type { AiEngine } from '../ai/engine';
+import { createJobRunner, type JobRunner } from '../jobs/runner';
 import { unavailableMedia, type MediaDeps } from '../media';
 import type { AuthGateway } from '../services/auth';
 import type { Deps } from '../services/deps';
@@ -13,6 +14,7 @@ import { registerAiRoutes } from './routes/ai';
 import { registerAuthRoutes } from './routes/auth';
 import { registerContentRoutes } from './routes/contents';
 import { registerIdeaRoutes } from './routes/ideas';
+import { registerJobRoutes } from './routes/jobs';
 import { registerPlanRoutes } from './routes/plan';
 import { registerVisualRoutes } from './routes/visual';
 import { registerWorkspaceRoutes } from './routes/workspace';
@@ -21,6 +23,8 @@ declare module 'fastify' {
   interface FastifyInstance {
     /** La coda dei visivi: `server.ts` la avvia, i test eseguono i lavori con `runPending()`. */
     visualRunner: VisualRunner;
+    /** La coda delle generazioni: stessa storia, ed è quella che tiene vive le AI lunghe. */
+    jobRunner: JobRunner;
   }
 }
 
@@ -72,11 +76,15 @@ export function buildApp(options: AppOptions): FastifyInstance {
   app.get('/api/health', () => ({ status: 'ok' }));
 
   const media = options.media?.(app.log) ?? unavailableMedia;
-  // La coda si costruisce qui ma non parte: la avvia server.ts, e nei test i lavori si eseguono a mano.
+  // Le code si costruiscono qui ma non partono: le avvia server.ts, e nei test i lavori si eseguono a mano.
   const visualRunner = createVisualRunner({ pool: options.pool, media, log: app.log });
   app.decorate('visualRunner', visualRunner);
+  // La coda delle generazioni ha bisogno delle dipendenze, che hanno bisogno di lei: le prende al volo.
+  const jobRunner = createJobRunner({ pool: options.pool, deps: () => deps, log: app.log });
+  app.decorate('jobRunner', jobRunner);
   app.addHook('onClose', async () => {
     visualRunner.stop();
+    jobRunner.stop();
   });
 
   const deps: Deps = {
@@ -85,8 +93,10 @@ export function buildApp(options: AppOptions): FastifyInstance {
     now: options.now ?? (() => new Date()),
     media,
     visualJobs: visualRunner,
+    jobs: jobRunner,
   };
   registerAuthRoutes(app, deps, options.auth);
+  registerJobRoutes(app, deps);
   registerWorkspaceRoutes(app, deps);
   registerAiRoutes(app, deps);
   registerIdeaRoutes(app, deps);

@@ -1,4 +1,4 @@
-import type { AiStreamEvent, OnAiSteps } from '../types';
+import type { AiStep, JobView, OnAiSteps } from '../types';
 import { endSession, updateTokens, useSessionStore, type TokenResponse } from './session';
 
 /** L'errore del backend, con il codice stabile e il messaggio da mostrare: `{ code, message }`. */
@@ -24,8 +24,14 @@ export interface ApiClient {
   put<T>(path: string, body?: unknown): Promise<T>;
   patch<T>(path: string, body?: unknown): Promise<T>;
   delete(path: string): Promise<void>;
-  /** Una POST con risposta a passi (Server-Sent Events): i passi vanno a `onSteps` man mano, poi arriva il risultato. */
-  stream<T>(path: string, body: unknown, onSteps?: OnAiSteps): Promise<T>;
+  /**
+   * Una generazione lunga: la POST la mette in coda, poi si rilegge il lavoro finché non
+   * finisce. I passi vanno a `onSteps` man mano. Chiudere l'app o perdere la rete non
+   * ferma niente: il lavoro sta sul server e si può riprendere con `follow`.
+   */
+  job<T>(path: string, body: unknown, onSteps?: OnAiSteps): Promise<T>;
+  /** Si rimette a guardare un lavoro già in corso. */
+  follow<T>(jobId: string, onSteps?: OnAiSteps): Promise<T>;
   /** Le rotte di accesso: nessun token, nessun rinnovo. */
   publicPost<T>(path: string, body: unknown): Promise<T>;
 }
@@ -34,6 +40,17 @@ type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** Il token si rinnova un minuto prima che scada, così una richiesta lenta non parte già morta. */
 const REFRESH_MARGIN_MS = 60_000;
+
+/** Ogni quanto si chiede a che punto è una generazione: i passi cambiano ogni pochi secondi. */
+const POLL_MS = 1500;
+const MAX_POLL_MS = 10_000;
+/** Tentativi a vuoto di fila (telefono senza rete, server giù) prima di smettere di aspettare. */
+const LOST_TRIES = 12;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** I passi si ridisegnano solo quando cambiano: testo e stato di ognuno, in fila. */
+const summarize = (steps: AiStep[]) => steps.map((step) => `${step.id}${step.status}${step.detail ?? ''}`).join('|');
 
 /** "/brands/" + id: i segmenti interpolati si codificano, gli id arrivano anche dai link. */
 export function route(strings: TemplateStringsArray, ...segments: string[]): string {
@@ -121,50 +138,46 @@ export function createApiClient(baseUrl: string): ApiClient {
     return parse<T>(await authorized(method, path, body));
   }
 
-  async function stream<T>(path: string, body: unknown, onSteps?: OnAiSteps): Promise<T> {
-    const response = await authorized('POST', path, body, 'text/event-stream');
-    if (!response.ok) return parse<T>(response);
-
-    let outcome: AiStreamEvent<T> | null = null;
-    const dispatch = (block: string) => {
-      const data = block
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trimStart())
-        .join('\n');
-      if (!data) return;
-      const event = JSON.parse(data) as AiStreamEvent<T>;
-      if (event.type === 'steps') onSteps?.(event.steps);
-      else outcome = event;
-    };
-
-    try {
-      const reader = response.body?.getReader();
-      if (reader) {
-        const decoder = new TextDecoder();
-        let buffer = '';
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
-          for (let end = buffer.indexOf('\n\n'); end >= 0; end = buffer.indexOf('\n\n')) {
-            dispatch(buffer.slice(0, end));
-            buffer = buffer.slice(end + 2);
-          }
-        }
-        dispatch(buffer);
-      } else {
-        // Senza lettura a pezzi i passi arrivano tutti insieme alla fine: il risultato resta giusto.
-        (await response.text()).split(/\r?\n\r?\n/).forEach(dispatch);
+  /**
+   * Guarda un lavoro finché non finisce. La rete che va e viene non lo interrompe: il lavoro
+   * sta sul server, quindi una lettura andata male si riprova, sempre più piano, e solo dopo
+   * una serie di tentativi a vuoto si dice che non si riesce più a seguirlo. Si contano i
+   * tentativi e non il tempo passato: col telefono addormentato il tempo passa senza che si
+   * sia provato niente, e al risveglio non è il momento di arrendersi.
+   */
+  async function follow<T>(jobId: string, onSteps?: OnAiSteps): Promise<T> {
+    let told = '';
+    let failures = 0;
+    for (;;) {
+      let job: JobView<T>;
+      try {
+        job = await request<JobView<T>>('GET', route`/jobs/${jobId}`);
+        failures = 0;
+      } catch (error) {
+        const unreachable = error instanceof ApiError && (error.status === 0 || error.status >= 500);
+        if (!unreachable || (failures += 1) >= LOST_TRIES) throw error;
+        await wait(Math.min(POLL_MS * 2 ** Math.min(failures, 3), MAX_POLL_MS));
+        continue;
       }
-    } catch {
-      throw new ApiError(0, 'NETWORK', 'La connessione si è interrotta. Controlla la rete e riprova.');
-    }
 
-    const result = outcome as AiStreamEvent<T> | null;
-    if (result?.type === 'result') return result.result;
-    if (result?.type === 'error') throw new ApiError(result.status, result.code, result.message);
-    throw new ApiError(0, 'NETWORK', 'La risposta si è interrotta. Riprova.');
+      // La lista arriva intera a ogni giro: si ridisegna solo quando è cambiata davvero.
+      const signature = summarize(job.steps);
+      if (signature !== told) {
+        told = signature;
+        onSteps?.(job.steps);
+      }
+
+      if (job.status === 'done') return job.result as T;
+      if (job.status === 'failed' && job.error) throw new ApiError(job.error.status, job.error.code, job.error.message);
+      if (job.status === 'failed') throw new ApiError(500, 'JOB_FAILED', 'La generazione non è riuscita. Riprova.');
+      if (job.status === 'canceled') throw new ApiError(0, 'JOB_CANCELED', 'Generazione annullata.');
+      await wait(POLL_MS);
+    }
+  }
+
+  async function job<T>(path: string, body: unknown, onSteps?: OnAiSteps): Promise<T> {
+    const { jobId } = await request<{ jobId: string }>('POST', path, body);
+    return follow<T>(jobId, onSteps);
   }
 
   return {
@@ -173,7 +186,8 @@ export function createApiClient(baseUrl: string): ApiClient {
     put: (path, body) => request('PUT', path, body),
     patch: (path, body) => request('PATCH', path, body),
     delete: (path) => request('DELETE', path),
-    stream,
+    job,
+    follow,
     publicPost: async (path, body) => parse(await send('POST', path, body, null)),
   };
 }
