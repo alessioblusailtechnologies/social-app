@@ -1,20 +1,17 @@
 {
   "expo": {
-    "name": "Presenza",
-    "slug": "social-app",
+    "name": "Moonbrand",
+    "slug": "moonbrand",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "presenza",
+    "scheme": "moonbrand",
     "userInterfaceStyle": "light",
     "backgroundColor": "#ECEEEF",
-    "ios": {
-      "icon": "./assets/expo.icon"
-    },
     "android": {
-      "package": "com.blusail.presenza",
+      "package": "com.blusail.moonbrand",
       "adaptiveIcon": {
-        "backgroundColor": "#ECEEEF",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -27,6 +24,8 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/with-apk-name",
+      "./plugins/with-cleartext",
       [
         "expo-image-picker",
         {
@@ -38,7 +37,7 @@
         {
           "backgroundColor": "#ECEEEF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 160
         }
       ]
     ],

@@ -1,5 +1,5 @@
-/** Nome provvisorio del prodotto: cambiarlo qui e in app.json. */
-export const APP_NAME = 'Presenza';
+/** Il nome del prodotto: sta qui e in app.json, che è quello che finisce sul telefono. */
+export const APP_NAME = 'Moonbrand';
 
 /**
  * Abilita il profilo di esempio, il reset dei dati e il catalogo del design system.
