@@ -1,5 +1,14 @@
-import { query, type HookCallback, type Options, type SDKMessage, type SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
+import {
+  query,
+  type HookCallback,
+  type McpServerConfig,
+  type Options,
+  type SDKMessage,
+  type SDKResultMessage,
+} from '@anthropic-ai/claude-agent-sdk';
 import type { FastifyBaseLogger } from 'fastify';
+import { delimiter } from 'node:path';
+
 import type pg from 'pg';
 import { z } from 'zod';
 
@@ -12,7 +21,10 @@ import { assertPublicUrl } from '../../be-node/src/lib/public-url';
 import type { ImageGenerator } from '../../be-node/src/media/images';
 import type { CardRenderer } from '../../be-node/src/media/renderer';
 import type { MediaStorage } from '../../be-node/src/media/storage';
+import { guardHiggsfield, higgsfieldDenied, higgsfieldServer, mirrorMedia } from './higgsfield';
+import type { HiggsfieldAuth } from './higgsfield-auth';
 import { visualTools } from './tools';
+import { deliverBeforeLeaving, ffmpegDir, prepareStudio, videoTools } from './video';
 import { prepareWorkspace } from './workspace';
 
 /**
@@ -41,6 +53,8 @@ export interface AgentEngineOptions {
   /** Servono agli strumenti del visivo: le chiavi restano di qua, l'agente chiede. */
   images: ImageGenerator;
   renderer: CardRenderer;
+  /** Higgsfield come server MCP remoto: nullo senza sessione, e allora l'agente non lo vede. */
+  higgsfield: { url: string; auth: HiggsfieldAuth; imageModel: string } | null;
   log: FastifyBaseLogger;
   recordUsage: (usage: AiUsage) => Promise<void>;
 }
@@ -52,12 +66,14 @@ export interface AgentEngineOptions {
  */
 const PASSED_ENV = ['PATH', 'HOME', 'USERPROFILE', 'TMP', 'TEMP', 'SystemRoot', 'ComSpec', 'APPDATA', 'LOCALAPPDATA', 'TZ', 'ANTHROPIC_API_KEY'];
 
-function agentEnv(): Record<string, string> {
+function agentEnv(extraPath?: string | null): Record<string, string> {
   const env: Record<string, string> = {};
   for (const name of PASSED_ENV) {
     const value = process.env[name];
     if (value !== undefined) env[name] = value;
   }
+  // Chi monta trova ffmpeg nel `PATH` come lo troverebbe sulla sua macchina, e lo chiama così.
+  if (extraPath) env.PATH = `${extraPath}${delimiter}${env.PATH ?? ''}`;
   env.CLAUDE_AGENT_SDK_CLIENT_APP = 'presenza-agent/0.1.0';
   return env;
 }
@@ -78,7 +94,21 @@ export class AgentEngine implements AiEngine {
     const brand = request.brandId ? await findBrand(this.options.pool, request.brandId) : null;
     const workspace = await this.workspaceFor(request, brand);
 
+    // Higgsfield solo dove i file hanno una casa: senza brand non c'è libreria in cui copiarli, e
+    // un indirizzo che scade tra un'ora non è una consegna. Il token si conia adesso, perché quello
+    // di ieri non vale più; se la loro sessione è finita si genera senza, non si ferma niente.
+    let higgsfield: { url: string; token: string } | null = null;
+    if (brand && this.options.higgsfield) {
+      try {
+        higgsfield = { url: this.options.higgsfield.url, token: await this.options.higgsfield.auth.token() };
+      } catch (error) {
+        this.options.log.warn({ err: error }, 'higgsfield senza sessione: si genera senza');
+      }
+    }
+
     // Gli strumenti del visivo solo a chi disegna un visivo: altrove sarebbero rumore nel prompt.
+    // Le foto le fa `genera_foto` soltanto quando Higgsfield non c'è: quando c'è, le immagini si
+    // chiedono a lui come le clip, e non restano due strade per la stessa cosa.
     const photos = new Map<string, string>();
     const drawing = request.task === 'visual-design' && brand !== null;
     const mcp = drawing
@@ -90,8 +120,28 @@ export class AgentEngine implements AiEngine {
           storage: this.options.storage,
           log: this.options.log,
           photos,
+          withPhotos: higgsfield === null,
         })
       : null;
+
+    // Chi gira un video monta nella cartella di lavoro: ffmpeg nel PATH, e due strumenti nostri —
+    // guardare quello che ha montato, e consegnarlo nella libreria.
+    const filming = request.task === 'video' && brand !== null;
+    const delivered = new Map<string, string>();
+
+    const mcpServers: Record<string, McpServerConfig> = {};
+    if (mcp) mcpServers.visivo = mcp;
+    if (higgsfield) mcpServers.higgsfield = higgsfieldServer(higgsfield);
+    if (filming && brand) {
+      mcpServers.montaggio = videoTools({
+        accountId: request.accountId,
+        brandId: brand.id,
+        dir: workspace.dir,
+        storage: this.options.storage,
+        log: this.options.log,
+        delivered,
+      });
+    }
 
     // L'agente può aprire pagine: valgono gli stessi indirizzi ammessi alle rotte, niente rete interna.
     const guardUrls: HookCallback = async (input) => {
@@ -111,6 +161,25 @@ export class AgentEngine implements AiEngine {
         };
       }
     };
+
+    // Coi tool di Higgsfield servono due guardie in più: una prima, sul confine tra generare e
+    // agire sul mondo; una dopo, che porta i file nella libreria del brand prima che scadano.
+    const preTool: HookCallback[] = [guardUrls];
+    const postTool: HookCallback[] = [];
+    const onStop: HookCallback[] = filming ? [deliverBeforeLeaving({ delivered, log: this.options.log })] : [];
+    if (higgsfield && brand) {
+      preTool.push(guardHiggsfield(this.options.log));
+      postTool.push(
+        mirrorMedia({
+          accountId: request.accountId,
+          brandId: brand.id,
+          storage: this.options.storage,
+          log: this.options.log,
+          saved: new Map(),
+          ...(filming && { dir: workspace.dir }),
+        }),
+      );
+    }
 
     let stderr = '';
     const options: Options = {
@@ -133,15 +202,34 @@ export class AgentEngine implements AiEngine {
         schema: z.toJSONSchema(request.schema, { target: 'draft-7' }) as Record<string, unknown>,
       },
       abortController: abort,
-      hooks: { PreToolUse: [{ hooks: [guardUrls] }] },
-      ...(mcp && { mcpServers: { visivo: mcp } }),
-      env: agentEnv(),
+      hooks: {
+        PreToolUse: [{ hooks: preTool }],
+        ...(postTool.length > 0 && { PostToolUse: [{ hooks: postTool }] }),
+        ...(onStop.length > 0 && { Stop: [{ hooks: onStop }] }),
+      },
+      ...(Object.keys(mcpServers).length > 0 && { mcpServers }),
+      // Tolti dal contesto, non solo negati: quello che non genera, l'agente non lo vede.
+      ...(higgsfield && { disallowedTools: higgsfieldDenied }),
+      env: agentEnv(filming ? ffmpegDir() : null),
       stderr: (data) => {
         stderr = `${stderr}${data}`.slice(-2000);
       },
     };
 
-    const prompt = workspace.summary ? `${workspace.summary}\n\n---\n\n${request.prompt}` : request.prompt;
+    // Chi gira riceve anche il progetto di montaggio, dentro la stessa cartella.
+    let summary = workspace.summary;
+    if (higgsfield && this.options.higgsfield) {
+      summary = `${summary}\n\nLe immagini e i video li generi con Higgsfield. Per le foto usa ${this.options.higgsfield.imageModel}: è il modello con cui sono fatte quelle che il brand ha già approvato, e cambiarlo si vede.`;
+    }
+    if (filming) {
+      try {
+        summary = `${summary}\n- ${await prepareStudio(workspace.dir)}`;
+      } catch (error) {
+        this.options.log.warn({ err: error }, 'progetto di montaggio non preparato');
+      }
+    }
+
+    const prompt = summary ? `${summary}\n\n---\n\n${request.prompt}` : request.prompt;
 
     let result: SDKResultMessage | undefined;
     let failure: unknown;

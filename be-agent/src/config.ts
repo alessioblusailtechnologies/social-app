@@ -25,6 +25,23 @@ const schema = z.object({
   AGENT_MAX_BUDGET_USD: z.coerce.number().positive().default(3),
   /** Dove stanno le cartelle di lavoro, una per brand. Relativa a `be-agent/`. */
   AGENT_WORKSPACES: z.string().min(1).default('.workspaces'),
+  /**
+   * Come si entra nel server MCP di Higgsfield. Il loro OAuth verso Claude Code oggi non passa, ma
+   * la risorsa accetta il bearer di una sessione del loro CLI: si fa `higgsfield auth login` una
+   * volta, e prima di ogni generazione il token lo chiediamo al CLI, che lo tiene fresco.
+   * Un token messo a mano qui sotto scavalca il CLI: comodo per la prima prova, scade in fretta.
+   * Senza né l'uno né l'altro il server resta spento e l'agente non ne vede gli strumenti.
+   */
+  AGENT_HIGGSFIELD_TOKEN: z.string().min(1).optional(),
+  AGENT_HIGGSFIELD_CLI: z.string().min(1).default('higgsfield'),
+  /** Il sottocomando che stampa il token: se il loro CLI lo chiama diversamente, si cambia qui. */
+  AGENT_HIGGSFIELD_CLI_ARGS: z.string().default('auth token'),
+  AGENT_HIGGSFIELD_URL: z.url().default('https://mcp.higgsfield.ai/mcp'),
+  /**
+   * Con che modello si fanno le foto, ora che non le fa più Gemini di qua. Si scrive il nome, non
+   * l'identificativo: i nomi nel loro catalogo cambiano meno, e l'agente ci arriva comunque.
+   */
+  AGENT_HIGGSFIELD_IMAGE_MODEL: z.string().min(1).default('Nano Banana 2'),
 });
 
 export type AgentConfig = z.infer<typeof schema>;

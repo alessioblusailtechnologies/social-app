@@ -108,3 +108,49 @@ export async function fetchPublicText(raw: string, maxBytes: number, timeoutMs =
   }
   throw new Error('troppi redirect');
 }
+
+/**
+ * Scarica un file da un indirizzo pubblico, con gli stessi controlli del testo. Due differenze:
+ * il tetto di tempo è largo, perché qui si scaricano video, e oltre il tetto di dimensione si
+ * lancia invece di troncare — mezzo video non è un video più corto, è un file rotto.
+ */
+export async function fetchPublicBytes(
+  raw: string,
+  maxBytes: number,
+  timeoutMs = 120_000,
+): Promise<{ url: URL; bytes: Uint8Array; contentType: string }> {
+  let url = await assertPublicUrl(raw);
+  for (let hop = 0; hop < 4; hop++) {
+    const response = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: { 'user-agent': 'PresenzaBot/0.1 (+https://presenza.app)', accept: '*/*' },
+    });
+    const location = response.headers.get('location');
+    if (response.status >= 300 && response.status < 400 && location) {
+      await response.body?.cancel();
+      url = await assertPublicUrl(new URL(location, url).toString());
+      continue;
+    }
+    if (!response.ok || !response.body) {
+      await response.body?.cancel();
+      throw new Error(`${url.toString()} risponde ${response.status}`);
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error(`${url.toString()} pesa più di ${Math.round(maxBytes / 1024 / 1024)} MB`);
+      }
+      chunks.push(value);
+    }
+    const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? '';
+    return { url, bytes: Buffer.concat(chunks), contentType };
+  }
+  throw new Error('troppi redirect');
+}

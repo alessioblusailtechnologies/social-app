@@ -31,6 +31,11 @@ export interface VisualToolsContext {
   log: FastifyBaseLogger;
   /** Le foto create durante la sessione, per percorso: le rilegge chi salva il disegno. */
   photos: Map<string, string>;
+  /**
+   * Se le foto le fa questo strumento. Quando c'è Higgsfield no: le immagini si chiedono a lui come
+   * le clip, e avere due modi per fare la stessa cosa significa solo che ogni tanto sceglie l'altro.
+   */
+  withPhotos: boolean;
 }
 
 const ASPECTS = Object.keys(ASPECT_SIZES) as [Aspect, ...Aspect[]];
@@ -47,43 +52,46 @@ const textShape = {
 };
 
 export function visualTools(context: VisualToolsContext) {
+  const photoTool = tool(
+    'genera_foto',
+    'Crea una foto per la card. Usalo solo se il layout che stai disegnando ha una foto. Descrivi cosa si vede in concreto: soggetto, luogo, inquadratura, luce. Niente scritte né loghi nell’immagine. Torna il percorso da passare a componi_card.',
+    {
+      descrizione: z.string().min(3).describe('Cosa si vede nella foto, in concreto.'),
+      formato: z.enum(PHOTO_ASPECTS).default('4:5').describe('Le proporzioni: il layout poi la ritaglia.'),
+    },
+    async ({ descrizione, formato }) => {
+      try {
+        const photo = await context.images.generate({
+          prompt: descrizione,
+          aspectRatio: formato,
+          references: [],
+          meta: { accountId: context.accountId, brandId: context.brand.id },
+        });
+        const path = mediaPath(context.accountId, context.brand.id, photo.mimeType);
+        await context.storage.upload(path, photo.bytes, photo.mimeType);
+        context.photos.set(path, descrizione);
+        return {
+          content: [
+            { type: 'text', text: `Foto pronta. Passa questo percorso a componi_card come fotoPath:\n${path}` },
+            { type: 'image', data: Buffer.from(photo.bytes).toString('base64'), mimeType: photo.mimeType },
+          ],
+        };
+      } catch (error) {
+        context.log.warn({ err: error }, 'genera_foto non riuscito');
+        return {
+          content: [{ type: 'text', text: `Non sono riuscito a creare la foto: ${message(error)}. Disegna un layout senza foto.` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
   return createSdkMcpServer({
     name: 'visivo',
     version: '0.1.0',
     tools: [
-      tool(
-        'genera_foto',
-        'Crea una foto per la card. Usalo solo se il layout che stai disegnando ha una foto. Descrivi cosa si vede in concreto: soggetto, luogo, inquadratura, luce. Niente scritte né loghi nell’immagine. Torna il percorso da passare a componi_card.',
-        {
-          descrizione: z.string().min(3).describe('Cosa si vede nella foto, in concreto.'),
-          formato: z.enum(PHOTO_ASPECTS).default('4:5').describe('Le proporzioni: il layout poi la ritaglia.'),
-        },
-        async ({ descrizione, formato }) => {
-          try {
-            const photo = await context.images.generate({
-              prompt: descrizione,
-              aspectRatio: formato,
-              references: [],
-              meta: { accountId: context.accountId, brandId: context.brand.id },
-            });
-            const path = mediaPath(context.accountId, context.brand.id, photo.mimeType);
-            await context.storage.upload(path, photo.bytes, photo.mimeType);
-            context.photos.set(path, descrizione);
-            return {
-              content: [
-                { type: 'text', text: `Foto pronta. Passa questo percorso a componi_card come fotoPath:\n${path}` },
-                { type: 'image', data: Buffer.from(photo.bytes).toString('base64'), mimeType: photo.mimeType },
-              ],
-            };
-          } catch (error) {
-            context.log.warn({ err: error }, 'genera_foto non riuscito');
-            return {
-              content: [{ type: 'text', text: `Non sono riuscito a creare la foto: ${message(error)}. Disegna un layout senza foto.` }],
-              isError: true,
-            };
-          }
-        },
-      ),
+      // Senza Higgsfield le foto restano di qua; con Higgsfield le fa lui, come le clip.
+      ...(context.withPhotos ? [photoTool] : []),
 
       tool(
         'componi_card',

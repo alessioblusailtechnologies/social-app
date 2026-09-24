@@ -15,6 +15,14 @@ export const MEDIA_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
+  // I file che non nascono dal nostro render: video e audio generati altrove, che finiscono
+  // nello stesso bucket e nella stessa cartella del brand.
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/wav': 'wav',
 };
 
 /** Un file nuovo per ogni versione, `account/brand/uuid.ext`: nessuna cache mostra quello vecchio. */

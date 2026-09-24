@@ -29,6 +29,8 @@ export type AiTask =
   | 'rewrite'
   /** Il visivo di un contenuto, disegnato da capo: solo `be-agent` lo sa fare. */
   | 'visual-design'
+  /** Il video di un contenuto: scene girate e montate nella cartella di lavoro, sempre `be-agent`. */
+  | 'video'
   | 'image'
   | 'cutout';
 export type WebTool = 'WebFetch' | 'WebSearch';

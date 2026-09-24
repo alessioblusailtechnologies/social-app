@@ -1,5 +1,7 @@
 import './env';
 
+import type { FastifyBaseLogger } from 'fastify';
+
 import { anthropicDirector } from '../../be-node/src/ai/art-director';
 import type { AiUsage } from '../../be-node/src/ai/engine';
 import { buildApp } from '../../be-node/src/api/app';
@@ -15,6 +17,7 @@ import { geminiVision, unavailableVision } from '../../be-node/src/media/vision'
 import { supabaseAuthGateway } from '../../be-node/src/services/auth';
 import { agentConfig, workspacesRoot } from './config';
 import { AgentEngine } from './engine';
+import { cliAuth, staticAuth, type HiggsfieldAuth } from './higgsfield-auth';
 
 /**
  * Il secondo backend. Espone le stesse rotte di be-node, sullo stesso database e sullo stesso
@@ -28,6 +31,22 @@ const pool = db();
 const storage = supabaseStorage(settings);
 const storeUsage = (usage: AiUsage) => recordUsage(pool, usage);
 const renderer = httpRenderer({ baseUrl: settings.RENDER_URL, token: settings.RENDER_TOKEN, timeoutMs: settings.RENDER_TIMEOUT_MS });
+
+/**
+ * La sessione di Higgsfield è una sola per tutto il processo: il token lo si conia una volta e
+ * vale finché vale, per tutte le generazioni. Un token messo a mano in `.env` scavalca il CLI.
+ */
+let higgsfieldAuth: HiggsfieldAuth | undefined;
+const higgsfield = (log: FastifyBaseLogger) => {
+  higgsfieldAuth ??= agent.AGENT_HIGGSFIELD_TOKEN
+    ? staticAuth(agent.AGENT_HIGGSFIELD_TOKEN)
+    : cliAuth({
+        command: agent.AGENT_HIGGSFIELD_CLI,
+        args: agent.AGENT_HIGGSFIELD_CLI_ARGS.split(' ').filter(Boolean),
+        log,
+      });
+  return { url: agent.AGENT_HIGGSFIELD_URL, auth: higgsfieldAuth, imageModel: agent.AGENT_HIGGSFIELD_IMAGE_MODEL };
+};
 
 const anthropicKey = settings.ANTHROPIC_API_KEY;
 if (!anthropicKey) {
@@ -54,6 +73,7 @@ const app = buildApp({
         ? geminiImages({ apiKey: settings.GEMINI_API_KEY, model: settings.IMAGE_MODEL, log, recordUsage: storeUsage })
         : unavailableImages,
       renderer,
+      higgsfield: higgsfield(log),
       log,
       recordUsage: storeUsage,
     }),
@@ -84,6 +104,13 @@ app.log.info(
   { model: agent.AGENT_MODEL, effort: agent.AGENT_EFFORT, maxTurns: agent.AGENT_MAX_TURNS, workspaces: workspacesRoot() },
   'motore agentico: Claude Code con i suoi strumenti nativi',
 );
+// Si prova subito ad aprire la sessione: meglio saperlo all'avvio che dentro la prima generazione.
+try {
+  await higgsfield(app.log).auth.token();
+  app.log.info({ url: agent.AGENT_HIGGSFIELD_URL }, 'higgsfield acceso: video, voci e studi passano dal suo MCP');
+} catch (error) {
+  app.log.warn({ err: error }, 'higgsfield spento: sessione assente o scaduta, rifai `higgsfield auth login`');
+}
 if (!settings.GEMINI_API_KEY) app.log.warn('foto dei visivi spente: manca GEMINI_API_KEY');
 if (!settings.FAL_KEY) app.log.warn('scontorno dei visivi spento: manca FAL_KEY');
 
