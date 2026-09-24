@@ -48,6 +48,7 @@ import {
   useUploadPhoto,
 } from '@/services/queries';
 import type { AiStep } from '@/services/types';
+import { pickedImageDataUri } from '@/lib/image';
 
 import { CardView } from './CardView';
 
@@ -230,9 +231,10 @@ export function VisualPanel({ brand, content, channel, locked, drawingSteps }: V
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, base64: true, exif: false });
     if (result.canceled) return;
     const asset = result.assets[0];
-    const dataUri = asset.base64 ? `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}` : asset.uri;
-    if (!dataUri.startsWith('data:')) {
-      toast('Non riesco a leggere la foto. Prova con un’altra.');
+    // Il tipo viene dai byte e non dal nome del file: il telefono chiama JPEG anche i WebP.
+    const dataUri = pickedImageDataUri(asset);
+    if (!dataUri) {
+      toast('Questa foto non è un PNG, un JPEG o un WebP: prova con un’altra.');
       return;
     }
     if (dataUri.length > PHOTO_LIMIT) {

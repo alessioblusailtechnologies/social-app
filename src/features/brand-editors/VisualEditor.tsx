@@ -28,6 +28,7 @@ import { describeLineFonts, sameReferences } from '@/domain/line';
 import { ASPECT_SIZES, brandKit, type BrandKit, type MediaFile } from '@/domain/visual';
 import { CardView } from '@/features/visual/CardView';
 import { apiErrorMessage } from '@/services';
+import { pickedImageDataUri } from '@/lib/image';
 import { useProfileJob, useProposeVisualStyle, useUploadReference } from '@/services/queries';
 import type { VisualStyle } from '@/services/types';
 
@@ -105,12 +106,20 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
     setUploading(picked.length);
     const added: MediaFile[] = [];
     for (const asset of picked) {
-      const dataUri = asset.base64 ? `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}` : null;
+      // Il tipo lo diciamo dai byte, non dal nome del file: un'immagine salvata da internet è
+      // spesso un WebP che il telefono chiama JPEG, e il backend, che guarda i byte, la rifiuta.
+      const dataUri = pickedImageDataUri(asset);
       try {
-        if (dataUri && dataUri.length > REFERENCE_LIMIT) throw new Error('troppo pesante');
+        if (!dataUri) throw new Error('formato');
+        if (dataUri.length > REFERENCE_LIMIT) throw new Error('troppo pesante');
         added.push(await upload.mutateAsync({ uri: asset.uri, dataUri }));
       } catch (error) {
-        toast(apiErrorMessage(error, 'Un’immagine è troppo pesante o non si legge: l’ho saltata.'));
+        const unreadable = error instanceof Error && error.message === 'formato';
+        toast(
+          unreadable
+            ? 'Questa immagine non è un PNG, un JPEG o un WebP: l’ho saltata.'
+            : apiErrorMessage(error, 'Un’immagine è troppo pesante o non si legge: l’ho saltata.'),
+        );
       } finally {
         setUploading((count) => Math.max(0, count - 1));
       }
