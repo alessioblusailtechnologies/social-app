@@ -219,7 +219,7 @@ export class AgentEngine implements AiEngine {
     // Chi gira riceve anche il progetto di montaggio, dentro la stessa cartella.
     let summary = workspace.summary;
     if (higgsfield && this.options.higgsfield) {
-      summary = `${summary}\n\nLe immagini e i video li generi con Higgsfield. Per le foto usa ${this.options.higgsfield.imageModel}: è il modello con cui sono fatte quelle che il brand ha già approvato, e cambiarlo si vede.`;
+      summary = `${summary}\n\nLe immagini e i video li generi con Higgsfield. Per le foto usa ${this.options.higgsfield.imageModel}: è quello scelto per le foto dei brand, e cambiarlo si vede.`;
     }
     if (filming) {
       try {

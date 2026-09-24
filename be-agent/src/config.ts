@@ -38,10 +38,14 @@ const schema = z.object({
   AGENT_HIGGSFIELD_CLI_ARGS: z.string().default('auth token'),
   AGENT_HIGGSFIELD_URL: z.url().default('https://mcp.higgsfield.ai/mcp'),
   /**
-   * Con che modello si fanno le foto, ora che non le fa più Gemini di qua. Si scrive il nome, non
-   * l'identificativo: i nomi nel loro catalogo cambiano meno, e l'agente ci arriva comunque.
+   * Con che modello si fanno le foto, ora che non le fa più Gemini di qua. Nome e identificativo
+   * insieme: il nome regge se cambiano gli id, l'id evita che debba cercarlo nel catalogo.
+   *
+   * Pro e non la 2 perché a parità di risoluzione costano lo stesso (2 crediti a 2K), il 4:5 ce
+   * l'ha nativo, ed esegue la descrizione invece di arricchirla: la 2 ci aggiungeva posate e
+   * tovaglioli, che su una card finiscono sotto il titolo.
    */
-  AGENT_HIGGSFIELD_IMAGE_MODEL: z.string().min(1).default('Nano Banana 2'),
+  AGENT_HIGGSFIELD_IMAGE_MODEL: z.string().min(1).default('Nano Banana Pro (nano_banana_pro)'),
 });
 
 export type AgentConfig = z.infer<typeof schema>;
