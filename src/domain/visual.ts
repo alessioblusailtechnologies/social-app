@@ -69,6 +69,8 @@ export interface VisualImage {
 export interface VisualPage {
   /** Il layout del motore: quello che si disegna se il brand non ha un template suo con l'id di `custom`. */
   templateId: TemplateId;
+  /** La foto di questa pagina, quando non è quella del visivo: le slide di un carosello fatto con le foto vere. */
+  photo?: MediaFile | null;
   /** Un template scritto per il brand (`BrandLine.templates`): se c'è, la card si disegna con quello. */
   custom?: string;
   text: CardText;
@@ -542,6 +544,30 @@ export function proposeDesign(proposal: VisualProposal, format: IdeaFormat, slid
     kind: proposal.kind,
     pages: normalizePages(proposal.kind, pages),
     image: { description: clip(proposal.imageDescription, CARD_LIMITS.description), source: 'generated', photo: null, cutout: null },
+    status: 'proposed',
+    step: null,
+    error: null,
+    nextPages: null,
+    renders: [],
+  };
+}
+
+/**
+ * Il carosello nato dal materiale di chi pubblica: una pagina per slide, ognuna con la sua foto vera. Le pagine con la
+ * foto usano il template con la foto della linea del brand, se ne ha uno, altrimenti la foto nel riquadro del motore.
+ * Le foto ci sono già: creare il visivo compone e basta, non genera niente.
+ */
+export function photoCarouselDesign(slides: readonly CarouselSlide[], line: BrandLine | null | undefined): VisualDesign {
+  const withPhoto = line?.templates?.find((template) => template.photo);
+  const pages: VisualPage[] = slides.map((slide, index) => {
+    const text = cleanCardText({ ...emptyCardText(), headline: slide.title, body: slide.body });
+    if (!slide.photo) return { templateId: index === 0 ? 'statement' : 'point', text };
+    return { templateId: 'photo-frame', ...(withPhoto && { custom: withPhoto.id }), text, photo: slide.photo };
+  });
+  return {
+    kind: 'photo',
+    pages,
+    image: { description: '', source: 'upload', photo: slides.find((slide) => slide.photo)?.photo ?? null, cutout: null },
     status: 'proposed',
     step: null,
     error: null,

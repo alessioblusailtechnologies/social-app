@@ -35,13 +35,15 @@ export function mapDesignFiles(design: VisualDesign, change: (file: MediaFile) =
   return {
     ...design,
     image: { ...design.image, photo: map(design.image.photo), cutout: map(design.image.cutout) },
+    // La foto di una pagina, nei caroselli fatti con le foto vere.
+    pages: design.pages.map((page) => (page.photo ? { ...page, photo: change(page.photo) } : page)),
     renders: design.renders.map((render) => ({ ...render, file: change(render.file) })),
   };
 }
 
 export function designPaths(design: VisualDesign | null | undefined): string[] {
   if (!design) return [];
-  return [design.image.photo, design.image.cutout, ...design.renders.map((render) => render.file)]
+  return [design.image.photo, design.image.cutout, ...design.pages.map((page) => page.photo), ...design.renders.map((render) => render.file)]
     .map((file) => file?.path)
     .filter((path): path is string => Boolean(path));
 }

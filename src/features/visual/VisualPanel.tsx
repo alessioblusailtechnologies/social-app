@@ -389,7 +389,7 @@ export function VisualPanel({ brand, content, channel, locked, drawingSteps }: V
           page={cover}
           pageIndex={0}
           pageCount={design.pages.length}
-          photoUrl={design.image.photo?.url || null}
+          photoUrl={cover.photo?.url || design.image.photo?.url || null}
           cutoutUrl={null}
           aspect="4:5"
           width={72}

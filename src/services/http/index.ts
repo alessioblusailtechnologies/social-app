@@ -34,6 +34,17 @@ export function createHttpServices(api: ApiClient): Services {
     setActiveBrand: (brandId) => api.put<void>('/workspace/active-brand', { brandId }),
     loadDemoBrand: () => api.post<Brand>('/demo'),
     resetDemo: () => api.delete('/demo'),
+    async uploadMaterial(brandId, file) {
+      const { path, uploadUrl } = await api.post<{ path: string; uploadUrl: string }>(route`/brands/${brandId}/material/upload`, {
+        mimeType: file.mimeType,
+        bytes: file.bytes,
+      });
+      // Il file va dritto nel bucket: un video non passa dall'API.
+      const body = await (await fetch(file.uri)).blob();
+      const sent = await fetch(uploadUrl, { method: 'PUT', headers: { 'content-type': file.mimeType, 'x-upsert': 'false' }, body });
+      if (!sent.ok) throw new ApiError(sent.status, 'UPLOAD_FAILED', 'Il caricamento non è riuscito. Riprova.');
+      return { path, url: '' };
+    },
     remakeMusic: (brandId, onSteps) => api.job<Brand>(route`/brands/${brandId}/music/job`, {}, onSteps),
     uploadReference: (_uri, dataUri) => {
       if (!dataUri) return Promise.reject(new ApiError(400, 'INVALID_DATA', 'Non riesco a leggere l’immagine: riprova con un’altra.'));

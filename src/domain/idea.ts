@@ -23,7 +23,57 @@ export type IdeaStatus = 'new' | 'saved' | 'discarded';
 export type IdeaSource =
   | { kind: 'prompt'; text: string }
   | { kind: 'link'; url: string; note: string }
-  | { kind: 'document'; name: string; size: number | null; note: string };
+  | { kind: 'document'; name: string; size: number | null; note: string }
+  /** Le foto e i video di chi pubblica: la storia la trova l'AI guardandoli. `note` è l'intenzione, facoltativa. */
+  | { kind: 'material'; files: MaterialFile[]; note: string };
+
+/** Un momento di un video del materiale, con i suoi tempi: quello che ci si vede, e se si può usare. */
+export interface MaterialShot {
+  start: number;
+  end: number;
+  what: string;
+  /** Mosso, buio, sfocato, tagliato male: meglio non usarlo. */
+  usable: boolean;
+  /** Si riconosce il volto di qualcuno: chi pubblica deve sapere cosa sta usando. */
+  faces: boolean;
+}
+
+/** Cosa c'è in un file del materiale: lo scrive l'analisi una volta, e la bozza rifatta lo riusa. */
+export interface MaterialCatalog {
+  summary: string;
+  /** Solo per i video. */
+  seconds: number | null;
+  /** Solo per i video: i momenti, in ordine. */
+  shots: MaterialShot[];
+  /** Cosa si sente, per i video: voce, rumori, musica. Vuoto se niente. */
+  audio: string;
+}
+
+/** Un file del materiale: il percorso nella libreria del brand, e il suo catalogo quando è stato guardato. */
+export interface MaterialFile {
+  path: string | null;
+  url: string;
+  kind: 'video' | 'image';
+  name: string;
+  catalog?: MaterialCatalog | null;
+}
+
+/** Quanti file si danno insieme: oltre, l'analisi diventa lunga e la storia si disperde. */
+export const MATERIAL_LIMIT = 15;
+
+/** Il titolo di partenza di una fonte, per i passi e per le bozze senza idea. */
+export function sourceTitle(source: IdeaSource): string {
+  switch (source.kind) {
+    case 'prompt':
+      return source.text;
+    case 'link':
+      return source.url;
+    case 'document':
+      return source.name;
+    case 'material':
+      return source.note.trim() || `${source.files.length} tra foto e video`;
+  }
+}
 
 export interface IdeaDraft {
   /** L'idea in una frase. */

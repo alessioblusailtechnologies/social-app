@@ -36,6 +36,39 @@ export const unavailableMusic: MusicGenerator = {
   compose: () => Promise.reject(ApiError.unavailable('MUSIC_UNAVAILABLE', 'La musica non è configurata su questo server.')),
 };
 
+/** Quello che una traccia strumentale non deve avere, qualunque cosa chieda il piano. */
+const NO_VOICE = ['vocals', 'singing', 'lyrics', 'spoken words', 'choir'];
+
+/**
+ * Il piano nel formato del modello. `force_instrumental` vale solo col prompt, non col piano (422): lo strumentale lo
+ * fanno le sezioni senza righe di testo e gli stili esclusi. `music_v1` vuole stili globali e sezioni; i v2 vogliono
+ * `chunks`, ognuno col suo testo (per noi solo il nome della sezione tra quadre), la durata e gli stili, e i primi
+ * stili sono quelli che danno il genere.
+ */
+function compositionPlan(model: string, plan: TrackPlan): Record<string, unknown> {
+  if (model === 'music_v1') {
+    return {
+      positive_global_styles: plan.styles,
+      negative_global_styles: [...plan.avoid, ...NO_VOICE],
+      sections: plan.sections.map((section) => ({
+        section_name: section.name,
+        positive_local_styles: [...section.styles, 'instrumental'],
+        negative_local_styles: ['vocals'],
+        duration_ms: Math.round(section.seconds * 1000),
+        lines: [],
+      })),
+    };
+  }
+  return {
+    chunks: plan.sections.map((section, index) => ({
+      text: `[${section.name.replace(/[[\]{}]/g, '').slice(0, 100) || 'Instrumental'}]`,
+      duration_ms: Math.min(120_000, Math.max(3000, Math.round(section.seconds * 1000))),
+      positive_styles: [...(index === 0 ? plan.styles : []), ...section.styles, 'instrumental'],
+      negative_styles: [...plan.avoid, ...NO_VOICE],
+    })),
+  };
+}
+
 /** A consumo, del 24/09/2026: uguale per tutti i modelli. */
 const PRICE_PER_MINUTE = 0.15;
 
@@ -61,21 +94,7 @@ export function elevenLabsMusic(options: ElevenLabsMusicOptions): MusicGenerator
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'xi-api-key': options.apiKey, 'content-type': 'application/json' },
-          body: JSON.stringify({
-            model_id: options.model,
-            force_instrumental: true,
-            composition_plan: {
-              positive_global_styles: plan.styles,
-              negative_global_styles: [...plan.avoid, 'vocals', 'singing', 'spoken words'],
-              sections: plan.sections.map((section) => ({
-                section_name: section.name,
-                positive_local_styles: section.styles,
-                negative_local_styles: [],
-                duration_ms: Math.round(section.seconds * 1000),
-                lines: [],
-              })),
-            },
-          }),
+          body: JSON.stringify({ model_id: options.model, composition_plan: compositionPlan(options.model, plan) }),
           signal: AbortSignal.timeout(options.timeoutMs ?? 180_000),
         });
         if (!response.ok) {

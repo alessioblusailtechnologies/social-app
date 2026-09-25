@@ -7,6 +7,7 @@ import { config } from '../config';
 import { recordUsage } from '../data/usage';
 import { db } from '../db/pool';
 import { falCutout, unavailableCutout } from '../media/cutout';
+import { geminiFootage, unavailableFootage } from '../media/footage';
 import { elevenLabsMusic, unavailableMusic } from '../media/music';
 import { geminiImages, unavailableImages } from '../media/images';
 import { httpRenderer } from '../media/renderer';
@@ -52,6 +53,9 @@ const app = buildApp({
     music: settings.ELEVENLABS_API_KEY
       ? elevenLabsMusic({ apiKey: settings.ELEVENLABS_API_KEY, model: settings.MUSIC_MODEL, log, recordUsage: storeUsage })
       : unavailableMusic,
+    footage: settings.GEMINI_API_KEY
+      ? geminiFootage({ apiKey: settings.GEMINI_API_KEY, model: settings.VISION_MODEL, log, recordUsage: storeUsage })
+      : unavailableFootage,
     renderer,
     vision: settings.GEMINI_API_KEY
       ? geminiVision({ apiKey: settings.GEMINI_API_KEY, model: settings.VISION_MODEL, log, recordUsage: storeUsage })

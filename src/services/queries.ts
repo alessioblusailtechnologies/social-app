@@ -119,6 +119,11 @@ export function useCreateContent(brandId: string) {
   return { ...mutation, steps };
 }
 
+/** Un file del materiale, caricato dritto nello spazio dei file del brand. */
+export function useUploadMaterial(brandId: string) {
+  return useMutation({ mutationFn: (file: FootageFile) => services.brands.uploadMaterial(brandId, file) });
+}
+
 export function useCreateContentFromIdea(brandId: string) {
   const client = useQueryClient();
   const [steps, setSteps] = useState<AiStep[]>([]);

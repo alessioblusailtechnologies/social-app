@@ -170,7 +170,11 @@ export function createVisualRunner({ pool, media, log, concurrency = 2, pollMs =
     // La fascia della linea va sulla copertina dei caroselli: il brand letto dal database non ha indirizzi firmati.
     const band = brand.visual.line?.band ?? null;
     const bandPath = band?.photo?.path ?? null;
-    const urls = await media.storage.sign([photoPath, cutoutPath, bandPath].filter((path): path is string => Boolean(path)));
+    // Le pagine con una foto loro (i caroselli fatti con le foto vere) la usano al posto di quella del visivo.
+    const pagePaths = design.pages.map((page) => page.photo?.path ?? null);
+    const urls = await media.storage.sign(
+      [photoPath, cutoutPath, bandPath, ...pagePaths].filter((path): path is string => Boolean(path)),
+    );
     const signed = (path: string | null) => {
       if (!path) return null;
       const url = urls.get(path);
@@ -200,7 +204,7 @@ export function createVisualRunner({ pool, media, log, concurrency = 2, pollMs =
           page,
           pageIndex: index,
           pageCount: design.pages.length,
-          photoUrl,
+          photoUrl: signed(pagePaths[index]) ?? photoUrl,
           cutoutUrl,
           aspect,
         });

@@ -21,6 +21,8 @@ export interface ChannelVariant {
 export interface CarouselSlide {
   title: string;
   body: string;
+  /** La foto vera della slide, per i caroselli nati dal materiale di chi pubblica. */
+  photo?: MediaFile | null;
 }
 
 /**
@@ -48,6 +50,8 @@ export interface VideoScene {
   overlay: string;
   /** Il materiale vero caricato da chi pubblica: il girato di una scena «shoot», la foto di una «photo». */
   footage?: MediaFile | null;
+  /** Il pezzo del girato da usare, in secondi: lo sceglie la regia quando parte dal materiale. Senza, tutto. */
+  trim?: { start: number; end: number } | null;
   /** B-roll: il fotogramma di partenza, da approvare prima di comprare il movimento. */
   frame?: MediaFile | null;
   /** B-roll: la clip generata dal fotogramma. */

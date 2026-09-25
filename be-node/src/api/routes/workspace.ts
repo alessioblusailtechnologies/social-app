@@ -4,8 +4,9 @@ import { z } from 'zod';
 import { isSectionKey, type SectionPatch } from '@/domain/brand';
 
 import { ApiError } from '../../contract/errors';
-import { brandDraftSchema, sectionSchemas } from '../../contract/schemas';
+import { brandDraftSchema, materialUploadSchema, sectionSchemas } from '../../contract/schemas';
 import type { Deps } from '../../services/deps';
+import { materialUploadUrl } from '../../services/material';
 import {
   chooseActiveBrand,
   createBrand,
@@ -41,6 +42,11 @@ export function registerWorkspaceRoutes(app: FastifyInstance, deps: Deps): void 
     const patch = { key, value: sectionSchemas[key].parse(value) } as SectionPatch;
     return updateBrandSection(deps, request.identity, idFrom(request.params.brandId, 'Brand non trovato.'), patch);
   });
+
+  /** Dove caricare un file del materiale, per la creazione «dal tuo materiale». */
+  app.post<{ Params: { brandId: string } }>('/api/brands/:brandId/material/upload', (request) =>
+    materialUploadUrl(deps, request.identity, idFrom(request.params.brandId, 'Brand non trovato.'), materialUploadSchema.parse(request.body)),
+  );
 
   /** «Rifai la musica»: una libreria nuova di tracce del brand. In coda, coi passi: sono minuti. */
   app.post<{ Params: { brandId: string } }>('/api/brands/:brandId/music/job', (request, reply) => {

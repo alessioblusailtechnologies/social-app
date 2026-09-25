@@ -295,7 +295,7 @@ function ScenePreview({ scene, busy, onOpen }: { scene: VideoScene; busy: string
       {media.kind === 'image' ? (
         <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
       ) : (
-        <VideoPoster uri={media.uri} />
+        <VideoPoster uri={media.uri} start={scene.source === 'shoot' ? (scene.trim?.start ?? 0) : 0} />
       )}
       {media.kind === 'video' ? (
         <View style={styles.play} pointerEvents="none">
@@ -304,18 +304,26 @@ function ScenePreview({ scene, busy, onOpen }: { scene: VideoScene; busy: string
       ) : null}
       <View style={styles.tag} pointerEvents="none">
         <Text variant="label" color={palette.white}>
-          {media.label} · {SCENE_SOURCE_LABELS[scene.source]}
+          {media.label} · {scene.source === 'shoot' && scene.trim ? `${clock(scene.trim.start)}–${clock(scene.trim.end)}` : SCENE_SOURCE_LABELS[scene.source]}
         </Text>
       </View>
     </Pressable>
   );
 }
 
-/** Il primo fotogramma del video, fermo e muto: si guarda a tutto schermo. */
-function VideoPoster({ uri }: { uri: string }) {
+/** «0:04»: i secondi di un girato come li legge chi l'ha girato. */
+function clock(seconds: number): string {
+  const whole = Math.round(seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+/** Il primo fotogramma del video (o del pezzo scelto), fermo e muto: si guarda a tutto schermo. */
+function VideoPoster({ uri, start }: { uri: string; start: number }) {
   const [source] = useState(uri);
   const player = useVideoPlayer(source, (created) => {
     created.muted = true;
+    // Il pezzo scelto dalla regia: l'anteprima parte da lì.
+    if (start > 0) created.currentTime = start;
   });
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">

@@ -273,3 +273,23 @@ bloccherebbe ogni video con una scena di b-roll, che non si può ancora generare
 - **Tempi**: il montaggio sono minuti, il b-roll anche. Il pannello deve mostrare i passi, e il lavoro deve
   sopravvivere a un riavvio (la coda lo fa già).
 - **Dati fuori dall'UE**: clip e musica passano da Higgsfield ed ElevenLabs.
+
+## Dal tuo materiale (la creazione al contrario)
+
+Deciso il 2026-09-25. Oggi si parte dall'idea e il cliente gira dopo; qui il cliente scarica foto e video che ha già, e
+la storia nasce da lì.
+
+- **«Nuovo contenuto» ha due strade grandi**: «Da un'idea» (il flusso di prima) e «Dal tuo materiale».
+- **Il materiale**: fino a 15 foto e video dal telefono, caricati uno alla volta dritti nel bucket con un indirizzo
+  firmato (`/api/brands/:id/material/upload`). Una riga d'intenzione facoltativa: vuota, il taglio lo trova l'AI.
+- **L'analisi la fa Gemini** (`media/footage.ts`, compito `material`): guarda il video nativamente, immagine e audio, e
+  ne fa un catalogo coi tempi (`MaterialCatalog`: momenti, usabile o no, volti riconoscibili, cosa si sente). I video
+  passano dalla Files API e si cancellano dopo. Due file alla volta. Prova vera: 30 s di video in 20 s, 0,006 $.
+- **La regia la scrive Opus** dal catalogo: per un video, le scene prendono il loro pezzo di file (`footage` + `trim`);
+  per un carosello, ogni slide la sua foto, e il visivo nasce già con una pagina per slide (`photoCarouselDesign`,
+  `VisualPage.photo`), che si compone senza generare niente.
+- **Il catalogo resta nella fonte** (`brief`): rifare la bozza non riguarda il materiale.
+- Il montaggio usa il pezzo indicato di ogni girato.
+
+Dopo: l'archivio del materiale nel brand (caricato una volta, pescato da più contenuti) e la voce originale delle clip,
+coi sottotitoli dalla trascrizione.

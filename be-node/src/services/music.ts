@@ -6,6 +6,7 @@ import type { OnAiSteps } from '@/services/types';
 
 import { planBrandMusic } from '../ai/music';
 import { ApiError } from '../contract/errors';
+import { inBatches } from '../lib/batches';
 import { requireBrand, updateSection } from '../data/brands';
 import type { Identity } from '../db/identity';
 import { mediaPath, signBrand } from '../visual/files';
@@ -14,9 +15,15 @@ import { withVideoProfile } from './video-profile';
 
 /**
  * La musica del brand: una piccola libreria di tracce strumentali, non una traccia per video. Nasce al primo montaggio
- * (o dal Profilo), dal «come suona» del profilo video: l'AI scrive il piano, ElevenLabs compone le tracce in parallelo,
+ * (o dal Profilo), dal «come suona» del profilo video: l'AI scrive il piano, ElevenLabs compone le tracce (due alla volta),
  * e finiscono nella libreria del brand.
  */
+
+/**
+ * Quante tracce si compongono insieme. ElevenLabs conta le richieste contemporanee per abbonamento (2 sul piano di
+ * adesso): oltre, risponde 429 e la traccia si perde.
+ */
+const COMPOSING_AT_ONCE = 2;
 
 async function composeLibrary(deps: Deps, identity: Identity, brand: Brand, onSteps?: OnAiSteps): Promise<BrandTrack[]> {
   const meta = aiMeta(identity, brand.id);
@@ -24,8 +31,10 @@ async function composeLibrary(deps: Deps, identity: Identity, brand: Brand, onSt
   const planned = await planBrandMusic(deps.ai, meta, brand, steps.first);
 
   const log = createStepLog(steps.then);
-  const made = await Promise.all(
-    planned.map(async (track, index): Promise<BrandTrack | null> => {
+  const made = await inBatches(
+    planned,
+    COMPOSING_AT_ONCE,
+    async (track, index): Promise<BrandTrack | null> => {
       const step = `track-${index}`;
       log.start(step, MUSIC_STEPS.track(track.mood), `${track.bpm} bpm`);
       try {
@@ -39,7 +48,7 @@ async function composeLibrary(deps: Deps, identity: Identity, brand: Brand, onSt
         log.finish(step, { failed: true });
         return null;
       }
-    }),
+    },
   );
   const tracks = made.filter((track): track is BrandTrack => track !== null);
   if (tracks.length === 0) throw new ApiError(502, 'MUSIC_FAILED', 'Non sono riuscito a comporre la musica. Riprova.');

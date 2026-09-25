@@ -114,7 +114,11 @@ function cutPrompt(content: Content, music: BrandTrack[], chosen: 'auto' | 'trac
         `${index + 1}. ${scene.title} · ${scene.seconds}s · ${SCENE_SOURCE_LABELS[scene.source].toLowerCase()}`,
         `   Cosa si vede: ${scene.description}`,
         scene.overlay ? `   Testo a schermo: «${scene.overlay}»` : null,
-        materialOf(scene) ? `   ${scene.source === 'broll' ? 'Clip generata' : 'Materiale caricato'}: media/${footageName(index, materialOf(scene)!)}` : null,
+        materialOf(scene)
+          ? `   ${scene.source === 'broll' ? 'Clip generata' : 'Materiale caricato'}: media/${footageName(index, materialOf(scene)!)}${
+              scene.trim && scene.source === 'shoot' ? `, il pezzo da ${scene.trim.start} a ${scene.trim.end} s` : ''
+            }`
+          : null,
       ]
         .filter((line): line is string => line !== null)
         .join('\n'),
@@ -122,7 +126,7 @@ function cutPrompt(content: Content, music: BrandTrack[], chosen: 'auto' | 'trac
     '',
     '## Cosa c’è a disposizione',
     '- Grafica e testo a schermo li disegni tu nella composizione, coi colori e i caratteri del brand (BRAND.md, i CSS in linea/).',
-    '- Girati: quelli che il cliente ha caricato sono in media/, indicati scena per scena; gli altri non ci sono ancora. Del girato prendi il pezzo migliore per la durata della scena.',
+    '- Girati: quelli che il cliente ha caricato sono in media/, indicati scena per scena; gli altri non ci sono ancora. Del girato usa il pezzo indicato, se c’è; altrimenti prendi il migliore per la durata della scena.',
     '- B-roll: le clip già generate sono in media/, indicate scena per scena; le altre non ci sono ancora, e in questo montaggio non si generano.',
     '- Foto vive: se il cliente ha caricato la foto della scena è in media/; altrimenti le foto vere del brand sono in esempi/foto/ e riferimenti/, e se una va bene la puoi muovere, se no la scena aspetta la sua.',
     'Dove l’immagine manca metti un cartello nello stile del brand che dice cosa ci andrà (per un girato, l’indicazione di ripresa), così chi guarda capisce già ritmo e storia. Il testo a schermo della scena resta sopra, come nel video finito.',

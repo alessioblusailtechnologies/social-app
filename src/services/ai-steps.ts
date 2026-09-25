@@ -126,6 +126,15 @@ export const MUSIC_STEPS = {
   track: (mood: string) => `Compongo «${shorten(mood, MAX_NAME)}»`,
 } as const;
 
+/** Le parole della creazione dal materiale: il caricamento, poi un file guardato alla volta. */
+export const MATERIAL_STEPS = {
+  upload: (done: number, total: number) => (done === total ? `Caricati ${total} file` : `Carico il materiale: ${done} di ${total}`),
+  look: (name: string, kind: 'video' | 'image') =>
+    `${kind === 'video' ? 'Guardo il video' : 'Guardo la foto'} «${shorten(name.replace(/\s+/g, ' ').trim(), MAX_NAME)}»`,
+  position: (index: number, total: number) => `${index + 1} di ${total}`,
+  story: 'Scelgo i pezzi migliori e scrivo la storia',
+} as const;
+
 /** Le parole delle idee proposte dal Brand DNA. */
 export const IDEAS_STEPS = {
   context: (name: string) => (name.trim() ? `Rileggo il profilo di ${name.trim()}` : 'Rileggo il profilo del brand'),

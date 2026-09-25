@@ -1,7 +1,7 @@
 import type { Brand, BrandKind, ChannelId, Theme } from '@/domain/brand';
 import { isConnected } from '@/domain/brand';
 import { CHANNELS } from '@/domain/catalog';
-import { ideaPreferences, type Idea, type IdeaDraft, type IdeaFormat, type IdeaSource } from '@/domain/idea';
+import { ideaPreferences, sourceTitle, type Idea, type IdeaDraft, type IdeaFormat, type IdeaSource } from '@/domain/idea';
 import { themeLevelLabel } from '@/domain/themes';
 import { formatDay } from '@/lib/dates';
 import { createRng, pick, sample, seedFromString } from '@/lib/random';
@@ -419,7 +419,8 @@ function sourceFamilies(brand: Brand, source: IdeaSource): { families: SourceFam
     };
   }
 
-  const title = documentTitle(source.name);
+  // Il materiale, nel mock, vale come un documento: se ne conosce solo il titolo.
+  const title = documentTitle(source.kind === 'material' ? sourceTitle(source) : source.name);
   return {
     basis: `${title} ${source.note}`,
     families: [
@@ -469,7 +470,9 @@ export function draftsFromSource(brand: Brand, source: IdeaSource, variant = 0):
       ? { kind: 'prompt' as const, label: 'Una tua nota' }
       : source.kind === 'link'
         ? { kind: 'link' as const, label: describeLink(source.url).host }
-        : {
+        : source.kind === 'material'
+          ? { kind: 'prompt' as const, label: sourceTitle(source) }
+          : {
             kind: 'document' as const,
             label: source.size ? `${source.name} · ${Math.max(1, Math.round(source.size / 45_000))} pagine` : source.name,
           };

@@ -23,6 +23,7 @@ import { findIdea, requireIdea } from '../data/ideas';
 import { findSlot, insertSlot, requireSlot, saveSlot } from '../data/slots';
 import type { Identity } from '../db/identity';
 import { aiMeta, inTransaction, type Deps } from './deps';
+import { catalogMaterial } from './material';
 import { withVideoProfile } from './video-profile';
 
 /**
@@ -164,11 +165,15 @@ export async function createDirectContent(
   deps: Deps,
   identity: Identity,
   brandId: string,
-  { source, channels, format }: DirectContentRequest,
+  { source: asked, channels, format }: DirectContentRequest,
   onSteps?: OnAiSteps,
 ): Promise<Content> {
   const stored = await inTransaction(deps, identity, (db) => requireBrand(db, brandId));
-  const { brand, onSteps: writing } = await readyFor(deps, identity, stored, format, onSteps);
+  // Dal materiale di chi pubblica: prima lo si guarda, poi la regia sceglie da lì. Il catalogo resta nella fonte,
+  // così rifare la bozza non riguarda niente.
+  const looking = stepsInSequence(onSteps);
+  const source = asked.kind === 'material' ? await catalogMaterial(deps, identity, brandId, asked, looking.first) : asked;
+  const { brand, onSteps: writing } = await readyFor(deps, identity, stored, format, looking.then);
   const written = await writeContent(deps.ai, aiMeta(identity, brandId), {
     brand,
     basis: { kind: 'source', source },

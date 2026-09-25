@@ -2,7 +2,7 @@ import type { Brand, ChannelId, Identity } from '@/domain/brand';
 import { applyPatch } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
 import { channelsWaitingForVideo, channelsWithoutImage, cutKey, footageKind, readScene, videoSeconds, type Content, type VideoScene } from '@/domain/content';
-import type { Idea, IdeaDraft, IdeaStatus } from '@/domain/idea';
+import { sourceTitle, type Idea, type IdeaDraft, type IdeaSource, type IdeaStatus, type MaterialFile } from '@/domain/idea';
 import {
   buildSkeleton,
   channelsWithIdea,
@@ -20,6 +20,7 @@ import {
   editDesign,
   fallbackDesign,
   needsImages,
+  photoCarouselDesign,
   redoDesign,
   refreshDesign,
   withoutPhoto,
@@ -37,6 +38,8 @@ import {
   REWRITE_STEPS,
   WRITING_STEPS,
   BROLL_STEPS,
+  MATERIAL_STEPS,
+  stepsInSequence,
   MUSIC_STEPS,
   VIDEO_CUT_STEPS,
   VIDEO_SCENE_STEPS,
@@ -168,6 +171,12 @@ function createMockBrandService(): BrandService {
     async uploadReference(uri) {
       await delay(300);
       return { path: null, url: uri };
+    },
+
+    /** Nel mock il file resta sul telefono: il materiale è il suo indirizzo locale. */
+    async uploadMaterial(_brandId, file) {
+      await delay(latency(250, 500));
+      return { path: null, url: file.uri };
     },
 
     /** Il mock non compone: finge i passi e scrive quattro atmosfere, senza file da ascoltare. */
@@ -415,6 +424,44 @@ function setSlotStatus(slotId: string, status: PlanSlot['status']): Promise<Plan
     const updated: PlanSlot = { ...slot, status };
     return { items: slots.map((candidate) => (candidate.id === slotId ? updated : candidate)), result: updated };
   });
+}
+
+/** Il mock non guarda niente: un passo per file, per vedere la schermata lavorare. */
+async function lookAtMaterial(files: readonly MaterialFile[], onSteps: OnAiSteps): Promise<void> {
+  const log = createStepLog(onSteps);
+  for (const [index, file] of files.entries()) {
+    log.start(`file-${index}`, MATERIAL_STEPS.look(file.name, file.kind), MATERIAL_STEPS.position(index, files.length));
+    await delay(latency(350, 600));
+    log.finish(`file-${index}`);
+  }
+}
+
+/**
+ * Nel mock la bozza dal materiale usa i file in ordine: i video diventano girati (i primi 4 secondi), le foto foto vive
+ * o slide del carosello con la loro foto.
+ */
+function withMaterial<T extends { visual: Content['visual']; format: Content['format'] }>(written: T, source: IdeaSource, brand: Brand): T {
+  if (source.kind !== 'material') return written;
+  const files = source.files;
+  if (written.format === 'video') {
+    const scenes = written.visual.scenes.map((scene, index): VideoScene => {
+      const file = files[index];
+      if (!file) return readScene(scene);
+      return file.kind === 'video'
+        ? { ...readScene(scene), source: 'shoot', footage: { path: file.path, url: file.url }, trim: { start: 0, end: Math.min(4, scene.seconds) } }
+        : { ...readScene(scene), source: 'photo', footage: { path: file.path, url: file.url }, trim: null };
+    });
+    return { ...written, visual: { ...written.visual, scenes } };
+  }
+  if (written.format === 'carousel') {
+    const photos = files.filter((file) => file.kind === 'image');
+    const slides = written.visual.slides.map((slide, index) => {
+      const photo = photos[index];
+      return photo ? { ...slide, photo: { path: photo.path, url: photo.url } } : slide;
+    });
+    return { ...written, visual: { ...written.visual, slides, design: photoCarouselDesign(slides, brand.visual.line) } };
+  }
+  return written;
 }
 
 function updateScene(contentId: string, index: number, change: (scene: VideoScene) => VideoScene): Promise<Content> {
@@ -817,9 +864,11 @@ function createMockContentService(): ContentService {
 
     async createDirect(brandId, { source, channels, format }, onSteps) {
       const brand = await brandById(brandId);
-      await writingSteps(onSteps, {
+      const looking = stepsInSequence(onSteps);
+      if (source.kind === 'material') await lookAtMaterial(source.files, looking.first);
+      await writingSteps(looking.then, {
         brand,
-        basis: source.kind === 'prompt' ? source.text : source.kind === 'link' ? source.url : source.name,
+        basis: sourceTitle(source),
         channels,
         link: linkOf(source),
       });
@@ -832,7 +881,7 @@ function createMockContentService(): ContentService {
         ideaId: null,
         brief: source,
         channels,
-        ...generateDirectContent(brand, source, channels, format, 0, id),
+        ...withMaterial(generateDirectContent(brand, source, channels, format, 0, id), source, brand),
         status: 'draft',
         revision: 0,
         createdAt: now,

@@ -16,7 +16,7 @@ import type {
   Voice,
 } from '@/domain/brand';
 import { REWRITE_LIMIT } from '@/domain/content';
-import type { IdeaDraft, IdeaSource } from '@/domain/idea';
+import { MATERIAL_LIMIT, type IdeaDraft, type IdeaSource } from '@/domain/idea';
 import type { PlanRequest, SlotDraft } from '@/domain/plan';
 import { TEMPLATE_IDS, type MediaFile, type VisualEdit } from '@/domain/visual';
 
@@ -281,7 +281,45 @@ export const ideaSourceSchema = z.discriminatedUnion('kind', [
     size: z.number().int().nonnegative().nullable(),
     note: text(2000),
   }),
+  // Il catalogo lo scrive il server: dall'app arriva senza, e da una bozza salvata torna com'era.
+  z.object({
+    kind: z.literal('material'),
+    files: z
+      .array(
+        z.object({
+          path: z.string().min(1).max(500).nullable(),
+          url: text(4000),
+          kind: z.enum(['video', 'image']),
+          name: z.string().min(1).max(300),
+          catalog: z
+            .object({
+              summary: text(2000),
+              seconds: z.number().nullable(),
+              shots: z
+                .array(
+                  z.object({
+                    start: z.number().min(0),
+                    end: z.number().min(0),
+                    what: text(600),
+                    usable: z.boolean(),
+                    faces: z.boolean(),
+                  }),
+                )
+                .max(40),
+              audio: text(1000),
+            })
+            .nullable()
+            .optional(),
+        }),
+      )
+      .min(1)
+      .max(MATERIAL_LIMIT),
+    note: text(2000),
+  }),
 ]) satisfies z.ZodType<IdeaSource>;
+
+/** Un file del materiale da caricare: prima si chiede dove, poi lo si carica direttamente. */
+export const materialUploadSchema = z.object({ mimeType: z.string().min(3).max(60), bytes: z.number().int().positive() });
 
 export const ideaDraftSchema = z.object({
   title: z.string().trim().min(1).max(300),

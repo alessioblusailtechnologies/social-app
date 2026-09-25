@@ -39,6 +39,8 @@ export interface BrandService {
   resetDemo(): Promise<void>;
   /** Un'immagine di riferimento (data URI o file locale): torna col percorso nello storage e l'indirizzo firmato. */
   uploadReference(uri: string, dataUri: string | null): Promise<MediaFile>;
+  /** Un file del materiale per la creazione «dal tuo materiale»: va dritto nello spazio dei file del brand. */
+  uploadMaterial(brandId: string, file: FootageFile): Promise<MediaFile>;
   /** «Rifai la musica»: una libreria nuova di tracce strumentali del brand, coi passi. */
   remakeMusic(brandId: string, onSteps?: OnAiSteps): Promise<Brand>;
 }

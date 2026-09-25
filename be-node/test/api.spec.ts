@@ -109,6 +109,7 @@ const fakeMedia: MediaDeps = {
     uploadUrl: (path) => Promise.resolve(`https://carica.test/${path}`),
   },
   music: { available: false, compose: () => Promise.reject(new Error('non serve')) },
+  footage: { available: false, catalog: () => Promise.reject(new Error('non serve')) },
   images: {
     available: true,
     generate: () => {

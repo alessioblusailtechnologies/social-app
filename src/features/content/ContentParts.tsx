@@ -117,12 +117,20 @@ export function VisualPreview({
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
         {design.pages.map((page, i) => (
-          <CardView key={i} {...card} page={page} pageIndex={i} width={CAROUSEL_CARD_WIDTH} />
+          <CardView key={i} {...card} photoUrl={page.photo?.url || card.photoUrl} page={page} pageIndex={i} width={CAROUSEL_CARD_WIDTH} />
         ))}
       </ScrollView>
     );
   }
-  return <CardView {...card} page={design.pages[0]} pageIndex={0} style={aspect === '9:16' ? styles.tall : undefined} />;
+  return (
+    <CardView
+      {...card}
+      photoUrl={design.pages[0].photo?.url || card.photoUrl}
+      page={design.pages[0]}
+      pageIndex={0}
+      style={aspect === '9:16' ? styles.tall : undefined}
+    />
+  );
 }
 
 /** Il post come apparirà sul canale: intestazione, testo, hashtag e visivo. */

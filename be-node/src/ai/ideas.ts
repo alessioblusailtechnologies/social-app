@@ -171,6 +171,7 @@ export async function generateIdeas(
 function sourceSignal(source: IdeaSource): IdeaDraft['signal'] {
   if (source.kind === 'prompt') return { kind: 'prompt', label: 'Una tua nota' };
   if (source.kind === 'link') return { kind: 'link', label: describeLink(source.url).host };
+  if (source.kind === 'material') return { kind: 'prompt', label: `${source.files.length} tra foto e video` };
   return {
     kind: 'document',
     label: source.size ? `${source.name} · ${Math.max(1, Math.round(source.size / 45_000))} pagine` : source.name,
@@ -191,6 +192,7 @@ export function describeSource(source: IdeaSource): string {
       .filter(Boolean)
       .join('\n');
   }
+  if (source.kind === 'material') return describeMaterial(source);
   return [
     '## La fonte: un documento',
     `Nome del file: ${source.name}`,
@@ -199,6 +201,41 @@ export function describeSource(source: IdeaSource): string {
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+const time = (seconds: number) => `${Math.round(seconds * 10) / 10} s`;
+
+/**
+ * Il materiale di chi pubblica, file per file, col catalogo che ne ha fatto l'analisi: i momenti dei video coi tempi,
+ * e quello che non si può usare. Chi scrive la regia sceglie da qui, indicando il numero del file e il pezzo.
+ */
+function describeMaterial(source: Extract<IdeaSource, { kind: 'material' }>): string {
+  const files = source.files.map((file, index) => {
+    const length = file.kind === 'video' && file.catalog?.seconds ? `, ${time(file.catalog.seconds)}` : '';
+    const head = `File ${index + 1} (${file.kind === 'video' ? `video${length}` : 'foto'}), «${file.name}»`;
+    if (!file.catalog) return `${head}: non sono riuscito a guardarlo, non usarlo.`;
+    return [
+      `${head}: ${file.catalog.summary}`,
+      ...file.catalog.shots.map(
+        (shot) =>
+          `   ${time(shot.start)}–${time(shot.end)}: ${shot.what}${shot.usable ? '' : ' [non usabile]'}${shot.faces ? ' [volti riconoscibili]' : ''}`,
+      ),
+      file.catalog.audio ? `   Audio: ${file.catalog.audio}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  });
+  return [
+    '## La fonte: il materiale di chi pubblica',
+    source.note.trim()
+      ? `Cosa vuole raccontare: ${source.note.trim()}`
+      : 'Non ha detto cosa vuole raccontare: trova tu il taglio guardando cosa c’è.',
+    'Sono foto e video veri, girati da chi pubblica: è da qui che si mostra quello che il brand vende. La storia nasce da quello che c’è.',
+    ...files,
+    '',
+    'In un video, una scena girata («shoot») o una foto viva («photo») prende il suo materiale da un file: indicalo in material col numero del file e, per un video, il pezzo da usare (start e end in secondi, dentro un momento usabile; per una foto 0 e 0). Una scena senza materiale adatto resta da girare, con le indicazioni per farlo, o diventa grafica o b-roll di contorno.',
+    'In un carosello, ogni slide può avere la sua foto: indica in photo il numero di una foto.',
+  ].join('\n');
 }
 
 const sourceSchema = z.object({ ideas: z.array(z.object(IDEA_FIELDS)) });

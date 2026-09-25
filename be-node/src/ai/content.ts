@@ -10,12 +10,14 @@ import {
   type Content,
   type ContentVisual,
   type RewriteInstruction,
+  type VideoScene,
 } from '@/domain/content';
-import type { Idea, IdeaFormat, IdeaSource } from '@/domain/idea';
+import { sourceTitle, type Idea, type IdeaFormat, type IdeaSource, type MaterialFile } from '@/domain/idea';
 import {
   CARD_LIMITS,
   VISUAL_KINDS,
   VISUAL_KIND_LABELS,
+  photoCarouselDesign,
   type VisualDesign,
 } from '@/domain/visual';
 
@@ -80,7 +82,13 @@ const writtenSchema = z.object({
   themeId: z.string().nullable().describe('L’id del tema del brand a cui si lega, o null.'),
   headline: z.string(),
   variants: z.array(z.object({ channel: channelIdSchema, text: z.string(), hashtags: z.array(z.string()) })),
-  slides: z.array(z.object({ title: z.string(), body: z.string() })),
+  slides: z.array(
+    z.object({
+      title: z.string(),
+      body: z.string(),
+      photo: z.number().int().nullable().describe('Il numero della foto del materiale per questa slide, o null.'),
+    }),
+  ),
   script: z.string().describe('Lo script del video; vuoto negli altri formati.'),
   scenes: z.array(
     z.object({
@@ -89,6 +97,10 @@ const writtenSchema = z.object({
       seconds: z.number().int(),
       source: z.enum(SCENE_SOURCES),
       overlay: z.string(),
+      material: z
+        .object({ file: z.number().int(), start: z.number(), end: z.number() })
+        .nullable()
+        .describe('Il file del materiale da cui prende l’immagine, col pezzo da usare; null se non ne usa uno.'),
     }),
   ),
 });
@@ -153,8 +165,24 @@ function describeBasis(brand: Brand, basis: ContentBasis): string {
 /** Il titolo di partenza, per il passo che dice da cosa nasce la bozza. */
 function basisTitle(basis: ContentBasis): string {
   if (basis.kind === 'idea') return basis.idea.title;
-  const { source } = basis;
-  return source.kind === 'prompt' ? source.text : source.kind === 'link' ? source.url : source.name;
+  return sourceTitle(basis.source);
+}
+
+/**
+ * Il materiale indicato dalla regia, riportato su un file vero: un video diventa il girato della scena, ritagliato
+ * dentro la sua durata; una foto, la foto di una foto viva. Un numero che non c'è non si usa.
+ */
+function sceneMaterial(
+  files: readonly MaterialFile[],
+  pick: { file: number; start: number; end: number } | null,
+): Pick<VideoScene, 'source' | 'footage' | 'trim'> | null {
+  const file = pick ? files[pick.file - 1] : undefined;
+  if (!pick || !file?.path || !file.catalog) return null;
+  if (file.kind === 'image') return { source: 'photo', footage: { path: file.path, url: '' }, trim: null };
+  const length = file.catalog.seconds ?? Math.max(pick.end, 0);
+  const start = Math.min(Math.max(0, pick.start), Math.max(0, length - 0.5));
+  const end = Math.min(Math.max(start + 0.5, pick.end), length || pick.end);
+  return { source: 'shoot', footage: { path: file.path, url: '' }, trim: { start, end } };
 }
 
 export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteContentInput): Promise<WrittenContent> {
@@ -227,30 +255,45 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
         : null;
 
   const headline = result.headline.trim();
+  // Il materiale di chi pubblica, quando la bozza nasce da lì: scene e slide lo citano per numero.
+  const files = basis.kind === 'source' && basis.source.kind === 'material' ? basis.source.files : [];
+  const photoOf = (index: number | null) => {
+    const file = index ? files[index - 1] : undefined;
+    return file?.kind === 'image' && file.path ? { path: file.path, url: '' } : null;
+  };
   const slides =
     format === 'carousel'
-      ? result.slides.slice(0, 10).map((slide) => ({ title: slide.title.trim(), body: slide.body.trim() }))
+      ? result.slides.slice(0, 10).map((slide) => {
+          const photo = photoOf(slide.photo);
+          return { title: slide.title.trim(), body: slide.body.trim(), ...(photo && { photo }) };
+        })
       : [];
   const scenes =
     format === 'video'
-      ? result.scenes.slice(0, 10).map((scene) => ({
-          title: scene.title.trim(),
-          description: scene.description.trim(),
-          seconds: Math.min(60, Math.max(1, scene.seconds)),
-          source: scene.source,
-          overlay: scene.overlay.trim(),
-        }))
+      ? result.scenes.slice(0, 10).map((scene): VideoScene => {
+          const material = sceneMaterial(files, scene.material);
+          return {
+            title: scene.title.trim(),
+            description: scene.description.trim(),
+            seconds: Math.min(60, Math.max(1, scene.seconds)),
+            source: scene.source,
+            overlay: scene.overlay.trim(),
+            ...material,
+          };
+        })
       : [];
   const script = format === 'video' ? result.script.trim() : '';
+  // Un carosello fatto con le foto vere ha già il suo visivo: una pagina per slide, ognuna con la sua foto.
+  const photoCarousel = slides.some((slide) => slide.photo) ? photoCarouselDesign(slides, brand.visual.line) : null;
 
   return {
     title,
     themeId,
     format,
     variants,
-    // Nessun visivo: la card non nasce con la bozza. La disegna `designContentVisual` quando
-    // l'utente lo chiede, guardando questo testo e le card d'esempio del brand.
-    visual: { headline, slides, script, scenes, design: null },
+    // Di solito nessun visivo: la card non nasce con la bozza. La disegna `designContentVisual` quando l'utente lo
+    // chiede, guardando questo testo e le card d'esempio del brand. Il carosello fatto con le foto vere invece ce l'ha.
+    visual: { headline, slides, script, scenes, design: photoCarousel },
   };
 }
 

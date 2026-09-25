@@ -42,7 +42,10 @@ export function VideoMusicRow({ brand, content, disabled }: { brand: Brand; cont
           ? `${shown.mood} · scelta da me`
           : library.length > 0
             ? 'La scelgo io tra le tracce del brand'
-            : 'La compongo al primo montaggio, dal suono del brand';
+            : cut
+              ? // Montato senza tracce: la composizione non è riuscita, e il video è uscito muto.
+                'Senza musica: non sono riuscito a comporla. Rimonta per riprovare, o componila dal Profilo'
+              : 'La compongo al primo montaggio, dal suono del brand';
 
   const toggle = (track: BrandTrack) => {
     if (playing === track.id && status.playing) {

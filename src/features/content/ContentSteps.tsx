@@ -33,7 +33,7 @@ import {
   variantFormat,
   type Content,
 } from '@/domain/content';
-import { FORMAT_LABELS, type IdeaFormat, type IdeaSource } from '@/domain/idea';
+import { FORMAT_LABELS, sourceTitle, type IdeaFormat, type IdeaSource } from '@/domain/idea';
 import type { PlanSlot } from '@/domain/plan';
 import { channelsWaitingForVisual, needsMedia, stageAspect } from '@/domain/visual';
 import { DayTimePicker } from '@/features/plan/SlotPanels';
@@ -63,6 +63,7 @@ export interface WhenChoice {
 export function describeBrief(brief: IdeaSource): string {
   if (brief.kind === 'prompt') return brief.text;
   if (brief.kind === 'link') return brief.note ? `${brief.url} · ${brief.note}` : brief.url;
+  if (brief.kind === 'material') return sourceTitle(brief);
   return brief.note ? `${brief.name} · ${brief.note}` : brief.name;
 }
 

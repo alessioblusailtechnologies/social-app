@@ -31,6 +31,8 @@ export type AiTask =
   /** La musica del brand: il piano delle tracce lo scrive l'AI, le compone ElevenLabs. */
   | 'music-plan'
   | 'music'
+  /** Il materiale di chi pubblica, guardato da Gemini: un file alla volta. */
+  | 'material'
   | 'voice'
   | 'ideas'
   | 'source-ideas'
