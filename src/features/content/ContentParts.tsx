@@ -1,10 +1,21 @@
 import { ImagePlus, Play } from 'lucide-react-native';
+import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { Badge, Panel, StatusDot, Text, colors, palette, radii } from '@/design-system';
+import { Badge, Panel, StatusDot, Text, colors, palette, radii, type BadgeTone } from '@/design-system';
 import type { Brand, ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
-import type { ChannelVariant, ContentVisual, VideoScene, VoiceCheck } from '@/domain/content';
+import {
+  SCENE_SOURCES,
+  SCENE_SOURCE_LABELS,
+  readScene,
+  videoSeconds,
+  type ChannelVariant,
+  type ContentVisual,
+  type SceneSource,
+  type VideoScene,
+  type VoiceCheck,
+} from '@/domain/content';
 import type { IdeaFormat } from '@/domain/idea';
 import { ASPECT_SIZES, VISUAL_STEP_LABELS, aspectFor, brandKit, withDesignTemplates, type Aspect, type VisualStep } from '@/domain/visual';
 import { BrandAvatar } from '@/features/brand-editors';
@@ -73,7 +84,7 @@ export function VisualPreview({
           <Play size={20} color={palette.navy700} fill={palette.navy700} />
         </View>
         <Text variant="caption" color={readableOn(primary)}>
-          {visual.scenes.reduce((sum, scene) => sum + scene.seconds, 0)} secondi · {visual.scenes.length} scene
+          {videoSeconds(visual.scenes)} secondi · {visual.scenes.length} scene
         </Text>
       </View>
     );
@@ -160,28 +171,72 @@ export function PostPreview({
   );
 }
 
-export function ScenesPanel({ scenes }: { scenes: VideoScene[] }) {
+const SCENE_TONES: Record<SceneSource, BadgeTone> = {
+  shoot: 'yellow',
+  photo: 'lime',
+  broll: 'mint',
+  graphic: 'neutral',
+};
+
+/** «2 da girare · 1 foto viva · 2 grafica»: di cosa è fatto il video, nell'ordine dei tipi. */
+function sceneMix(scenes: readonly VideoScene[]): string {
+  return SCENE_SOURCES.map((source) => {
+    const count = scenes.filter((scene) => scene.source === source).length;
+    return count > 0 ? `${count} ${SCENE_SOURCE_LABELS[source].toLowerCase()}` : null;
+  })
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** Il Video Studio: lo script e la regia, scena per scena, con da dove arriva ogni immagine. */
+export function VideoStudio({
+  visual,
+  renderScene,
+}: {
+  visual: ContentVisual;
+  /** Cosa c'è sotto ogni scena: il materiale da caricare, «Non posso girarla». */
+  renderScene?: (scene: VideoScene, index: number) => ReactNode;
+}) {
+  // Le bozze di prima hanno i due tipi di allora e nessuno script.
+  const scenes = visual.scenes.map(readScene);
   return (
-    <Panel label="Scene del video" gap={0}>
-      {scenes.map((scene, i) => (
-        <View key={i} style={[styles.scene, i > 0 && styles.divider]}>
-          <View style={styles.sceneIndex}>
-            <Text variant="strongSmall">{i + 1}</Text>
-          </View>
-          <View style={styles.flex}>
-            <View style={styles.row}>
-              <Text variant="strongSmall" style={styles.flex}>
-                {scene.title} · {scene.seconds}s
-              </Text>
-              <Badge tone={scene.source === 'generated' ? 'mint' : 'yellow'} size="sm">
-                {scene.source === 'generated' ? 'La genero io' : 'Da girare'}
-              </Badge>
+    <>
+      {visual.script ? (
+        <Panel label="Script" gap={6}>
+          <Text variant="body">{visual.script}</Text>
+        </Panel>
+      ) : null}
+
+      <Panel label="Regia" action={<Text variant="value">{videoSeconds(scenes)}s</Text>} gap={0}>
+        <Text variant="caption" style={styles.mix}>
+          {sceneMix(scenes)}
+        </Text>
+        {scenes.map((scene, i) => (
+          <View key={i} style={[styles.scene, styles.divider]}>
+            <View style={styles.sceneIndex}>
+              <Text variant="strongSmall">{i + 1}</Text>
             </View>
-            <Text variant="caption">{scene.description}</Text>
+            <View style={[styles.flex, styles.sceneBody]}>
+              <View style={styles.row}>
+                <Text variant="strongSmall" style={styles.flex}>
+                  {scene.title} · {scene.seconds}s
+                </Text>
+                <Badge tone={SCENE_TONES[scene.source]} size="sm">
+                  {SCENE_SOURCE_LABELS[scene.source]}
+                </Badge>
+              </View>
+              <Text variant="caption">{scene.description}</Text>
+              {scene.overlay ? (
+                <Text variant="caption" color={colors.textTitle}>
+                  A schermo: «{scene.overlay}»
+                </Text>
+              ) : null}
+              {renderScene?.(scene, i)}
+            </View>
           </View>
-        </View>
-      ))}
-    </Panel>
+        ))}
+      </Panel>
+    </>
   );
 }
 
@@ -237,7 +292,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.85)',
   },
+  mix: { paddingBottom: 10 },
   scene: { flexDirection: 'row', gap: 10, paddingVertical: 10 },
+  sceneBody: { gap: 3 },
   divider: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
   sceneIndex: {
     width: 26,

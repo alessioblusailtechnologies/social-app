@@ -70,6 +70,24 @@ function toolStep(tool: string, input: Record<string, unknown>): { label: string
       return { label: 'Preparo la foto', detail: shorten(String(input.descrizione ?? '')) };
     case 'mcp__visivo__componi_card':
       return { label: 'Compongo la card e me la guardo' };
+    // Higgsfield (server MCP remoto di be-agent): quelli che l'utente aspetta davvero.
+    case 'mcp__higgsfield__models_explore':
+      return { label: 'Scelgo il modello giusto' };
+    case 'mcp__higgsfield__media_import_url':
+      return { label: 'Passo l’immagine al generatore' };
+    case 'mcp__higgsfield__generate_image':
+    case 'mcp__higgsfield__generate_image_batch':
+      return { label: 'Preparo l’immagine', detail: shorten(String(input.prompt ?? '')) };
+    case 'mcp__higgsfield__generate_video':
+    case 'mcp__higgsfield__generate_video_batch':
+      return { label: 'Giro la clip', detail: shorten(String(input.prompt ?? '')) };
+    case 'mcp__higgsfield__jobs_wait':
+      return { label: 'Aspetto che sia pronta: può volerci qualche minuto' };
+    // La sala di montaggio (server MCP «montaggio» di be-agent).
+    case 'mcp__montaggio__guarda':
+      return { label: `Guardo «${fileName(input.file)}»`, detail: shorten(`ai secondi ${String(input.secondi ?? '')}`) };
+    case 'mcp__montaggio__consegna':
+      return { label: 'Consegno il video', detail: shorten(String(input.cosa ?? '')) };
     default:
       return { label: 'Lavoro un momento' };
   }

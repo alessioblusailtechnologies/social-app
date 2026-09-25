@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type {
   BrandDraft,
   BrandLine,
+  BrandVideo,
   ChannelId,
   Channels,
   Identity,
@@ -153,6 +154,14 @@ const lineSchema = z.object({
   copy: z.array(text(400)).max(8),
 }) satisfies z.ZodType<BrandLine>;
 
+export const brandVideoSchema = z.object({
+  real: text(1000),
+  generated: text(1000),
+  shots: z.array(text(300)).max(10),
+  look: text(1000),
+  sound: text(600),
+}) satisfies z.ZodType<BrandVideo>;
+
 const visualSchema = z.object({
   // Sul web il logo può arrivare come data URI: il tetto sta sotto il limite del corpo.
   logoUri: text(3_000_000).nullable(),
@@ -175,6 +184,20 @@ const visualSchema = z.object({
   // La linea grafica manca nei brand salvati prima del motore delle card.
   line: lineSchema.nullable().optional(),
   examples: z.array(visualExampleSchema).max(5).optional(),
+  // Il profilo video manca nei brand salvati prima del Video Studio.
+  video: brandVideoSchema.nullable().optional(),
+  music: z
+    .array(
+      z.object({
+        id: text(60),
+        mood: text(120),
+        bpm: z.number().min(40).max(220),
+        seconds: z.number().min(3).max(600),
+        file: mediaFileSchema,
+      }),
+    )
+    .max(8)
+    .optional(),
 }) satisfies z.ZodType<Visual>;
 
 const referencesSchema = z.object({
@@ -225,6 +248,13 @@ export const visualStyleRequestSchema = z.object({
   siteSummary: text(2000).optional(),
   restart: z.boolean().optional(),
 });
+
+/** Il girato o la foto di una scena: prima si chiede dove caricarlo, poi si dice cosa si è caricato. */
+export const footageUploadSchema = z.object({ mimeType: z.string().min(3).max(60), bytes: z.number().int().positive() });
+export const footageAttachSchema = z.object({ path: z.string().min(1).max(500).nullable() });
+export const sceneLockSchema = z.object({ locked: z.boolean() });
+/** La musica del video: l'id di una traccia del brand, `null` per nessuna, `auto` perché la scelga chi monta. */
+export const contentMusicSchema = z.object({ musicId: z.string().min(1).max(60).nullable() });
 
 /** Un'immagine di riferimento come data URI: tipo e misura li controlla il servizio, come per le foto. */
 export const referenceUploadSchema = z.object({ dataUri: z.string().min(1).max(5_000_000) });

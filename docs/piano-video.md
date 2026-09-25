@@ -1,305 +1,275 @@
 # Video dei contenuti · piano di sviluppo
 
-Stato: da cominciare, deciso il 2026-09-17. Segue e riusa `docs/piano-visivi.md`.
+Stato: rivisto il 2026-09-24, dopo le prime prove con Higgsfield. Sostituisce il piano del 2026-09-17 (b-roll di
+Seedance su fal più card del brand). Segue e riusa `docs/piano-visivi.md`.
 
 ## Obiettivo
 
-Reel, storie e TikTok fatti in casa: poche clip generate dall'AI, montate dai template del brand. Coerenti tra
-loro come le card, e a un costo che regge i ripensamenti — perché è lì che si spende davvero.
+Reel, storie e TikTok che sembrano fatti da chi conosce il brand, non da una macchina. Coerenti tra loro come le
+card, e senza il sapore di AI che si sente subito: colori che virano, movimenti di gomma, posti che non esistono.
 
-Prima famiglia: **b-roll più card del brand**. Clip d'ambiente (il luogo, le mani al lavoro, il dettaglio,
-l'atmosfera) con sopra i titoli, i sottotitoli e la chiusura del brand. Niente personaggi ricorrenti, niente
-avatar che parlano: vengono dopo, e il dominio è pronto ad accoglierli.
+## Cosa abbiamo imparato
+
+Le prove per un salone di parrucchieri con Higgsfield: il colore dei capelli cambia da un fotogramma all'altro,
+il movimento non ha peso, i bordi sfarfallano. Non è un prompt da migliorare. I capelli sono migliaia di fili che
+il modello ridisegna a ogni fotogramma, e per un parrucchiere sono **il prodotto**: un colore che vira è una
+promessa falsa sul lavoro del salone. Lo stesso vale per il piatto di un ristorante, il gelato, un vestito.
 
 ## Principi
 
-- **Il modello video non gira mai il reel.** Produce solo ingredienti: clip mute di 4–6 secondi. Il montaggio —
-  testi, logo, sottotitoli, musica, stacchi, durata, ordine — lo fa sempre il brand. Un refuso o un claim da
-  cambiare non ricomprano niente.
-- **Il testo non sta mai dentro la clip generata.** Sta nell'overlay: font del brand, italiano corretto,
-  modificabile all'infinito.
-- **Quello che è del brand non si genera: si disegna.** Logo, tipografia, sfondi, forme, dati che si animano,
-  transizioni: tutto deterministico, in 3D o in 2D, dentro il nostro renderer. Si compra dal modello solo il
-  mondo reale, che non si modella (vedi «Il 3D, e cosa non compriamo»).
-- **Prima il fotogramma, poi il video.** Ogni scena nasce da un keyframe fatto con Gemini, con le foto già create
-  dal brand come riferimento di stile. Si approva l'immagine (0,067 $) prima di comprare il movimento (0,13 $).
-- **Si paga per scena, non per reel.** Ogni scena ha il suo stato e il suo lucchetto: rifarne una non ricompra le
-  altre.
-- **Due qualità.** 720p muto per provare, 1080p solo quando si approva, e solo per le scene bloccate.
-- **Niente parte da solo.** «Crea i fotogrammi», «Anima le scene», «Monta il video» sono tre gesti dell'utente,
-  come «Crea il visivo».
-- **Le scene da girare restano da girare.** Le `VideoScene` con `source: 'shoot'` non si generano: l'utente carica
-  il suo girato, e il montaggio lo tratta come le altre.
+- **Il prodotto del cliente non si genera.** Quello che il brand vende si mostra vero: girato dal cliente o dalle
+  sue foto. L'AI fa la regia, il contorno, la grafica e il montaggio.
+- **L'AI dice cosa girare, il cliente gira.** Le riprese da fare col telefono sono il materiale migliore che
+  abbiamo, e l'agente le chiede come le chiederebbe un regista: cosa, da dove, con che luce, quanto dura.
+- **Il testo non sta mai dentro una clip generata.** Sta sopra, in Remotion, coi font del brand: si corregge
+  all'infinito e non ricompra niente.
+- **La coerenza la fa il montaggio.** Stessa correzione colore e stessa grana su tutto, stacchi sul tempo della
+  musica, titoli animati dai template del brand, chiusura col logo disegnato e non generato.
+- **Decide il modello, dentro il contesto del brand.** Brief, scene e tipo di ogni scena li sceglie l'agente;
+  noi gli diamo il profilo del brand e cosa sa fare ogni strumento, non regole per settore.
+- **Niente parte da solo.** Ogni passo che costa è un gesto dell'utente, come «Crea il visivo».
 
-## Flusso nell'app
+## I quattro tipi di scena
 
-Nella schermata Contenuto, formato video. Il pannello Scene che c'è oggi diventa il pannello **Video**.
+La regia divide il video in scene di pochi secondi, e per ognuna l'agente sceglie da dove arriva l'immagine.
 
-1. **«Prepara la bozza»** scrive il testo per canale e lo storyboard — già fa questo — e in più, per ogni scena
-   `generated`, **cosa si vede** e **come si muove**. Non genera niente.
-2. **«Crea i fotogrammi»**: per ogni scena generata un keyframe con Gemini, in parallelo. Nel pannello ogni scena
-   mostra la sua immagine, la durata, la descrizione modificabile e il tipo (*La genero io · Da girare*). Le scene
-   da girare mostrano «Carica il tuo girato».
-3. Si guardano i fotogrammi e si rifà quello che non va: **«Rifai il fotogramma»**, 0,067 $. È il filtro che
-   protegge la spesa vera.
-4. **«Anima le scene»**: le clip a 720p mute, una per scena, in coda. Ogni scena ha *‹ Rivedi ›* con il suo
-   lettore, **«Rifai questa scena»** (stesso seed, descrizione cambiata) e **«Un'altra ripresa»** (seed nuovo).
-   Il **lucchetto** blocca una scena che va bene: non si tocca più e passerà in alta qualità.
-5. **«Monta il video»**: `be-render` mette insieme clip, card animate, sottotitoli e musica e restituisce l'MP4
-   9:16 di anteprima. Si rimonta quante volte si vuole: non costa AI.
-6. **All'approvazione, «Porta in alta qualità»**: si ricomprano in 1080p solo le scene bloccate, e si rimonta.
+| tipo | cosa è | chi lo fa | costo |
+|---|---|---|---|
+| **girato** (`shoot`) | una ripresa vera, con le istruzioni di cosa inquadrare | il cliente, col telefono | 0 |
+| **foto viva** (`photo`) | una foto vera del brand mossa in Remotion: zoom lento, parallasse, tendina prima/dopo | nessun modello | 0 |
+| **b-roll** (`broll`) | una clip generata di contorno: ambiente, oggetti, atmosfera, mai il prodotto | Higgsfield | a crediti |
+| **grafica** (`graphic`) | solo tipografia animata, logo, forme, dati, nei colori e nei font del brand | Remotion | 0 |
 
-Casi di confine:
+Il **testo a schermo** non è un tipo: è un livello che ogni scena può avere. La **musica** scorre sotto tutto.
 
-- **Rifai la bozza** rifà testo e storyboard. Le scene già animate restano, con «Il testo è cambiato» e
-  «Aggiorna il video»: nulla si ricrea da solo.
-- **Ritocchi del testo** toccano la didascalia, non i sottotitoli: quelli hanno il loro campo.
-- **Approvazione**: Instagram e TikTok in formato video non si pubblicano senza il montaggio pronto.
+Un reel da 20 secondi per il salone:
+
+```
+0–3 s    grafica    «3 errori che sbiadiscono il tuo colore»
+3–7 s    girato     il phon in controluce               + «1. l'acqua troppo calda»
+7–9 s    b-roll     flaconi sul bancone, luce radente   + «2. lo shampoo sbagliato»
+9–13 s   girato     la mano che passa tra i capelli     + «3. il sole senza protezione»
+13–17 s  foto viva  prima/dopo di una cliente, tendina
+17–20 s  grafica    «Prenota la tua consulenza colore» + logo
+```
+
+Per una trattoria le proporzioni cambiano da sole: più girato sull'impiattamento, b-roll di sala e cucina,
+grafica per il menù. La differenza sta nel profilo video del brand, non nel codice.
+
+## Il profilo video del brand
+
+Scritto una volta dall'agente, accanto alla linea grafica (all'onboarding, o al primo video per i brand che
+esistono già), e modificabile dal Profilo. Dice:
+
+- **cosa vende e va mostrato vero**: i capelli, il piatto, il bouquet;
+- **cosa si può generare** senza tradire nessuno: l'ambiente, i materiali, la luce;
+- **le riprese tipiche da chiedere**, nel mondo del cliente: «il phon in controluce», «l'impiattamento dall'alto»;
+- **come si muove il brand**: correzione colore, grana, ritmo, come entrano i titoli;
+- **come suona**: genere, velocità, strumenti, atmosfera.
+
+Nella cartella di lavoro diventa `VIDEO.md`, e l'agente lo legge come legge `BRAND.md`. Per i settori misti (il
+salone che vende anche prodotti, il ristorante col cocktail bar) è l'agente a scriverlo giusto, caso per caso.
+
+## Flusso nell'app: il Video Studio
+
+Nella schermata Contenuto, formato video, il passo del visivo diventa il **Video Studio**.
+
+1. **«Prepara la bozza»** scrive i testi per canale e, per il video, **lo script** (l'aggancio, lo sviluppo, la
+   chiusura, in poche righe) e **la regia**: le scene con tipo, durata, cosa si vede e testo a schermo. Solo
+   testo, costa poco. Ogni scena resta modificabile, tipo compreso.
+2. **«Monta il video»**: l'agente monta subito, anche senza girati. Dove manca una ripresa mette un cartello
+   («qui: il phon da dietro, 4 s»). Si vedono ritmo e storia prima di girare una sola scena.
+3. **I girati**: ogni scena `shoot` ha «Carica il girato». La Home ha già il compito «da girare» (`scenesToShoot`).
+   Su ogni scena girata c'è anche **«Non posso girarla»**: l'agente la rifà come foto viva, grafica o b-roll di
+   contorno, mai inventando il prodotto.
+4. **Il b-roll**, con un gesto esplicito: prima il fotogramma (Nano Banana Pro, con le foto del brand come
+   riferimento), poi il movimento. Si approva l'immagine prima di comprare la clip; ogni scena si rifà da sola e
+   si può bloccare col lucchetto.
+5. **Si rimonta** quante volte si vuole: il montaggio non costa generazioni.
+
+Casi di confine, come per le card:
+
+- **Rifai la bozza** rifà script e regia; le clip e i girati già caricati restano finché la scena esiste.
+- **Approvazione**: Instagram e TikTok in formato video non si pubblicano senza un montaggio senza cartelli.
 - **Contenuto approvato**: il video è bloccato come il testo, si sblocca con «Riapri la bozza».
 
-## Costi
+## Musica
 
-Listino fal del 17/09/2026, 9:16, formula a token `h · w · fps · durata / 1024`.
+**ElevenLabs Music**, verificato il 2026-09-24:
 
-| ingrediente | prezzo |
-|---|---|
-| keyframe (Gemini 3.1 Flash Image, 2K) | 0,067 $ |
-| clip 5 s · 720p · muta (Seedance 1.5 Pro) | 0,13 $ |
-| clip 5 s · 1080p · muta | 0,29 $ |
-| clip 5 s · 1080p · con audio del modello | 0,58 $ |
-| montaggio | 0 $ di AI |
+- API ufficiale, a consumo **0,15 $ al minuto**; licenza commerciale dal piano Starter, l'output è nostro;
+- `force_instrumental` garantisce tracce senza voce; da 3 s a 10 min; `composition_plan` per sezioni (intro,
+  crescendo, chiusura); `seed` e audio di riferimento sui modelli v2 e v2.5;
+- nessuna esclusività: tracce simili possono uscire ad altri. Per un sottofondo va bene;
+- vietati nei prompt nomi di artisti, titoli e testi: il suono si descrive in termini musicali;
+- non restituisce BPM né battiti.
 
-Un reel vero — 20 secondi, 4 scene, con due ripensamenti sui fotogrammi e due sulle clip:
+Come la usiamo:
 
-```
-6 keyframe (4 + 2 rifatti)      0,40 $
-6 clip 720p (4 + 2 rifatte)     0,78 $
-4 clip 1080p, solo le bloccate  1,17 $
-montaggi, quanti se ne vuole    0,00 $
-                                ------
-                                2,35 $
-```
+- **una libreria per brand, non una traccia per video**: 4–6 tracce strumentali di stati d'animo diversi,
+  generate al primo video dal «come suona» del profilo. La prima fa da riferimento per le altre. Un brand che
+  suona sempre uguale è riconoscibile, e si paga una volta (meno di 1 $);
+- **la velocità è fissata nel piano della traccia**, così il montaggio fa cadere gli stacchi sul tempo;
+- niente voci cantate: sono la parte più finta della musica generata.
 
-Lo stesso reel comprato tutto da Seedance 2.5 (0,473 $/s a 720p) e rifatto due volte fa **28 $**. È tutta qui la
-differenza fra un prodotto che si può usare e uno che non si può vendere.
-
-Per confronto, se un giorno servisse la coerenza forte di un personaggio ricorrente: Seedance 2.0
-reference-to-video, 0,3024 $/s a 720p (0,1814 $/s con un video di riferimento), fino a 9 immagini di riferimento e
-stacchi gestiti dal modello. Resta un'opzione per il futuro, non il motore di base.
-
-**Tetto di spesa.** `ai_usage` registra già il costo per operazione: bastano i task `frame` e `clip`, un budget
-mensile per account con blocco, e un contatore nell'app («ti restano N video in alta qualità questo mese»).
-Una cache su `(descrizione, movimento, seed, keyframe, durata, risoluzione)` fa sì che premere due volte non
-ricompri.
-
-## Il 3D, e cosa non compriamo
-
-Due mondi, e conviene tenerli separati.
-
-**Il mondo del brand lo facciamo in casa, in 3D deterministico.** Sfondi geometrici animati, logo che si muove,
-tipografia cinetica, un dato che cresce, mockup, transizioni: niente di tutto questo va chiesto a un modello.
-`@remotion/three` fa girare React Three Fiber dentro lo stesso Chromium che abbiamo già acceso
-(`chromiumOptions: { gl: 'angle' }` per il render sul server). Il che significa:
-
-- stessi componenti React, stesso bundle, stesso servizio, stesso token: zero infrastruttura nuova;
-- **l'anteprima dal vivo nell'app funziona già**: il componente DOM con `'use dom'` mostra la stessa scena che il
-  server poi registra. Con Blender questa parità non l'avremmo mai;
-- deterministico: stesso input, stesso fotogramma. Ogni ripensamento costa CPU, non dollari;
-- `useOffthreadVideoTexture()` mette una clip AI come texture dentro la scena: il b-roll che scorre su una
-  superficie del brand.
-
-**Il mondo reale lo compriamo.** Il salone, le mani che lavorano, il piatto, la strada: roba che nessuno modella
-in 3D per un post.
-
-### La passata unica alla Blender
-
-L'idea — costruisco la scena in 3D, la rifaccio quante volte voglio gratis, e pago il modello una volta sola per
-renderla fotorealistica — funziona davvero, e si chiama video-to-video guidato dalla struttura. Blender ha un
-vantaggio secco: i passaggi di **profondità e maschera li esporta lui**, quindi non si paga l'estrazione
-(0,04 $/s). La passata costa 0,05 $/s a 480p e 0,10 $/s a 720p (famiglia Wan VACE su fal): 2 $ per venti secondi
-a 720p.
-
-Da sapere prima di innamorarsene:
-
-- **Non è più economica** del b-roll (0,52–1,17 $ per lo stesso reel). Compra *controllo e coerenza*, non un
-  prezzo più basso. Quello che diventa gratis è l'iterazione prima della passata finale.
-- **Il costo si sposta sull'asset**: nessuno dei nostri clienti ha una scena 3D del suo negozio, e costruirla non
-  si automatizza per post. Regge solo con una libreria di scene riusabili parametrizzate dal kit del brand.
-- **E sulla macchina**: Blender headless in Docker, EEVEE senza GPU gira in software ed è lento, Cycles su CPU è
-  fuori discussione. Servirebbe una macchina con GPU (che Render non dà) e un'immagine più grande di un giga.
-
-Quindi non ora. Ma `VideoShot.clip` non sa da dove arriva la clip: il giorno che servisse un prodotto fisico
-riconoscibile o una simulazione vera, la strada si innesta senza toccare il resto.
-
-### Piattaforme che non integriamo
-
-- **Higgsfield**: la cosa che vale sono i movimenti di macchina nominati (dolly, crash zoom, corpo macchina,
-  ottica) al posto dei prompt a caso. Ma è a crediti in abbonamento (15 / 39 / 99 $ al mese, che non si cumulano)
-  con l'API appoggiata sopra: per un SaaS multi-cliente vuol dire rivendere l'abbonamento di un altro, pagando a
-  vuoto i mesi scarichi e andando a muro in quelli pieni. L'idea la copiamo — preset di movimento invece di testo
-  libero — il servizio no.
-- **MaxFusion**: UGC con attori AI, voci ElevenLabs, prodotto in mano. È la famiglia «avatar che parla», già
-  scartata, e per i nostri clienti un finto cliente soddisfatto è un rischio di reputazione oltre che un contenuto
-  da etichettare.
-
-## Modello
-
-`ContentVisual` guadagna `video: VideoDesign | null` (nullo per i post), accanto a `design`.
-
-```ts
-type VideoQuality = 'draft' | 'final';   // 720p muto · 1080p
-type ShotStatus = 'proposed' | 'framing' | 'framed' | 'animating' | 'ready' | 'failed';
-
-interface VideoShot {
-  /** Titolo, durata e tipo restano nella VideoScene di pari indice. */
-  description: string;      // cosa si vede, modificabile
-  motion: string;           // come si muove la camera o il soggetto
-  seed: number;             // fisso: si rifà senza cambiare il look
-  frame: MediaFile | null;  // il keyframe, da Gemini o caricato
-  clip: MediaFile | null;   // la clip, generata o il girato dell'utente
-  quality: VideoQuality;    // di che qualità è la clip che c'è adesso
-  locked: boolean;          // approvata: non si tocca, e va in alta qualità
-  status: ShotStatus;
-  error: string | null;
-}
-
-interface VideoDesign {
-  shots: VideoShot[];              // una per scena, anche per quelle da girare
-  captions: boolean;               // sottotitoli dal testo che abbiamo già scritto
-  musicId: string | null;          // dalla libreria, non generata
-  voice: 'none' | 'tts';
-  quality: VideoQuality;           // quella del montaggio attuale
-  cut: MediaFile | null;           // l'MP4
-  status: 'proposed' | 'working' | 'ready' | 'failed';
-  step: 'frame' | 'clip' | 'assemble' | null;
-  error: string | null;
-}
-```
-
-Le descrizioni sono **semantiche**: cosa si vede e come si muove, non «prompt per Seedance». Il prompt vero lo
-compone il server, come già fa `photoPrompt`, aggiungendo lo stile del brand.
-
-### Formato
-
-Un solo formato: 9:16, 1080 × 1920 (720 × 1280 in bozza), 24 fps. Instagram e TikTok lo vogliono così; per
-Facebook e LinkedIn lo stesso file va bene. Il 1:1 e il 16:9 vengono dopo, se servono.
+Suno è stato scartato: non ha un'API pubblica, e i servizi che la simulano passano da account Suno senza
+trasferire i diritti commerciali.
 
 ## Architettura
 
 ```
-App ─ pannello Video: scene, fotogrammi, lettore per scena, montaggio finale
+App ─ Video Studio: script, regia, girati, lettore del montaggio
  │
- └─► API (be-node) ── storyboard + descrizioni nella bozza (Agent SDK)
-        │            ── coda presenza.visual_jobs: 'frame' | 'clip' | 'assemble'
-        │                 ├─ Gemini: keyframe (come le foto delle card)
-        │                 ├─ fal Seedance 1.5 Pro: image-to-video, coda asincrona
-        │                 └─ be-render: MP4 ──► Supabase Storage (presenza-media)
-        └─ contenuti con URL firmati
-be-render ─ overlay animati con Remotion + montaggio con ffmpeg
+ └─► API (be-node, avviata da be-agent)
+        ├─ bozza: script + regia nell'output strutturato (Agent SDK)
+        ├─ coda: lavori video per contenuto
+        └─ be-agent, compito 'video', nella cartella del brand:
+             ├─ BRAND.md, VIDEO.md, linea/, esempi/, media/ (girati e foto del brand)
+             ├─ Higgsfield (MCP): fotogrammi e b-roll, i file copiati nella libreria
+             ├─ ElevenLabs: le tracce del brand
+             ├─ remotion/: il montaggio lo scrive l'agente, in React
+             └─ guarda · consegna: vede i fotogrammi, mette l'MP4 nella libreria
 ```
 
-- **Un lavoro per scena.** `visual_jobs.kind` guadagna `'frame'`, `'clip'` e `'assemble'`. Il parallelismo e il
-  rework granulare vengono gratis dalla coda che c'è già, con `for update skip locked` e la ripresa dopo un
-  riavvio.
-- **Chiamate lunghe.** Una clip ci mette 1–3 minuti: serve la **coda asincrona di fal** (`queue.submit` più
-  polling), non la chiamata sincrona che usiamo per BiRefNet. Il timeout del lavoro sale, e l'app — che rilegge
-  ogni due secondi — mostra a che punto è ogni scena.
-- **`media/video.ts`**: un `VideoGenerator` con la stessa forma di `ImageGenerator` e `CutoutService` —
-  `available`, `generate()`, consumi in `ai_usage`, `assertPublicUrl` sul risultato. Stessa `FAL_KEY` dello
-  scontorno.
-- **Il confine dentro be-render.** Due pezzi separati, apposta:
-  - **overlay**: Remotion disegna solo la parte animata del brand (titolo, sottotitoli, firma, chiusura) come
-    WebM con canale alpha, o come PNG con alpha nella prima fase. Pochi secondi di render, non venti. È anche il
-    posto dove entra il 3D, con `@remotion/three` e `chromiumOptions: { gl: 'angle' }`.
-  - **montaggio**: ffmpeg concatena le clip, sovrappone gli overlay, mette la musica e codifica l'MP4.
+- Il montaggio è già dove serve: `be-agent/src/video.ts` prepara il progetto Remotion nella cartella di lavoro,
+  ffmpeg è quello di Remotion, `guarda` gli restituisce i fotogrammi e `consegna` porta il file nella libreria.
+  Un hook `Stop` non lo lascia uscire senza aver consegnato.
+- Higgsfield entra con il token della sessione del CLI (`higgsfield auth login`), e l'agente vede solo i tool che
+  generano (63 su 69): niente pubblicazioni su TikTok, acquisti o esecuzione di codice remoto.
+- **Storage**: stesso bucket privato `presenza-media`, percorsi `account/brand/uuid.ext`, firmati alla lettura.
 
-  Così Chromium non deve disegnare seicento fotogrammi (tempi e memoria crollano) e, se la licenza Remotion
-  diventasse un problema, si sostituisce solo l'overlay: il montaggio resta dov'è.
-- **Storage**: stesso bucket privato `presenza-media`, stessi percorsi `account/brand/uuid.mp4`, stessa firma
-  alla lettura.
+## Modello
 
-## Contratto API (nuove rotte)
+```ts
+type SceneSource = 'shoot' | 'photo' | 'broll' | 'graphic';
 
-| Metodo | Percorso | Corpo | Risposta |
-|---|---|---|---|
-| PUT | `/api/contents/:id/video` | `VideoEdit` | `Content` (descrizioni, sottotitoli, musica; senza AI) |
-| POST | `/api/contents/:id/video/frames` | | `Content` (keyframe di tutte le scene generate) |
-| POST | `/api/contents/:id/video/shots/:i/frame` | | `Content` (rifà un keyframe) |
-| POST | `/api/contents/:id/video/shots/:i/clip` | `{ take: 'same' o 'new' }` | `Content` (anima una scena) |
-| POST | `/api/contents/:id/video/shots/:i/upload` | `{ dataUri }` | `Content` (il girato dell'utente) |
-| POST | `/api/contents/:id/video/animate` | | `Content` (anima le scene che non hanno clip) |
-| POST | `/api/contents/:id/video/assemble` | | `Content` (monta) |
-| POST | `/api/contents/:id/video/final` | | `Content` (1080p delle scene bloccate, poi rimonta) |
+interface VideoScene {
+  title: string;
+  description: string;   // cosa si vede; per un girato, come girarlo
+  seconds: number;
+  source: SceneSource;
+  overlay: string;       // il testo a schermo, vuoto se non ce n'è
+}
 
-`be-render`: `POST /reel` con `{ kit, shots: [{ clipUrl, seconds, overlay }], captions, musicId, aspect }` e
-`x-render-token` → `video/mp4`.
+interface ContentVisual {
+  // ...
+  script: string;        // lo script del video, vuoto negli altri formati
+  scenes: VideoScene[];
+}
+```
+
+Le bozze salvate prima di questo piano hanno `source: 'generated'`, che allora voleva dire «testo a schermo o
+grafica»: si leggono come `graphic`.
+
+Nelle fasi dopo, ogni scena guadagna i suoi file (il girato, il fotogramma, la clip, lo stato, il lucchetto) e il
+contenuto un `VideoCut` con l'MP4 montato, lo stato del lavoro e la traccia usata.
+
+## Costi
+
+Da misurare al primo giro vero con Higgsfield: è a crediti in abbonamento, e il prezzo di una clip dipende dal
+modello che l'agente sceglie. Quello che sappiamo già:
+
+| ingrediente | prezzo |
+|---|---|
+| script e regia | una bozza di testo |
+| girato, foto viva, grafica, montaggio | 0 $ di generazioni |
+| libreria musicale del brand, 6 tracce da 1 min | circa 0,90 $, una volta |
+| b-roll | crediti Higgsfield, da misurare |
+
+La scelta dei tipi di scena è anche la leva del costo: un video fatto di girati, foto e grafica non compra niente.
+
+**Tetto di spesa.** `ai_usage` registra già il costo per operazione: servono un budget per video e uno mensile
+per account, i modelli di Higgsfield ammessi, e un contatore nell'app.
 
 ## Fasi
 
-### Fase 1 · Dominio
+### Fase 1 · Script e regia
 
-- [ ] `src/domain/video.ts`: tipi, formato, formule di costo, passi della creazione, regole di approvazione
-- [ ] `ContentVisual.video` e storyboard con descrizione e movimento
-- [ ] test del dominio
+- [x] dominio: `SceneSource` a quattro tipi, testo a schermo, script; le bozze vecchie si leggono
+- [x] la bozza scrive script e regia coi quattro tipi
+- [x] mock allineato
+- [x] Video Studio nell'app: script, scene con tipo, durata e testo a schermo
 
-### Fase 2 · Flusso nell'app, sul mock
+### Fase 2 · Profilo video del brand
 
-- [ ] pannello Video: scene con fotogramma, lettore, lucchetto, ripresa nuova
-- [ ] clip e montaggio finti nel mock, con i passi e l'avanzamento
-- [ ] anteprima del post col video, regole di approvazione
+- [x] `brand.visual.video` nel dominio, e nel Profilo (sezione Visivo) da correggere a mano o rifare
+- [x] si scrive con la prima linea, in parallelo; al primo video per i brand che non ce l'hanno, prima della regia
+- [x] la regia della bozza lo riceve nel prompt; `VIDEO.md` nella cartella di lavoro dell'agente
 
-### Fase 3 · Generazione
+### Fase 3 · Montaggio con i cartelli
 
-- [ ] keyframe con Gemini, riusando `photoPrompt` e le foto del brand come riferimento
-- [ ] `media/video.ts`: Seedance 1.5 Pro su fal, coda asincrona, 720p e 1080p
-- [ ] coda: lavori `frame`, `clip`, `assemble`, uno per scena
-- [ ] consumi in `ai_usage` (`frame`, `clip`) e tetto per account
+- [x] il lavoro `video-cut` in coda, con i passi visibili come gli altri; ripreso se si esce e si rientra
+- [x] «Monta il video»: l'agente monta grafica, testi e cartelli al posto del materiale mancante, senza Higgsfield
+  (`generate: false`), in una sottocartella per contenuto (`video/<id>/`)
+- [x] il lettore nel Video Studio (`expo-video`), l'MP4 firmato alla lettura; «la regia è cambiata» con `cutKey`
 
-### Fase 4 · Montaggio
+### Fase 4 · I girati del cliente
 
-- [ ] `be-render`: `POST /reel`, overlay Remotion con alpha, montaggio ffmpeg, sottotitoli, musica
-- [ ] ffmpeg nel Dockerfile, prova in locale di un reel intero
+- [x] «Carica il girato» (o la foto, per una foto viva) per scena, dal Video Studio; il compito «da girare» della
+  Home porta lì e conta solo le scene senza girato. Il file va dritto nel bucket con un indirizzo firmato di
+  caricamento (`storage.uploadUrl`), poi si conferma il percorso: un girato non passa dall'API
+- [x] «Non posso girarla»: la scena rifatta dalla regia con un altro tipo (lavoro `video-scene`, coi passi)
+- [x] il materiale caricato arriva nella cartella del montaggio (`media/scena-N.ext`); le foto del brand sono già
+  in `esempi/foto/` e `riferimenti/`
 
-### Fase 4 bis · Il brand in movimento (3D)
+Il materiale si carica e il video si rimonta anche a contenuto approvato: si gira dopo aver deciso cosa girare, ed
+è proprio la Home a chiederlo per le uscite programmate. Cambiare la regia («Non posso girarla», rifare la bozza)
+resta bloccato fino a «Riapri la bozza». La regola «niente video pubblicato coi cartelli» arriva con la Fase 5: oggi
+bloccherebbe ogni video con una scena di b-roll, che non si può ancora generare.
 
-- [ ] `@remotion/three` in `be-render` e `gl: 'angle'`; una scena di prova che regge il render headless
-- [ ] due o tre scene parametrizzate dal kit: sfondo geometrico, titolo in tipografia cinetica, chiusura col logo
-- [ ] le stesse scene nell'anteprima dal vivo dell'app (`'use dom'`), come già fanno le card
+### Fase 5 · B-roll
 
-### Fase 5 · Deploy
+- [x] fotogramma prima, clip dopo, con un gesto per ciascuno (lavori `video-frame` e `video-clip`): l'agente riceve
+  le foto del brand e il fotogramma come indirizzi firmati, genera con Higgsfield, e non esce finché non è arrivato
+  un file (`waitBeforeLeaving`)
+- [x] rifai il fotogramma (butta la clip), un'altra ripresa, lucchetto; il montaggio usa le clip
+- [x] tetto per account: fotogrammi e clip riusciti nel mese, contati in `ai_usage` (`BROLL_MONTHLY_LIMITS`)
+- [x] la regola «niente video coi cartelli» vale per **pubblicare adesso** su Instagram e TikTok; programmare si può
+  (si gira dopo aver programmato, è la Home a chiederlo)
+- [ ] i crediti veri di Higgsfield: `ai_usage` oggi registra il costo di Claude, non quello della clip
+- [ ] le due qualità: 720p per provare, 1080p per le scene bloccate
 
-- [ ] piano a pagamento per `be-render` (2 GB) e tempi della coda
+### Fase 6 · Musica
+
+- [x] ElevenLabs Music (`media/music.ts`, `composition_plan`, `force_instrumental`): la libreria del brand
+  (`brand.visual.music`, 4–6 tracce) dal «come suona» del profilo. Il piano lo scrive l'agente (`music-plan`), le
+  tracce si compongono in parallelo; consumi in `ai_usage` (task `music`, 0,15 $/min)
+- [x] nasce al primo montaggio se manca (se non riesce, si monta senza); dal Profilo si ascolta e si rifà
+  (lavoro `brand-music`, lettore `expo-audio`)
+- [x] velocità nel piano della traccia; chi monta sceglie la traccia, la taglia e fa cadere gli stacchi sul tempo;
+  il montaggio ricorda quale ha usato (`cut.trackId`)
+- [x] la musica nel Video Studio: la riga «Musica» del montaggio dice quale suona, la fa ascoltare e la cambia
+  (`content.visual.musicId`: assente = sceglie chi monta, `null` = senza, un id = quella traccia). Cambiarla non
+  costa generazioni: il montaggio risulta da rifare (la scelta entra in `cutKey`)
+
+### Fase 7 · Deploy
+
+- [ ] macchina per il montaggio (Remotion e ffmpeg non girano sui 512 MB gratuiti)
+- [ ] la sessione di Higgsfield su un server senza nessuno davanti
 - [ ] `render.yaml`, `.env.example`, README
 
 ## Decisioni aperte
 
-1. **Licenza Remotion.** La licenza gratuita vale «per individui e aziende fino a 3 persone», senza iscrizione:
-   se siamo dentro quella soglia copre i video come già copre i PNG, e non aggiungiamo un rischio nuovo. Il piano
-   «Remotion for Automators» (0,01 $ a render, **minimo 100 $ al mese**) è pensato per le app che generano video
-   per i propri utenti, che è quello che siamo: la soglia è sulle persone, la descrizione è sull'uso, e le due
-   cose non combaciano. Va mandata **una sola email** a Remotion che chiede tutte e due le cose — se gli still
-   contano e se l'overlay animato di un'app come questa sta nella licenza gratuita. Nel frattempo si parte, e il
-   confine overlay/montaggio tiene aperta la porta.
-2. **Macchina.** Il montaggio non gira sui 512 MB gratuiti: piano standard da 2 GB e 25 $ al mese. I tempi
-   passano da secondi a minuti.
-3. **`FAL_KEY`**: già aperta per lo scontorno, qui diventa obbligatoria.
-4. **Musica**: una libreria con licenza chiara (poche tracce scelte, non generate) da mettere su Storage.
-5. **Voce**: per ora nessuna. Il TTS italiano è un capitolo a parte, e i sottotitoli coprono già la comprensione
-   senza audio, che è come si guardano i reel.
-6. **Blender e la passata guidata**: rimandata, non scartata. Si riapre quando un cliente porta un prodotto
-   fisico riconoscibile, o quando la libreria di scene riusabili vale il lavoro di costruirla. Prima di allora
-   servono una macchina con GPU e qualcuno che modelli.
+1. **Licenza ElevenLabs.** I termini parlano di accordi a parte per chi rivende o incorpora i loro servizi per
+   terzi (sezione 17, «OEM Terms»). Una mail per sapere se un'app che mette la musica nei video che consegna ai
+   suoi clienti ci rientra. Nel frattempo si sviluppa.
+2. **Licenza Remotion.** Gratuita fino a 3 persone; il piano «for Automators» (minimo 100 $ al mese) è pensato
+   per chi genera video per i propri utenti. Una mail sola che chieda se l'uso di un'app come questa sta nella
+   licenza gratuita.
+3. **Higgsfield in un SaaS.** Un solo account a crediti, con la sessione del CLI che ruota il token: regge per
+   sviluppare. Per la produzione vanno chiariti i termini di rivendita e cosa succede nei mesi pieni.
+4. **Voce fuori campo.** Per ora no: testo a schermo e musica. Il TTS italiano c'è (Higgsfield porta ElevenLabs
+   e altri), ma è un capitolo a parte.
+5. **Audio di tendenza su TikTok.** Aiuta la diffusione, ma non passa da noi. Per ora solo la musica del brand.
 
 ## Rischi e limiti
 
-- **L'audio del modello non si compra**: raddoppia il prezzo, non è controllabile e in italiano non è affidabile.
-  Le clip si chiedono mute.
-- **Deriva fra le scene**: il keyframe e il seed fisso la contengono, ma due scene restano due riprese diverse.
-  Per il b-roll va benissimo; per una storia con un personaggio riconoscibile no, e lì servirà Seedance 2.x.
-- **Tempi**: un reel da quattro scene sono 3–5 minuti di attesa. Il pannello deve dirlo, e il lavoro deve
+- **Persone generate.** Un finto cliente o un finto titolare è un rischio di reputazione. Persone solo di spalle,
+  mani o lontane; i volti veri solo dal girato del cliente.
+- **Deriva fra le scene di b-roll**: il fotogramma di partenza la contiene, ma due clip restano due riprese. Per
+  il contorno va bene, e la correzione colore comune del montaggio fa il resto.
+- **Il cliente che non gira**: il video non deve dipendere da lui. Con «Non posso girarla» ogni scena ha
+  un'alternativa, e un video di sole foto vive e grafica resta un video vero.
+- **Tempi**: il montaggio sono minuti, il b-roll anche. Il pannello deve mostrare i passi, e il lavoro deve
   sopravvivere a un riavvio (la coda lo fa già).
-- **Filigrane**: i keyframe di Gemini portano SynthID invisibile. Se le clip di fal escano con una filigrana
-  visibile va verificato al primo giro vero, prima di costruirci sopra.
-- **Dati fuori dall'UE**: le clip passano da fal e da un modello ByteDance, come i testi passano da DeepSeek.
-- **Volti**: per un personal brand non si genera il volto della persona. Si carica il suo girato, oppure la scena
-  resta `shoot`.
+- **Dati fuori dall'UE**: clip e musica passano da Higgsfield ed ElevenLabs.

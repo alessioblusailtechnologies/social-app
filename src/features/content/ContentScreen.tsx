@@ -27,7 +27,7 @@ import {
 } from '@/design-system';
 import { isConnected, type Brand, type ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
-import { channelsWithoutImage, type Content } from '@/domain/content';
+import { channelsWaitingForVideo, channelsWithoutImage, type Content } from '@/domain/content';
 import { FORMAT_LABELS, type IdeaFormat } from '@/domain/idea';
 import { nextFreeDay, SLOT_STATUS_LABELS, type PlanSlot } from '@/domain/plan';
 import { channelsWaitingForVisual } from '@/domain/visual';
@@ -146,6 +146,8 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
   // Instagram e TikTok non pubblicano senza immagine; gli altri canali possono uscire solo testo, se lo scegli.
   const waiting = content ? channelsWaitingForVisual(content.format, channels, design, channelsWithoutImage(content)) : [];
   const creatingVisual = design?.status === 'creating';
+  /** Un video con dei cartelli si programma, ma non esce adesso. */
+  const videoWaiting = content ? channelsWaitingForVideo(content) : [];
   const unconnected = channels.filter((candidate) => !isConnected(brand.channels[candidate]));
 
   // Approvato o pubblicato si guarda soltanto: il riepilogo racconta com'è uscito.
@@ -263,7 +265,14 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
       </Button>
     </>
   ) : current === 'when' ? (
-    <Button size="lg" block onPress={() => goTo('review')}>
+    <Button
+      size="lg"
+      block
+      disabled={when.mode === 'now' && videoWaiting.length > 0}
+      onDisabledPress={() =>
+        toast(`Il video non è pronto per ${videoWaiting.map(channelName).join(' e ')}: monta coi girati, senza cartelli. Programmarlo intanto si può.`)
+      }
+      onPress={() => goTo('review')}>
       Continua
     </Button>
   ) : !locked ? (
@@ -304,7 +313,7 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
         : `Scrivo il testo per ${channelNames} seguendo la tua scheda voce.`
       : current === 'visual'
         ? content?.format === 'video'
-          ? 'Le scene del video, con quelle che genero io e quelle da girare.'
+          ? 'Lo script e la regia del video: cosa giri tu, cosa parte dalle tue foto, cosa genero io.'
           : 'La card che accompagna il testo, con i colori e i caratteri del brand.'
         : current === 'when'
           ? 'Mettila in calendario, falla uscire adesso, oppure tienila da parte.'
@@ -458,6 +467,7 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
               onChannel={setSelectedChannel}
               locked={locked}
               drawingSteps={running.kind === 'visual-design' ? running.steps : undefined}
+              cuttingSteps={running.kind === 'video-cut' ? running.steps : undefined}
             />
           )}
 

@@ -1,4 +1,4 @@
-import type { BrandKind, BrandLine, Identity, ImageStyle, VisualExample } from '@/domain/brand';
+import type { BrandKind, BrandLine, BrandVideo, Identity, ImageStyle, VisualExample } from '@/domain/brand';
 import { AUDIENCES, channelName, GOALS } from '@/domain/catalog';
 import { exampleChannels, sameReferences, templateFallback } from '@/domain/line';
 import { aspectFor, brandKit, cleanCardText, clip, defaultLine } from '@/domain/visual';
@@ -14,6 +14,7 @@ import {
   pickedDetail,
   POSITIONING_STEPS,
   THINKING_STEP,
+  VIDEO_PROFILE_STEPS,
   VISUAL_STEPS,
   WEBSITE_STEPS,
 } from '../ai-steps';
@@ -287,7 +288,20 @@ export function createMockAiService(): AiService {
         },
         line,
         examples,
+        // Come nel backend: il profilo video nasce con la prima linea.
+        ...(!visual.video && { video: mockVideoProfile(identity) }),
       };
+    },
+
+    async proposeVideoProfile({ identity }, onSteps) {
+      const log = createStepLog(onSteps);
+      log.start(THINKING_STEP, VIDEO_PROFILE_STEPS.thinking);
+      await delay(latency(1200, 1800));
+      log.drop(THINKING_STEP);
+      const profile = mockVideoProfile(identity);
+      log.start('done', VIDEO_PROFILE_STEPS.done, `${profile.shots.length} riprese da chiedere`);
+      log.finish('done');
+      return profile;
     },
 
     async analyzeVoice(voiceSample, identity) {
@@ -325,5 +339,22 @@ export function createMockAiService(): AiService {
         avoid: `${AVOID_BASE}, frasi fatte da comunicato stampa.`,
       };
     },
+  };
+}
+
+/** Il mock non conosce il settore: un profilo video generico, che dice quello che vale per quasi tutti. */
+export function mockVideoProfile(identity: Identity): BrandVideo {
+  const who = identity.name || 'il brand';
+  return {
+    real: `Il lavoro di ${who} e i suoi risultati: quello che si vende si mostra com'è, girato o in foto.`,
+    generated: 'Il luogo vuoto prima di aprire, gli attrezzi, i materiali da vicino, la luce che entra dalla finestra.',
+    shots: [
+      'Le mani al lavoro, dall’alto, con la luce della finestra di lato',
+      'Il risultato finito, da vicino, girandoci attorno lentamente',
+      'Il luogo di lavoro la mattina, un’inquadratura ferma di 5 secondi',
+      'Un dettaglio del materiale, a pochi centimetri',
+    ],
+    look: 'Colori naturali e caldi, un filo di grana, stacchi puliti ogni 2-3 secondi, titoli che salgono dal basso.',
+    sound: 'Strumentale acustico, chitarra e percussioni leggere, intorno ai 100 bpm, luminoso e tranquillo.',
   };
 }

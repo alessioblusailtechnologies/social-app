@@ -25,3 +25,13 @@ export async function recordUsage(db: Queryable, usage: AiUsage): Promise<void> 
     ],
   );
 }
+
+/** Quante generazioni riuscite di un'operazione ha fatto l'account nel mese in corso: serve ai tetti di spesa. */
+export async function countThisMonth(db: Queryable, accountId: string, task: AiUsage['task']): Promise<number> {
+  const { rows } = await db.query<{ count: string }>(
+    `select count(*) from presenza.ai_usage
+      where account_id = $1 and task = $2 and outcome = 'ok' and created_at >= date_trunc('month', now())`,
+    [accountId, task],
+  );
+  return Number(rows[0]?.count ?? 0);
+}

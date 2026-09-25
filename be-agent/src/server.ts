@@ -10,6 +10,7 @@ import { config } from '../../be-node/src/config';
 import { recordUsage } from '../../be-node/src/data/usage';
 import { db } from '../../be-node/src/db/pool';
 import { falCutout, unavailableCutout } from '../../be-node/src/media/cutout';
+import { elevenLabsMusic, unavailableMusic } from '../../be-node/src/media/music';
 import { geminiImages, unavailableImages } from '../../be-node/src/media/images';
 import { httpRenderer } from '../../be-node/src/media/renderer';
 import { supabaseStorage } from '../../be-node/src/media/storage';
@@ -83,6 +84,9 @@ const app = buildApp({
       ? geminiImages({ apiKey: settings.GEMINI_API_KEY, model: settings.IMAGE_MODEL, log, recordUsage: storeUsage })
       : unavailableImages,
     cutout: settings.FAL_KEY ? falCutout({ apiKey: settings.FAL_KEY, log, recordUsage: storeUsage }) : unavailableCutout,
+    music: settings.ELEVENLABS_API_KEY
+      ? elevenLabsMusic({ apiKey: settings.ELEVENLABS_API_KEY, model: settings.MUSIC_MODEL, log, recordUsage: storeUsage })
+      : unavailableMusic,
     renderer,
     vision: settings.GEMINI_API_KEY
       ? geminiVision({ apiKey: settings.GEMINI_API_KEY, model: settings.VISION_MODEL, log, recordUsage: storeUsage })

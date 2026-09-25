@@ -31,7 +31,7 @@ const content = (overrides: Partial<Content>): Content => ({
   channels: ['linkedin'],
   format: 'post',
   variants: [],
-  visual: { headline: '', slides: [], scenes: [], design: null },
+  visual: { headline: '', slides: [], script: '', scenes: [], design: null },
   status: 'draft',
   revision: 0,
   createdAt: TODAY,
@@ -41,9 +41,9 @@ const content = (overrides: Partial<Content>): Content => ({
 });
 
 const scenes: VideoScene[] = [
-  { title: 'Apertura', description: '', seconds: 4, source: 'shoot' },
-  { title: 'Il punto', description: '', seconds: 8, source: 'shoot' },
-  { title: 'Chiusura', description: '', seconds: 3, source: 'generated' },
+  { title: 'Apertura', description: '', seconds: 4, source: 'shoot', overlay: '' },
+  { title: 'Il punto', description: '', seconds: 8, source: 'shoot', overlay: '' },
+  { title: 'Chiusura', description: '', seconds: 3, source: 'graphic', overlay: '' },
 ];
 
 describe('homeTasks', () => {
@@ -68,7 +68,7 @@ describe('homeTasks', () => {
       slot({ id: 'post', date: '2026-09-18', status: 'scheduled', ideaId: 'idea' }),
     ];
     const contents = [
-      content({ id: 'c1', slotId: 'video', format: 'video', visual: { headline: '', slides: [], scenes, design: null }, status: 'approved' }),
+      content({ id: 'c1', slotId: 'video', format: 'video', visual: { headline: '', slides: [], script: '', scenes, design: null }, status: 'approved' }),
       content({ id: 'c2', slotId: 'post', status: 'approved' }),
     ];
     const tasks = homeTasks(slots, contents, TODAY);

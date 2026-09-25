@@ -151,7 +151,7 @@ describe('visivi', () => {
       image: { description: '', source: 'generated' as const, photo: { path: 'a/b/foto.png', url: 'https://scaduto' }, cutout: null },
       renders: [{ page: 0, aspect: '4:5' as const, file: { path: 'a/b/card.png', url: 'https://scaduto' } }],
     };
-    const visual = { headline: '', slides: [], scenes: [], design };
+    const visual = { headline: '', slides: [], script: '', scenes: [], design };
     expect(unsignedVisual(visual).design?.image.photo?.url).toBe('');
     expect(unsignedVisual({ ...visual, design: undefined as never }).design).toBeNull();
 
@@ -163,6 +163,7 @@ describe('visivi', () => {
         calls += 1;
         return Promise.resolve(new Map(paths.map((path) => [path, `https://firmato/${path}`])));
       },
+      uploadUrl: () => Promise.reject(new Error('non serve')),
     };
     const content = { id: 'c1', visual } as unknown as Content;
     const [first, second] = await signContents(storage, [content, { ...content, id: 'c2' }]);

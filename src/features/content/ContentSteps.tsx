@@ -42,7 +42,9 @@ import { formatWeekdayShort } from '@/lib/dates';
 import { useEditVariant, useSetVariantLayout } from '@/services/queries';
 import type { AiStep } from '@/services/types';
 
-import { PostPreview, ScenesPanel, VisualPreview, VoicePanel } from './ContentParts';
+import { PostPreview, VideoStudio, VisualPreview, VoicePanel } from './ContentParts';
+import { SceneMaterial } from './SceneMaterial';
+import { VideoCutPanel } from './VideoCutPanel';
 
 /** I quattro passi di un contenuto: prima il testo, poi il visivo, poi quando esce, infine la conferma. */
 export const CONTENT_STEPS = ['text', 'visual', 'when', 'review'] as const;
@@ -274,13 +276,15 @@ export interface VisualStepProps {
   locked: boolean;
   /** I passi di un disegno della card ripreso da prima: senza, li mostra chi l'ha chiesto. */
   drawingSteps?: AiStep[];
+  /** I passi di un montaggio ripreso da prima. */
+  cuttingSteps?: AiStep[];
 }
 
 /**
  * Il visivo, canale per canale: il formato con cui esce lì e, dove il canale lo permette, nessuna immagine.
  * Il testo non si tocca: qui si decide solo come si vede.
  */
-export function VisualStep({ brand, content, channels, channel, onChannel, locked, drawingSteps }: VisualStepProps) {
+export function VisualStep({ brand, content, channels, channel, onChannel, locked, drawingSteps, cuttingSteps }: VisualStepProps) {
   const toast = useToast();
   const setLayout = useSetVariantLayout();
 
@@ -354,9 +358,14 @@ export function VisualStep({ brand, content, channels, channel, onChannel, locke
         </Panel>
       ) : format === 'video' ? (
         <>
-          <ScenesPanel scenes={content.visual.scenes} />
+          <VideoStudio
+            visual={content.visual}
+            renderScene={(scene, index) => <SceneMaterial content={content} scene={scene} index={index} locked={locked} />}
+          />
+          <VideoCutPanel brand={brand} content={content} locked={locked} cuttingSteps={cuttingSteps} />
           <Text variant="caption">
-            Le scene «Da girare» le riprendi tu; le altre le genero io quando il video entra in lavorazione.
+            Le scene «Da girare» le riprendi tu col telefono, e quello che vendi si mostra sempre vero. Le foto vive
+            partono dalle tue foto, il b-roll è solo contorno, la grafica è nei colori del brand.
           </Text>
         </>
       ) : (

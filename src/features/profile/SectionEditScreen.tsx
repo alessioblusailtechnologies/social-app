@@ -70,6 +70,7 @@ export function SectionEditScreen({ brand, sectionKey }: { brand: Brand; section
       <FormScrollView contentContainerStyle={screenStyles.content}>
         <ScreenTitle title={title} subtitle={subtitle} />
         <SectionEditor
+          brandId={brand.id}
           sectionKey={sectionKey}
           draft={draft}
           insights={null}

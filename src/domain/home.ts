@@ -1,6 +1,6 @@
 import { addDays } from '@/lib/dates';
 
-import type { Content } from './content';
+import { scenesWaitingFootage, type Content } from './content';
 import type { PlanSlot, SlotStatus } from './plan';
 
 /**
@@ -35,7 +35,8 @@ const bySchedule = (a: PlanSlot, b: PlanSlot) => a.date.localeCompare(b.date) ||
 
 export function scenesToShoot(content: Content | null): number {
   if (!content || content.format !== 'video') return 0;
-  return content.visual.scenes.filter((scene) => scene.source === 'shoot').length;
+  // Una scena girata e caricata non è più un compito.
+  return scenesWaitingFootage(content.visual.scenes).length;
 }
 
 /** In ordine di calendario, così le uscite passate e non uscite vengono prima; in fondo le bozze senza data. */

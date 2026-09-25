@@ -38,6 +38,21 @@ export function createStepLog(onSteps?: OnAiSteps): StepLog {
   };
 }
 
+/**
+ * Due generazioni di fila che l'utente guarda come una: i passi della seconda si aggiungono sotto quelli della
+ * prima, invece di sostituirli.
+ */
+export function stepsInSequence(onSteps?: OnAiSteps): { first: OnAiSteps; then: OnAiSteps } {
+  let before: AiStep[] = [];
+  return {
+    first: (steps) => {
+      before = steps;
+      onSteps?.(steps);
+    },
+    then: (steps) => onSteps?.([...before, ...steps]),
+  };
+}
+
 /** Il passo di passaggio fra uno strumento e l'altro: uno solo, sempre in fondo. */
 export const THINKING_STEP = 'thinking';
 
@@ -71,6 +86,44 @@ export const VISUAL_STEPS = {
   keepPhotos: 'Tengo le foto di prima',
   editPhotos: 'Ritocco le foto di prima',
   card: (channel: string) => `Compongo la card per ${channel}`,
+} as const;
+
+/** Le parole del profilo video: come si racconta il brand nei reel. */
+export const VIDEO_PROFILE_STEPS = {
+  thinking: 'Penso a come si racconta il brand in video',
+  reflect: 'Ragiono su cosa mostrare vero e cosa si può generare',
+  done: 'Profilo video pronto',
+} as const;
+
+/** Le parole del montaggio: la regia, la sala di montaggio, il video consegnato. */
+export const VIDEO_CUT_STEPS = {
+  thinking: 'Leggo la regia e preparo il montaggio',
+  reflect: 'Ragiono sul montaggio',
+  done: (placeholders: number) =>
+    placeholders === 0 ? 'Video montato' : `Video montato, ${placeholders === 1 ? 'una scena aspetta' : `${placeholders} scene aspettano`} il materiale`,
+} as const;
+
+/** Le parole di «Non posso girarla»: la scena rifatta con un'altra strada. */
+export const VIDEO_SCENE_STEPS = {
+  thinking: 'Ripenso la scena senza il girato',
+  reflect: 'Ragiono su cosa mostrare al suo posto',
+  done: (kind: string) => `Scena rifatta: ${kind}`,
+} as const;
+
+/** Le parole del b-roll: prima il fotogramma, poi la clip. */
+export const BROLL_STEPS = {
+  frame: 'Penso al fotogramma della scena',
+  clip: 'Penso a come si muove la scena',
+  reflect: 'Controllo che sia quello che serve',
+  frameDone: 'Fotogramma pronto',
+  clipDone: 'Clip pronta',
+} as const;
+
+/** Le parole della musica del brand: il piano, poi una traccia alla volta. */
+export const MUSIC_STEPS = {
+  plan: 'Penso alla musica del brand',
+  reflect: 'Ragiono su atmosfere e velocità',
+  track: (mood: string) => `Compongo «${shorten(mood, MAX_NAME)}»`,
 } as const;
 
 /** Le parole delle idee proposte dal Brand DNA. */

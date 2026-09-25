@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { z } from 'zod';
 
+import type { Brand } from '@/domain/brand';
 import type { Content } from '@/domain/content';
 import type { OnAiSteps } from '@/services/types';
 
@@ -29,8 +30,13 @@ import {
 import { aiMeta, type Deps } from '../services/deps';
 import { generateBrandIdeas } from '../services/ideas';
 import { designContentVisual } from '../services/visual';
+import { cutContentVideo } from '../services/video-cut';
+import { remakeBrandMusic } from '../services/music';
+import { makeBrollClip, makeBrollFrame } from '../services/video-broll';
+import { replaceShootScene } from '../services/video-footage';
+import { proposeVideoProfile } from '../services/video-profile';
 import { proposeVisualStyle } from '../services/visual-style';
-import { signContent } from '../visual/files';
+import { signBrand, signContent } from '../visual/files';
 
 /**
  * Le generazioni che si possono mettere in coda. Il tipo di lavoro è scritto nella riga, non
@@ -75,6 +81,7 @@ const signWithSlot: JobKind['sign'] = async (deps, result) => {
 
 const brandRef = z.object({ brandId: z.uuid() });
 const contentRef = z.object({ contentId: z.uuid() });
+const sceneRef = contentRef.extend({ index: z.number().int().min(0).max(20) });
 
 export const JOB_KINDS: Record<string, JobKind> = {
   // Onboarding: il brand non esiste ancora, il risultato resta nel lavoro finché l'app torna a prenderlo.
@@ -88,6 +95,18 @@ export const JOB_KINDS: Record<string, JobKind> = {
 
   'visual-style': kind(visualStyleRequestSchema, ({ deps, identity, log, onSteps }, request) =>
     proposeVisualStyle(deps, identity, request, { log, onSteps }),
+  ),
+
+  // Dal Profilo o dall'onboarding: il profilo si restituisce, lo salva chi salva la sezione.
+  'video-profile': kind(visualStyleRequestSchema.omit({ restart: true }), ({ deps, identity, onSteps }, request) =>
+    proposeVideoProfile(deps, identity, request, onSteps),
+  ),
+
+  // «Rifai la musica» dal Profilo: una libreria nuova di tracce del brand, salvata sul brand.
+  'brand-music': kind(
+    brandRef,
+    ({ deps, identity, onSteps }, { brandId }) => remakeBrandMusic(deps, identity, brandId, onSteps),
+    (deps, result) => signBrand(deps.media.storage, result as Brand),
   ),
 
   ideas: kind(generateIdeasSchema.extend(brandRef.shape), ({ deps, identity, onSteps }, { brandId, count }) =>
@@ -123,6 +142,26 @@ export const JOB_KINDS: Record<string, JobKind> = {
     rewriteSchema.extend({ ...contentRef.shape, channel: channelIdSchema }),
     ({ deps, identity, onSteps }, { contentId, channel, instruction }) =>
       rewriteContentVariant(deps, identity, contentId, channel, instruction, onSteps),
+    signOne,
+  ),
+
+  // Il montaggio del video, dalla regia com'è adesso: minuti, in coda come il disegno della card.
+  'video-cut': kind(contentRef, ({ deps, identity, onSteps }, { contentId }) => cutContentVideo(deps, identity, contentId, onSteps), signOne),
+
+  // «Non posso girarla»: una scena della regia rifatta con un'altra strada.
+  'video-scene': kind(sceneRef, ({ deps, identity, onSteps }, { contentId, index }) =>
+    replaceShootScene(deps, identity, contentId, index, onSteps),
+    signOne,
+  ),
+
+  // Il b-roll di una scena: prima il fotogramma, poi la clip. Minuti, in coda, coi passi.
+  'video-frame': kind(sceneRef, ({ deps, identity, onSteps }, { contentId, index }) =>
+    makeBrollFrame(deps, identity, contentId, index, onSteps),
+    signOne,
+  ),
+
+  'video-clip': kind(sceneRef, ({ deps, identity, onSteps }, { contentId, index }) =>
+    makeBrollClip(deps, identity, contentId, index, onSteps),
     signOne,
   ),
 

@@ -22,6 +22,15 @@ export type AiTask =
   | 'themes'
   | 'positioning'
   | 'visual-style'
+  | 'video-profile'
+  /** Una scena del video rifatta con un'altra strada, quando chi pubblica non può girarla. */
+  | 'video-scene'
+  /** Il b-roll di una scena: il fotogramma di partenza, poi la clip. Passano da Higgsfield, sempre `be-agent`. */
+  | 'video-frame'
+  | 'video-clip'
+  /** La musica del brand: il piano delle tracce lo scrive l'AI, le compone ElevenLabs. */
+  | 'music-plan'
+  | 'music'
   | 'voice'
   | 'ideas'
   | 'source-ideas'
@@ -46,6 +55,18 @@ export interface AiRequest<S extends z.ZodType> {
   tools?: WebTool[];
   /** Senza, quella della configurazione. */
   effort?: Effort;
+  /**
+   * `false` quando il compito non deve comprare immagini o video: il motore agentico non gli apre Higgsfield.
+   * Senza, dove c'è, c'è.
+   */
+  generate?: boolean;
+  /**
+   * Dove si monta, dentro la cartella del brand: una sottocartella per contenuto, così un video non riparte dal
+   * montaggio di un altro. Senza, la cartella stessa.
+   */
+  studio?: string;
+  /** File della libreria da mettere nella cartella `media/` del montaggio, col nome con cui li cita il prompt. */
+  media?: { path: string; name: string }[];
   /** Chi ha chiesto la generazione: finisce nei consumi. */
   accountId: string;
   brandId?: string | null;

@@ -13,10 +13,12 @@ import { useResumeJob } from './jobs';
 import type {
   AiStep,
   DirectContentRequest,
+  FootageFile,
   JobKind,
   OnAiSteps,
   SlotPatch,
   VariantLayout,
+  VideoProfileRequest,
   VisualStyleRequest,
   VoiceSample,
   WebsiteInsights,
@@ -39,6 +41,9 @@ function cacheContent(client: Client, content: Content) {
   client.setQueryData(contentKey(content.id), content);
   if (content.slotId) client.setQueryData(slotContentKey(content.slotId), content);
   client.invalidateQueries({ queryKey: brandContentsKey(content.brandId) });
+  // Il primo video di un brand gli scrive il profilo video: il brand in cache non ce l'ha ancora, e salvando la
+  // sezione Visivo lo cancellerebbe.
+  if (content.format === 'video') client.invalidateQueries({ queryKey: ['workspace'] });
 }
 
 export function useContents(brandId: string | undefined) {
@@ -513,6 +518,25 @@ export function useUpdateSection() {
   });
 }
 
+/** «Rifai la musica», coi passi: il brand torna con la libreria nuova, già salvata. */
+export function useRemakeMusic() {
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const client = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (brandId: string) => {
+      setSteps([]);
+      return services.brands.remakeMusic(brandId, setSteps);
+    },
+    onSuccess: (updated) =>
+      client.setQueryData<Workspace>(WORKSPACE_KEY, (workspace) =>
+        workspace
+          ? { ...workspace, brands: workspace.brands.map((brand) => (brand.id === updated.id ? updated : brand)) }
+          : workspace,
+      ),
+  });
+  return { ...mutation, steps };
+}
+
 export function useSetActiveBrand() {
   const client = useQueryClient();
   return useMutation({
@@ -564,6 +588,18 @@ export function useProposeVisualStyle() {
   return { ...mutation, steps };
 }
 
+/** Il profilo video rifatto dal Profilo, coi passi: si restituisce, lo salva chi salva la sezione. */
+export function useProposeVideoProfile() {
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const mutation = useMutation({
+    mutationFn: (request: VideoProfileRequest) => {
+      setSteps([]);
+      return services.ai.proposeVideoProfile(request, setSteps);
+    },
+  });
+  return { ...mutation, steps };
+}
+
 /**
  * Il visivo disegnato da capo, coi passi mentre l'AI lavora: guarda le card d'esempio, scrive il
  * layout, lo compone e se lo guarda. `steps` riparte vuoto a ogni richiesta.
@@ -575,6 +611,86 @@ export function useDesignVisual() {
     mutationFn: ({ contentId, channels, instruction }: { contentId: string; channels: ChannelId[]; instruction?: string }) => {
       setSteps([]);
       return services.contents.designVisual(contentId, channels, instruction, setSteps);
+    },
+    onSuccess: (content) => cacheContent(client, content),
+  });
+  return { ...mutation, steps };
+}
+
+/** Il girato (o la foto) di una scena: carica il file e lo collega alla scena. */
+export function useUploadFootage() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contentId, index, file }: { contentId: string; index: number; file: FootageFile }) =>
+      services.contents.uploadFootage(contentId, index, file),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+export function useRemoveFootage() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contentId, index }: { contentId: string; index: number }) => services.contents.removeFootage(contentId, index),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+/** «Non posso girarla», coi passi mentre la regia ripensa la scena. */
+export function useReplaceScene() {
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const client = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({ contentId, index }: { contentId: string; index: number }) => {
+      setSteps([]);
+      return services.contents.replaceScene(contentId, index, setSteps);
+    },
+    onSuccess: (content) => cacheContent(client, content),
+  });
+  return { ...mutation, steps };
+}
+
+/** Il b-roll di una scena, coi passi: `step` dice se è il fotogramma o la clip. */
+export function useMakeBroll() {
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const client = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({ contentId, index, step }: { contentId: string; index: number; step: 'frame' | 'clip' }) => {
+      setSteps([]);
+      return step === 'frame'
+        ? services.contents.makeFrame(contentId, index, setSteps)
+        : services.contents.makeClip(contentId, index, setSteps);
+    },
+    onSuccess: (content) => cacheContent(client, content),
+  });
+  return { ...mutation, steps };
+}
+
+export function useLockScene() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contentId, index, locked }: { contentId: string; index: number; locked: boolean }) =>
+      services.contents.lockScene(contentId, index, locked),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+/** La musica del video: una traccia del brand, nessuna (`null`), o `'auto'`. */
+export function useSetMusic() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contentId, musicId }: { contentId: string; musicId: string | null }) => services.contents.setMusic(contentId, musicId),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
+/** «Monta il video», coi passi mentre l'agente monta: `steps` riparte vuoto a ogni richiesta. */
+export function useCutVideo() {
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const client = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (contentId: string) => {
+      setSteps([]);
+      return services.contents.cutVideo(contentId, setSteps);
     },
     onSuccess: (content) => cacheContent(client, content),
   });

@@ -4,6 +4,7 @@ import type { Brand, ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
 import {
   CHANNEL_LIMITS,
+  SCENE_SOURCES,
   type CarouselSlide,
   type ChannelVariant,
   type Content,
@@ -28,6 +29,7 @@ import { APP_CONTEXT, WRITING_RULES, describeBrand } from './brand-context';
 import type { AiEngine, AiMeta } from './engine';
 import { describeSource } from './ideas';
 import { stepsFromTools } from './steps';
+import { describeVideoProfile } from './video-profile';
 
 /** Le bozze: una variante di testo per ogni canale, da un'idea o da una fonte dell'utente. */
 
@@ -47,8 +49,15 @@ const FORMAT_GUIDE: Record<IdeaFormat, string> = {
   post: 'Post: testo e un’immagine di copertina. headline è il titolo della copertina, fino a 60 caratteri; slides e scenes restano vuoti.',
   carousel:
     'Carosello: da 5 a 7 slide. La prima è l’aggancio, le centrali sviluppano un punto ciascuna, l’ultima chiude con un’azione; titoli fino a 40 caratteri, testi fino a 160. headline è il titolo della prima slide; scenes resta vuoto.',
-  video:
-    'Video breve: da 4 a 6 scene per 20-40 secondi in tutto. Per ogni scena il titolo, cosa si vede e cosa si dice, la durata in secondi e source: «shoot» se va girata da chi pubblica (persone, luoghi, mani al lavoro), «generated» se è testo a schermo o grafica. headline è il testo della prima scena; slides resta vuoto.',
+  video: [
+    'Video verticale breve, per reel, storie e TikTok. Oltre ai testi per canale scrivi lo script — aggancio, sviluppo e chiusura in poche righe — e la regia: il video diviso in scene di pochi secondi. headline è il testo della prima scena; slides resta vuoto.',
+    'Ogni scena ha il titolo, cosa si vede, la durata in secondi, il testo a schermo (overlay, vuoto se non serve) e da dove arriva l’immagine (source):',
+    '- «shoot»: la gira chi pubblica, col telefono. In description scrivi cosa inquadrare, da dove e con che luce, come lo diresti a lui;',
+    '- «photo»: una foto vera del brand messa in movimento — zoom lento, parallasse, tendina fra un prima e un dopo;',
+    '- «broll»: una clip generata dall’AI. Regge ambienti, oggetti, materiali, luce e atmosfera; quello che il brand vende invece esce alterato (un colore di capelli che vira, un piatto che cambia forma), e lì serve il vero;',
+    '- «graphic»: solo grafica animata nei colori e nei font del brand — tipografia, logo, forme, un dato che cresce.',
+    'Il testo a schermo sta sempre nell’overlay, mai dentro l’immagine. Sotto il video andrà la musica del brand.',
+  ].join('\n'),
   article:
     'Articolo: su LinkedIn il testo lungo, con un’apertura forte e tre o quattro paragrafi; sugli altri canali un testo breve che lo presenta. headline è il titolo dell’articolo; slides e scenes restano vuoti.',
 };
@@ -72,12 +81,14 @@ const writtenSchema = z.object({
   headline: z.string(),
   variants: z.array(z.object({ channel: channelIdSchema, text: z.string(), hashtags: z.array(z.string()) })),
   slides: z.array(z.object({ title: z.string(), body: z.string() })),
+  script: z.string().describe('Lo script del video; vuoto negli altri formati.'),
   scenes: z.array(
     z.object({
       title: z.string(),
       description: z.string(),
       seconds: z.number().int(),
-      source: z.enum(['generated', 'shoot']),
+      source: z.enum(SCENE_SOURCES),
+      overlay: z.string(),
     }),
   ),
 });
@@ -185,6 +196,7 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
           ].join('\n')
         : '',
       describeBrand(brand, now),
+      format === 'video' && brand.visual.video ? describeVideoProfile(brand.visual.video) : '',
     ]
       .filter(Boolean)
       .join('\n\n'),
@@ -226,8 +238,10 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
           description: scene.description.trim(),
           seconds: Math.min(60, Math.max(1, scene.seconds)),
           source: scene.source,
+          overlay: scene.overlay.trim(),
         }))
       : [];
+  const script = format === 'video' ? result.script.trim() : '';
 
   return {
     title,
@@ -236,7 +250,7 @@ export async function writeContent(engine: AiEngine, meta: AiMeta, input: WriteC
     variants,
     // Nessun visivo: la card non nasce con la bozza. La disegna `designContentVisual` quando
     // l'utente lo chiede, guardando questo testo e le card d'esempio del brand.
-    visual: { headline, slides, scenes, design: null },
+    visual: { headline, slides, script, scenes, design: null },
   };
 }
 

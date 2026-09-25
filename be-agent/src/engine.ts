@@ -7,7 +7,8 @@ import {
   type SDKResultMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { FastifyBaseLogger } from 'fastify';
-import { delimiter } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { basename, delimiter, join } from 'node:path';
 
 import type pg from 'pg';
 import { z } from 'zod';
@@ -21,7 +22,7 @@ import { assertPublicUrl } from '../../be-node/src/lib/public-url';
 import type { ImageGenerator } from '../../be-node/src/media/images';
 import type { CardRenderer } from '../../be-node/src/media/renderer';
 import type { MediaStorage } from '../../be-node/src/media/storage';
-import { guardHiggsfield, higgsfieldDenied, higgsfieldServer, mirrorMedia } from './higgsfield';
+import { guardHiggsfield, higgsfieldDenied, higgsfieldServer, mirrorMedia, waitBeforeLeaving } from './higgsfield';
 import type { HiggsfieldAuth } from './higgsfield-auth';
 import { visualTools } from './tools';
 import { deliverBeforeLeaving, ffmpegDir, prepareStudio, videoTools } from './video';
@@ -98,7 +99,7 @@ export class AgentEngine implements AiEngine {
     // un indirizzo che scade tra un'ora non è una consegna. Il token si conia adesso, perché quello
     // di ieri non vale più; se la loro sessione è finita si genera senza, non si ferma niente.
     let higgsfield: { url: string; token: string } | null = null;
-    if (brand && this.options.higgsfield) {
+    if (brand && this.options.higgsfield && request.generate !== false) {
       try {
         higgsfield = { url: this.options.higgsfield.url, token: await this.options.higgsfield.auth.token() };
       } catch (error) {
@@ -128,6 +129,7 @@ export class AgentEngine implements AiEngine {
     // guardare quello che ha montato, e consegnarlo nella libreria.
     const filming = request.task === 'video' && brand !== null;
     const delivered = new Map<string, string>();
+    const studio = request.studio ? join(workspace.dir, request.studio) : workspace.dir;
 
     const mcpServers: Record<string, McpServerConfig> = {};
     if (mcp) mcpServers.visivo = mcp;
@@ -166,7 +168,14 @@ export class AgentEngine implements AiEngine {
     // agire sul mondo; una dopo, che porta i file nella libreria del brand prima che scadano.
     const preTool: HookCallback[] = [guardUrls];
     const postTool: HookCallback[] = [];
-    const onStop: HookCallback[] = filming ? [deliverBeforeLeaving({ delivered, log: this.options.log })] : [];
+    // I file che Higgsfield ha prodotto, copiati nella libreria: chi genera un fotogramma o una clip non esce senza.
+    const generated = new Map<string, string>();
+    const generating = (request.task === 'video-frame' || request.task === 'video-clip') && higgsfield !== null;
+    const onStop: HookCallback[] = filming
+      ? [deliverBeforeLeaving({ delivered, log: this.options.log })]
+      : generating
+        ? [waitBeforeLeaving({ generated, log: this.options.log })]
+        : [];
     if (higgsfield && brand) {
       preTool.push(guardHiggsfield(this.options.log));
       postTool.push(
@@ -175,8 +184,8 @@ export class AgentEngine implements AiEngine {
           brandId: brand.id,
           storage: this.options.storage,
           log: this.options.log,
-          saved: new Map(),
-          ...(filming && { dir: workspace.dir }),
+          saved: generated,
+          ...(filming && { dir: studio }),
         }),
       );
     }
@@ -223,7 +232,16 @@ export class AgentEngine implements AiEngine {
     }
     if (filming) {
       try {
-        summary = `${summary}\n- ${await prepareStudio(workspace.dir)}`;
+        summary = `${summary}\n- ${await prepareStudio(studio, request.studio ? `${request.studio}/` : '')}`;
+        // Il materiale caricato da chi pubblica, già al suo posto: col percorso dello Storage non ci si monta niente.
+        for (const file of request.media ?? []) {
+          try {
+            const stored = await this.options.storage.download(file.path);
+            await writeFile(join(studio, 'media', basename(file.name)), stored.bytes);
+          } catch (error) {
+            this.options.log.warn({ err: error, path: file.path }, 'materiale non scaricato nel montaggio');
+          }
+        }
       } catch (error) {
         this.options.log.warn({ err: error }, 'progetto di montaggio non preparato');
       }

@@ -48,6 +48,9 @@ const envSchema = z.object({
   DESIGN_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('high'),
   /** Lo scontorno (fal, BiRefNet). Senza, i layout con soggetto scontornato non si creano. */
   FAL_KEY: optionalString,
+  /** La musica dei video (ElevenLabs Music). Senza, i video si montano senza musica. */
+  ELEVENLABS_API_KEY: optionalString,
+  MUSIC_MODEL: z.string().min(1).default('music_v2_5'),
   /** Il servizio che compone i PNG delle card (be-render). Su Render arriva come `host:porta` del servizio privato. */
   RENDER_URL: z.preprocess(
     (value) => (value === '' ? undefined : typeof value === 'string' && !/^https?:\/\//.test(value) ? `http://${value}` : value),

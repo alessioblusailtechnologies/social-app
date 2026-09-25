@@ -46,15 +46,40 @@ export function designPaths(design: VisualDesign | null | undefined): string[] {
     .filter((path): path is string => Boolean(path));
 }
 
+/** Tutti i file del visivo di un contenuto: la card, il montaggio, il materiale delle scene. */
+function mapVisualFilesOf(visual: ContentVisual, change: (file: MediaFile) => MediaFile): ContentVisual {
+  const design = visual.design ?? null;
+  const cut = visual.cut ?? null;
+  return {
+    ...visual,
+    design: design && mapDesignFiles(design, change),
+    cut: cut && { ...cut, file: change(cut.file) },
+    scenes: visual.scenes.map((scene) => ({
+      ...scene,
+      ...(scene.footage && { footage: change(scene.footage) }),
+      ...(scene.frame && { frame: change(scene.frame) }),
+      ...(scene.clip && { clip: change(scene.clip) }),
+    })),
+  };
+}
+
+function contentPaths(visual: ContentVisual): string[] {
+  return [
+    ...designPaths(visual.design),
+    ...[visual.cut?.file, ...visual.scenes.flatMap((scene) => [scene.footage, scene.frame, scene.clip])]
+      .map((file) => file?.path)
+      .filter((path): path is string => Boolean(path)),
+  ];
+}
+
 /** Nel database l'indirizzo resta vuoto; le bozze nate prima dei visivi hanno `design` nullo. */
 export function unsignedVisual(visual: ContentVisual): ContentVisual {
-  const design = visual.design ?? null;
-  return { ...visual, design: design && mapDesignFiles(design, (file) => (file.path ? { ...file, url: '' } : file)) };
+  return mapVisualFilesOf({ ...visual, design: visual.design ?? null }, (file) => (file.path ? { ...file, url: '' } : file));
 }
 
 /** Firma in un colpo solo tutti i file dei contenuti. Se lo Storage non risponde, i contenuti si leggono lo stesso. */
 export async function signContents(storage: MediaStorage, contents: Content[]): Promise<Content[]> {
-  const paths = contents.flatMap((content) => designPaths(content.visual.design));
+  const paths = contents.flatMap((content) => contentPaths(content.visual));
   if (paths.length === 0) return contents;
   let urls: Map<string, string>;
   try {
@@ -62,12 +87,10 @@ export async function signContents(storage: MediaStorage, contents: Content[]): 
   } catch {
     return contents;
   }
-  return contents.map((content) => {
-    const { design } = content.visual;
-    if (!design) return content;
-    const signed = mapDesignFiles(design, (file) => (file.path ? { ...file, url: urls.get(file.path) ?? '' } : file));
-    return { ...content, visual: { ...content.visual, design: signed } };
-  });
+  const sign = (file: MediaFile) => (file.path ? { ...file, url: urls.get(file.path) ?? '' } : file);
+  return contents.map((content) =>
+    contentPaths(content.visual).length === 0 ? content : { ...content, visual: mapVisualFilesOf(content.visual, sign) },
+  );
 }
 
 export async function signContent(storage: MediaStorage, content: Content): Promise<Content> {
@@ -96,6 +119,7 @@ function mapVisualFiles(visual: Visual, change: (file: MediaFile) => MediaFile):
       })),
     }),
     ...(visual.line?.band?.photo && { line: { ...visual.line, band: { ...visual.line.band, photo: change(visual.line.band.photo) } } }),
+    ...(visual.music && { music: visual.music.map((track) => ({ ...track, file: change(track.file) })) }),
   };
 }
 
@@ -104,6 +128,7 @@ function visualPaths(visual: Visual): string[] {
     ...(visual.references ?? []),
     ...(visual.examples ?? []).flatMap((example) => [example.file, example.photo]),
     visual.line?.band?.photo,
+    ...(visual.music ?? []).map((track) => track.file),
   ]
     .map((file) => file?.path)
     .filter((path): path is string => Boolean(path));
@@ -119,6 +144,7 @@ export function storableVisual(accountId: string, visual: Visual): Visual {
     ...visual,
     ...(visual.references && { references: visual.references.filter(own) }),
     ...(visual.examples && { examples: visual.examples.filter((example) => own(example.file) && own(example.photo ?? null)) }),
+    ...(visual.music && { music: visual.music.filter((track) => own(track.file)) }),
     // La foto della fascia di un altro account non si tiene: la linea resta, senza foto.
     ...(visual.line?.band && !own(visual.line.band.photo) && { line: { ...visual.line, band: { ...visual.line.band, photo: null } } }),
   };

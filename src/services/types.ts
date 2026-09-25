@@ -6,6 +6,7 @@ import type {
   Brand,
   BrandDraft,
   BrandLine,
+  BrandVideo,
   ChannelId,
   Identity,
   ImageStyle,
@@ -38,6 +39,8 @@ export interface BrandService {
   resetDemo(): Promise<void>;
   /** Un'immagine di riferimento (data URI o file locale): torna col percorso nello storage e l'indirizzo firmato. */
   uploadReference(uri: string, dataUri: string | null): Promise<MediaFile>;
+  /** «Rifai la musica»: una libreria nuova di tracce strumentali del brand, coi passi. */
+  remakeMusic(brandId: string, onSteps?: OnAiSteps): Promise<Brand>;
 }
 
 export interface WebsiteInsights {
@@ -79,7 +82,19 @@ export interface VisualStyle {
   direction: VisualDirection;
   line: BrandLine;
   examples: VisualExample[];
+  /** Il profilo video, scritto insieme alla prima linea: assente se il brand ne aveva già uno. */
+  video?: BrandVideo;
 }
+
+/** Un file scelto dal telefono per una scena: dove sta, che tipo è, quanto pesa. */
+export interface FootageFile {
+  uri: string;
+  mimeType: string;
+  bytes: number;
+}
+
+/** Da cosa nasce il profilo video: le stesse cose della linea, senza riferimenti da guardare. */
+export type VideoProfileRequest = Omit<VisualStyleRequest, 'restart'>;
 
 /** Obiettivi e pubblico proposti per il profilo, i più adatti prima. */
 export interface PositioningIdeas {
@@ -114,13 +129,19 @@ export type JobKind =
   | 'website'
   | 'positioning'
   | 'visual-style'
+  | 'video-profile'
   | 'ideas'
   | 'content-prepare'
   | 'content-direct'
   | 'content-from-idea'
   | 'content-regenerate'
   | 'content-rewrite'
-  | 'visual-design';
+  | 'visual-design'
+  | 'video-cut'
+  | 'video-scene'
+  | 'video-frame'
+  | 'video-clip'
+  | 'brand-music';
 
 export interface JobView<T> {
   id: string;
@@ -158,6 +179,8 @@ export interface AiService {
   suggestPositioning(identity: Identity, site: WebsiteInsights | null, onSteps?: OnAiSteps): Promise<PositioningIdeas>;
   /** Guarda i riferimenti, sceglie caratteri e stile e compone una card di esempio per canale. */
   proposeVisualStyle(request: VisualStyleRequest, onSteps?: OnAiSteps): Promise<VisualStyle>;
+  /** Come si racconta il brand in video: cosa si mostra vero, cosa si genera, le riprese, il look, il suono. */
+  proposeVideoProfile(request: VideoProfileRequest, onSteps?: OnAiSteps): Promise<BrandVideo>;
   analyzeVoice(sample: VoiceSample, identity: Identity): Promise<VoiceAnalysis>;
 }
 
@@ -250,6 +273,19 @@ export interface ContentService {
     instruction?: string,
     onSteps?: OnAiSteps,
   ): Promise<Content>;
+  /** Il girato (o la foto) di una scena: il file va dritto nello spazio dei file, poi diventa il materiale della scena. */
+  uploadFootage(contentId: string, index: number, file: FootageFile): Promise<Content>;
+  removeFootage(contentId: string, index: number): Promise<Content>;
+  /** «Non posso girarla»: la scena rifatta con un'altra strada, coi passi mentre la ripensa. */
+  replaceScene(contentId: string, index: number, onSteps?: OnAiSteps): Promise<Content>;
+  /** Il b-roll di una scena: il fotogramma di partenza, poi la clip che lo muove. Coi passi. */
+  makeFrame(contentId: string, index: number, onSteps?: OnAiSteps): Promise<Content>;
+  makeClip(contentId: string, index: number, onSteps?: OnAiSteps): Promise<Content>;
+  lockScene(contentId: string, index: number, locked: boolean): Promise<Content>;
+  /** La musica del video: l'id di una traccia del brand, `null` per nessuna, `'auto'` perché la scelga chi monta. */
+  setMusic(contentId: string, musicId: string | null): Promise<Content>;
+  /** Monta il video dalla regia, coi cartelli dove manca il materiale. Minuti: si seguono i passi. */
+  cutVideo(contentId: string, onSteps?: OnAiSteps): Promise<Content>;
   /** Crea il visivo proposto (foto se serve, scontorno, composizione). Risponde subito, a creazione avviata. */
   createVisual(contentId: string): Promise<Content>;
   /** Rifà solo la foto con la stessa descrizione, tenendo layout e testi. */

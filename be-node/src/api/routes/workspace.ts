@@ -14,6 +14,7 @@ import {
   resetDemo,
   updateBrandSection,
 } from '../../services/workspace';
+import { queueJob } from './jobs';
 import { idFrom } from './params';
 
 const activeBrandSchema = z.object({ brandId: z.string() });
@@ -39,6 +40,12 @@ export function registerWorkspaceRoutes(app: FastifyInstance, deps: Deps): void 
     const { value } = sectionBodySchema.parse(request.body);
     const patch = { key, value: sectionSchemas[key].parse(value) } as SectionPatch;
     return updateBrandSection(deps, request.identity, idFrom(request.params.brandId, 'Brand non trovato.'), patch);
+  });
+
+  /** «Rifai la musica»: una libreria nuova di tracce del brand. In coda, coi passi: sono minuti. */
+  app.post<{ Params: { brandId: string } }>('/api/brands/:brandId/music/job', (request, reply) => {
+    const brandId = idFrom(request.params.brandId, 'Brand non trovato.');
+    return queueJob(deps, request, reply, { kind: 'brand-music', input: { brandId }, brandId, ref: brandId });
   });
 
   app.post('/api/demo', async (request, reply) => {

@@ -1,6 +1,7 @@
 import { unavailableDirector, type ArtDirector } from '../ai/art-director';
 import { unavailableCutout, type CutoutService } from './cutout';
 import { unavailableImages, type ImageGenerator } from './images';
+import { unavailableMusic, type MusicGenerator } from './music';
 import { unavailableRenderer, type CardRenderer } from './renderer';
 import { unavailableStorage, type MediaStorage } from './storage';
 import { unavailableVision, type VisionService } from './vision';
@@ -10,6 +11,8 @@ export interface MediaDeps {
   storage: MediaStorage;
   images: ImageGenerator;
   cutout: CutoutService;
+  /** La musica dei video. */
+  music: MusicGenerator;
   renderer: CardRenderer;
   vision: VisionService;
   /** Il direttore artistico della linea grafica: vede le immagini e decide la linea. */
@@ -21,6 +24,7 @@ export const unavailableMedia: MediaDeps = {
   storage: unavailableStorage,
   images: unavailableImages,
   cutout: unavailableCutout,
+  music: unavailableMusic,
   renderer: unavailableRenderer,
   vision: unavailableVision,
   director: unavailableDirector,

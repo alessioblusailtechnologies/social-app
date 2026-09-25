@@ -212,3 +212,24 @@ function typeFromUrl(url: string): string | null {
     return null;
   }
 }
+
+/**
+ * Non si esce a mani vuote. Un fotogramma si fa in secondi, una clip in minuti, e un agente abituato a parlare con
+ * qualcuno se la cava dicendo «ricontrollo tra poco»: qui dall'altra parte non c'è nessuno, e la clip resterebbe
+ * pagata e persa. La chiusura si rifiuta finché nella libreria non è arrivato un file; oltre i tentativi, comanda
+ * `maxTurns`.
+ */
+export function waitBeforeLeaving(context: { generated: Map<string, string>; log: FastifyBaseLogger }, max = 3): HookCallback {
+  let blocked = 0;
+  return async (input) => {
+    if (input.hook_event_name !== 'Stop' || context.generated.size > 0 || blocked >= max) return {};
+    blocked += 1;
+    context.log.info({ tentativo: blocked }, 'uscita rimandata: non è arrivato nessun file');
+    return {
+      decision: 'block',
+      reason:
+        'Non è ancora arrivato nessun file, e questa sessione non ha nessuno dall’altra parte: se te ne vai adesso quello che hai ' +
+        'chiesto resta pagato e perso. Se il lavoro è in corso aspettalo con jobs_wait, che tiene aperta la chiamata, poi rispondi col percorso.',
+    };
+  };
+}

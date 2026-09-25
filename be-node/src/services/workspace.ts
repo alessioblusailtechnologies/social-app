@@ -42,6 +42,12 @@ export async function updateBrandSection(deps: Deps, identity: Identity, brandId
   const stored: SectionPatch =
     patch.key === 'visual' ? { key: 'visual', value: storableVisual(identity.accountId, patch.value) } : patch;
   const brand = await inTransaction(deps, identity, async (db) => {
+    // Un'app aperta prima del profilo video o della musica manda la sezione senza: quello fatto intanto resta.
+    if (stored.key === 'visual' && (stored.value.video === undefined || stored.value.music === undefined)) {
+      const current = await requireBrand(db, brandId);
+      if (stored.value.video === undefined && current.visual.video) stored.value = { ...stored.value, video: current.visual.video };
+      if (stored.value.music === undefined && current.visual.music) stored.value = { ...stored.value, music: current.visual.music };
+    }
     const updated = await updateSection(db, brandId, stored);
     if (!updated) throw ApiError.notFound('Brand non trovato.');
     return updated;

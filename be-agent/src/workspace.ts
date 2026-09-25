@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { currentVoiceCard, type Brand, type ChannelId } from '@/domain/brand';
+import { currentVoiceCard, type Brand, type BrandVideo, type ChannelId } from '@/domain/brand';
 import { channelName, imageStyleLabel } from '@/domain/catalog';
 import type { MediaFile } from '@/domain/visual';
 
@@ -39,6 +39,11 @@ export async function prepareWorkspace(root: string, brand: Brand, storage: Medi
   const made: string[] = ['`BRAND.md`, il profilo del brand'];
   await writeFile(join(dir, 'BRAND.md'), brandMarkdown(brand), 'utf8');
   await writeFile(join(dir, 'CLAUDE.md'), HOUSE_RULES, 'utf8');
+
+  if (brand.visual.video) {
+    await writeFile(join(dir, 'VIDEO.md'), videoMarkdown(brand.visual.video), 'utf8');
+    made.push('`VIDEO.md`, come si racconta il brand in video');
+  }
 
   const templates = brand.visual.line?.templates ?? [];
   if (templates.length > 0) {
@@ -115,10 +120,42 @@ né build da lanciare.
   (\`{{headline}}\`, \`{{photo}}\`…). Quando pensi a un visivo, parti da qui.
 - \`esempi/\` sono le card già approvate dall'utente. Guardale: sono il metro del risultato giusto.
 - \`riferimenti/\` sono le immagini da cui è nata la linea.
+- \`VIDEO.md\`, se c'è, dice come si racconta il brand in video: cosa si mostra vero, cosa si può
+  generare, le riprese da chiedere, come si muove e come suona. Quando lavori a un video, parti da qui.
 
 Puoi scrivere file di lavoro qui dentro se ti servono. Quello che conta è la risposta finale nella
 forma richiesta: i file che lasci non vengono letti da nessuno.
 `;
+
+/** Il profilo video, scritto con la linea e corretto dall'utente. */
+function videoMarkdown(video: BrandVideo): string {
+  return [
+    '# Come si racconta in video',
+    '',
+    'Scritto con la linea del brand e rivisto dall’utente.',
+    '',
+    '## Si mostra sempre vero',
+    '',
+    video.real,
+    '',
+    '## Si può generare',
+    '',
+    video.generated,
+    '',
+    '## Riprese tipiche da chiedere',
+    '',
+    ...video.shots.map((shot) => `- ${shot}`),
+    '',
+    '## Come si muove',
+    '',
+    video.look,
+    '',
+    '## Come suona',
+    '',
+    video.sound,
+    '',
+  ].join('\n');
+}
 
 function brandMarkdown(brand: Brand): string {
   const { identity, positioning, channels, themes, voice, visual, references } = brand;

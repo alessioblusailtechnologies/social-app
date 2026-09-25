@@ -106,7 +106,9 @@ const fakeMedia: MediaDeps = {
       return bytes ? Promise.resolve({ bytes, contentType: 'image/png' }) : Promise.reject(new Error('file mancante'));
     },
     sign: (paths) => Promise.resolve(new Map(paths.filter((path) => files.has(path)).map((path) => [path, `https://firmato.test/${path}`]))),
+    uploadUrl: (path) => Promise.resolve(`https://carica.test/${path}`),
   },
+  music: { available: false, compose: () => Promise.reject(new Error('non serve')) },
   images: {
     available: true,
     generate: () => {

@@ -1,9 +1,10 @@
-import type { ChannelId } from '@/domain/brand';
+import type { Brand, ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
-import { channelsWithoutImage, type Content, type RewriteInstruction } from '@/domain/content';
+import { channelsWaitingForVideo, channelsWithoutImage, type Content, type RewriteInstruction } from '@/domain/content';
 import type { IdeaFormat } from '@/domain/idea';
 import { selectedChannels, type PlanSlot } from '@/domain/plan';
 import { channelsWaitingForVisual, redoDesign } from '@/domain/visual';
+import { stepsInSequence } from '@/services/ai-steps';
 import type { DirectContentRequest, OnAiSteps } from '@/services/types';
 
 import { rewriteVariant, writeContent } from '../ai/content';
@@ -22,6 +23,7 @@ import { findIdea, requireIdea } from '../data/ideas';
 import { findSlot, insertSlot, requireSlot, saveSlot } from '../data/slots';
 import type { Identity } from '../db/identity';
 import { aiMeta, inTransaction, type Deps } from './deps';
+import { withVideoProfile } from './video-profile';
 
 /**
  * I contenuti. Ogni operazione con l'AI legge in una transazione, genera fuori e scrive in
@@ -29,6 +31,22 @@ import { aiMeta, inTransaction, type Deps } from './deps';
  */
 
 export type WithSlot = { content: Content; slot: PlanSlot };
+
+/**
+ * La regia di un video la fa chi sa come si racconta il brand: se il profilo video manca (i brand salvati prima del
+ * Video Studio), si scrive adesso, e chi aspetta vede i suoi passi sopra quelli della bozza.
+ */
+async function readyFor(
+  deps: Deps,
+  identity: Identity,
+  brand: Brand,
+  format: IdeaFormat,
+  onSteps?: OnAiSteps,
+): Promise<{ brand: Brand; onSteps?: OnAiSteps }> {
+  if (format !== 'video' || brand.visual.video) return { brand, onSteps };
+  const steps = stepsInSequence(onSteps);
+  return { brand: await withVideoProfile(deps, identity, brand, steps.first), onSteps: steps.then };
+}
 
 const AI_FAILED = () => new ApiError(502, 'AI_FAILED', 'Non sono riuscito a completare la generazione. Riprova.');
 
@@ -94,15 +112,17 @@ export async function prepareContent(
   });
 
   const revision = previous ? previous.revision + 1 : 0;
+  const wanted = format ?? previous?.format ?? idea.formats[0] ?? 'post';
+  const ready = await readyFor(deps, identity, brand, wanted, onSteps);
   const written = await writeContent(deps.ai, aiMeta(identity, brand.id), {
-    brand,
+    brand: ready.brand,
     basis: { kind: 'idea', idea },
     channels: slot.channels,
-    format: format ?? previous?.format ?? idea.formats[0] ?? 'post',
+    format: wanted,
     revision,
     previous,
     now: deps.now(),
-    onSteps,
+    onSteps: ready.onSteps,
   });
 
   return inTransaction(deps, identity, async (db) => {
@@ -121,7 +141,13 @@ export async function prepareContent(
       format: written.format,
       variants: written.variants,
       // Un visivo già creato resta e aspetta «Aggiorna il visivo».
-      visual: { ...written.visual, design: redoDesign(existing?.visual.design, written.visual.design) },
+      // Anche il montaggio resta: con la regia nuova l'app dice di rimontarlo.
+      visual: {
+        ...written.visual,
+        design: redoDesign(existing?.visual.design, written.visual.design),
+        cut: existing?.visual.cut ?? null,
+        musicId: existing?.visual.musicId,
+      },
       status: 'draft',
       revision,
       approvedAt: null,
@@ -141,7 +167,8 @@ export async function createDirectContent(
   { source, channels, format }: DirectContentRequest,
   onSteps?: OnAiSteps,
 ): Promise<Content> {
-  const brand = await inTransaction(deps, identity, (db) => requireBrand(db, brandId));
+  const stored = await inTransaction(deps, identity, (db) => requireBrand(db, brandId));
+  const { brand, onSteps: writing } = await readyFor(deps, identity, stored, format, onSteps);
   const written = await writeContent(deps.ai, aiMeta(identity, brandId), {
     brand,
     basis: { kind: 'source', source },
@@ -150,7 +177,7 @@ export async function createDirectContent(
     revision: 0,
     previous: null,
     now: deps.now(),
-    onSteps,
+    onSteps: writing,
   });
   return inTransaction(deps, identity, (db) =>
     insertContent(db, identity.accountId, brandId, {
@@ -190,15 +217,17 @@ export async function createContentFromIdea(
   const asked = wanted && wanted.length > 0 ? [...wanted] : idea.channels;
   const fitting = asked.filter((channel) => allowed.includes(channel));
   const channels: ChannelId[] = fitting.length > 0 ? fitting : allowed.length > 0 ? allowed : ['linkedin'];
+  const format = idea.formats[0] ?? 'post';
+  const ready = await readyFor(deps, identity, brand, format, onSteps);
   const written = await writeContent(deps.ai, aiMeta(identity, brandId), {
-    brand,
+    brand: ready.brand,
     basis: { kind: 'idea', idea },
     channels,
-    format: idea.formats[0] ?? 'post',
+    format,
     revision: 0,
     previous: null,
     now: deps.now(),
-    onSteps,
+    onSteps: ready.onSteps,
   });
   return inTransaction(deps, identity, (db) =>
     insertContent(db, identity.accountId, brandId, {
@@ -237,15 +266,17 @@ export async function regenerateContent(
   if (!idea && !content.brief) throw ApiError.invalid('Non so da cosa rifare la bozza.');
 
   const revision = content.revision + 1;
+  const wanted = format ?? content.format;
+  const ready = await readyFor(deps, identity, brand, wanted, onSteps);
   const written = await writeContent(deps.ai, aiMeta(identity, brand.id), {
-    brand,
+    brand: ready.brand,
     basis: idea ? { kind: 'idea', idea } : { kind: 'source', source: content.brief! },
     channels: content.channels,
-    format: format ?? content.format,
+    format: wanted,
     revision,
     previous: content,
     now: deps.now(),
-    onSteps,
+    onSteps: ready.onSteps,
   });
 
   return inTransaction(deps, identity, async (db) => {
@@ -255,7 +286,12 @@ export async function regenerateContent(
       ...(idea ? {} : { title: written.title, themeId: written.themeId }),
       format: written.format,
       variants: written.variants,
-      visual: { ...written.visual, design: redoDesign(current.visual.design, written.visual.design) },
+      visual: {
+        ...written.visual,
+        design: redoDesign(current.visual.design, written.visual.design),
+        cut: current.visual.cut ?? null,
+        musicId: current.visual.musicId,
+      },
       revision,
       status: 'draft',
       approvedAt: null,
@@ -343,6 +379,13 @@ export function scheduleContent(
     const now = deps.now();
     const current = await requireContent(db, contentId);
     assertVisualReady(current);
+    const unready = when.publishNow ? channelsWaitingForVideo(current) : [];
+    if (unready.length > 0) {
+      throw ApiError.conflict(
+        'VIDEO_NOT_READY',
+        `Il video non è pronto per ${unready.map(channelName).join(' e ')}: monta il video coi girati, senza cartelli. Programmarlo intanto si può.`,
+      );
+    }
     const status: PlanSlot['status'] = when.publishNow ? 'published' : 'scheduled';
     const existing = current.slotId ? await findSlot(db, current.slotId, now) : null;
     const slot = existing

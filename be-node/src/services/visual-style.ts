@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { z } from 'zod';
 
-import type { BrandLine, BrandTemplate, ImageStyle, TemplateFont, VisualExample } from '@/domain/brand';
+import type { BrandLine, BrandTemplate, BrandVideo, ImageStyle, TemplateFont, VisualExample } from '@/domain/brand';
 import { channelName, IMAGE_STYLES } from '@/domain/catalog';
 import { cleanTemplates, exampleChannels, sameReferences, TEMPLATE_FIELDS, templateFallback } from '@/domain/line';
 import {
@@ -16,10 +16,11 @@ import {
   type Aspect,
   type MediaFile,
 } from '@/domain/visual';
-import { createStepLog, VISUAL_STEPS } from '@/services/ai-steps';
+import { createStepLog, VIDEO_PROFILE_STEPS, VISUAL_STEPS } from '@/services/ai-steps';
 import type { OnAiSteps, VisualStyle, VisualStyleRequest } from '@/services/types';
 
 import { APP_CONTEXT, describeIdentity } from '../ai/brand-context';
+import { writeVideoProfile } from '../ai/video-profile';
 import { ApiError } from '../contract/errors';
 import type { Identity as Caller } from '../db/identity';
 import type { MediaBytes } from '../media/images';
@@ -151,6 +152,24 @@ export async function proposeVisualStyle(
     { mode: refine ? 'correzione' : 'nuova', director: director.available, references: images.map((image) => image.mimeType), cards: cards.length },
     'linea grafica: si parte',
   );
+
+  // Il profilo video nasce con la prima linea, in parallelo: le correzioni della linea non lo toccano, e se non
+  // riesce la linea esce lo stesso (lo scriverà il primo video).
+  let video: Promise<BrandVideo | null> = Promise.resolve(null);
+  if (!visual.video && !refine) {
+    log.start('video', VIDEO_PROFILE_STEPS.thinking);
+    video = writeVideoProfile(deps.ai, meta, request).then(
+      (profile) => {
+        log.finish('video', { detail: `${profile.shots.length} riprese da chiedere` });
+        return profile;
+      },
+      (error: unknown) => {
+        options.log.error({ err: error }, 'profilo video non scritto');
+        log.finish('video', { failed: true, detail: 'Lo scrivo al primo video' });
+        return null;
+      },
+    );
+  }
 
   // 2. I template del brand: li scrive il direttore artistico guardando le immagini, o il modello dei testi.
   const lineLabel = refine ? VISUAL_STEPS.refine : VISUAL_STEPS.templates;
@@ -353,12 +372,14 @@ export async function proposeVisualStyle(
   const paths = examples.flatMap((example) => [example.file?.path]).filter((path): path is string => Boolean(path));
   const urls = await storage.sign(paths).catch(() => new Map<string, string>());
   const signed = (file: MediaFile | null | undefined) => (file?.path ? { ...file, url: urls.get(file.path) ?? file.url } : (file ?? null));
+  const profile = await video;
   return {
     typography: visual.typography,
     imageStyle,
     direction,
     line,
     examples: examples.map((example) => ({ ...example, file: signed(example.file) })),
+    ...(profile && { video: profile }),
   };
 }
 

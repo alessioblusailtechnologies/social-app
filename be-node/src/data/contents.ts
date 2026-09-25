@@ -1,5 +1,5 @@
 import type { ChannelId } from '@/domain/brand';
-import type { ChannelVariant, Content, ContentStatus, ContentVisual } from '@/domain/content';
+import { readScene, type ChannelVariant, type Content, type ContentStatus, type ContentVisual } from '@/domain/content';
 import type { IdeaFormat, IdeaSource } from '@/domain/idea';
 
 import { ApiError } from '../contract/errors';
@@ -40,8 +40,14 @@ export function toContent(row: ContentRow): Content {
     channels: row.channels,
     format: row.format,
     variants: row.variants,
-    // Le bozze nate prima dei visivi non hanno `design`.
-    visual: { ...row.visual, design: row.visual.design ?? null },
+    // Le bozze nate prima dei visivi non hanno `design`; quelle nate prima del Video Studio non hanno
+    // lo script, e le loro scene hanno i due tipi di allora.
+    visual: {
+      ...row.visual,
+      script: row.visual.script ?? '',
+      scenes: (row.visual.scenes ?? []).map(readScene),
+      design: row.visual.design ?? null,
+    },
     status: row.status,
     revision: row.revision,
     approvedAt: row.approved_at?.toISOString() ?? null,

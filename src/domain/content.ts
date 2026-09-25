@@ -1,6 +1,6 @@
 import type { ChannelId, VoiceCard } from './brand';
 import type { IdeaFormat, IdeaSource } from './idea';
-import type { VisualDesign } from './visual';
+import { needsMedia, type MediaFile, type VisualDesign } from './visual';
 
 /**
  * Il contenuto: la bozza che l'AI prepara, con una variante di testo per ogni canale e il
@@ -23,19 +23,138 @@ export interface CarouselSlide {
   body: string;
 }
 
+/**
+ * Da dove arriva l'immagine di una scena. Il prodotto del brand si mostra vero (girato o foto);
+ * il b-roll generato è solo contorno, la grafica è tutta nostra.
+ */
+export const SCENE_SOURCES = ['shoot', 'photo', 'broll', 'graphic'] as const;
+
+export type SceneSource = (typeof SCENE_SOURCES)[number];
+
+export const SCENE_SOURCE_LABELS: Record<SceneSource, string> = {
+  shoot: 'Da girare',
+  photo: 'Foto viva',
+  broll: 'B-roll',
+  graphic: 'Grafica',
+};
+
 export interface VideoScene {
   title: string;
+  /** Cosa si vede; per un girato, come girarlo. */
   description: string;
   seconds: number;
-  /** L'AI la genera oppure va girata da chi pubblica. */
-  source: 'generated' | 'shoot';
+  source: SceneSource;
+  /** Il testo a schermo, sopra l'immagine: vuoto se non ce n'è. */
+  overlay: string;
+  /** Il materiale vero caricato da chi pubblica: il girato di una scena «shoot», la foto di una «photo». */
+  footage?: MediaFile | null;
+  /** B-roll: il fotogramma di partenza, da approvare prima di comprare il movimento. */
+  frame?: MediaFile | null;
+  /** B-roll: la clip generata dal fotogramma. */
+  clip?: MediaFile | null;
+  /** Va bene così: non si rigenera più, né il fotogramma né la clip. */
+  locked?: boolean;
+}
+
+/**
+ * I canali che non possono far uscire il video adesso: Instagram e TikTok vogliono il montaggio finito, senza cartelli.
+ * Programmarlo si può lo stesso: si gira dopo aver deciso cosa girare, ed è la Home a chiederlo.
+ */
+export function channelsWaitingForVideo(content: Content): ChannelId[] {
+  if (content.format !== 'video' || videoReady(content.visual)) return [];
+  const skipped = channelsWithoutImage(content);
+  return content.channels.filter((channel) => needsMedia(channel) && !skipped.includes(channel));
+}
+
+/** Quante generazioni di b-roll si fanno al mese per account: il tetto di spesa, finché non c'è un piano vero. */
+export const BROLL_MONTHLY_LIMITS = { frames: 120, clips: 40 } as const;
+
+/**
+ * Il montaggio si può pubblicare: c'è, è della regia di adesso, e nessuna scena ha più il cartello. Senza, Instagram e
+ * TikTok aspettano, come aspettano la card di un post.
+ */
+export function videoReady(visual: Pick<ContentVisual, 'script' | 'scenes' | 'cut' | 'musicId'>): boolean {
+  const cut = visual.cut ?? null;
+  return cut !== null && cut.placeholders === 0 && cut.from === cutKey(visual);
+}
+
+/** Cosa si carica per una scena: un video per i girati, una foto per le foto vive. Nulla per le altre. */
+export function footageKind(source: SceneSource): 'video' | 'image' | null {
+  return source === 'shoot' ? 'video' : source === 'photo' ? 'image' : null;
+}
+
+/** I tipi di file accettati come materiale, con quanto possono pesare. */
+export const FOOTAGE_TYPES: Record<'video' | 'image', { mimeTypes: readonly string[]; maxBytes: number }> = {
+  video: { mimeTypes: ['video/mp4', 'video/quicktime'], maxBytes: 200 * 1024 * 1024 },
+  image: { mimeTypes: ['image/png', 'image/jpeg', 'image/webp'], maxBytes: 10 * 1024 * 1024 },
+};
+
+/** Le scene da girare che aspettano ancora il girato. */
+export function scenesWaitingFootage(scenes: readonly VideoScene[]): VideoScene[] {
+  return scenes.filter((scene) => scene.source === 'shoot' && !scene.footage);
+}
+
+/**
+ * Le bozze salvate prima dei quattro tipi hanno `source: 'generated'`, che allora voleva dire
+ * «testo a schermo o grafica», e nessun `overlay`.
+ */
+export function readScene(scene: Omit<VideoScene, 'source' | 'overlay'> & { source: string; overlay?: string }): VideoScene {
+  const source = (SCENE_SOURCES as readonly string[]).includes(scene.source) ? (scene.source as SceneSource) : 'graphic';
+  return { ...scene, source, overlay: scene.overlay ?? '' };
+}
+
+/** La durata del video, dalla regia. */
+export function videoSeconds(scenes: readonly VideoScene[]): number {
+  return scenes.reduce((sum, scene) => sum + scene.seconds, 0);
+}
+
+/** Il video montato dall'agente: l'MP4, e quante scene hanno ancora il cartello al posto dell'immagine. */
+export interface VideoCut {
+  file: MediaFile;
+  /** Le scene col cartello: girati da caricare, b-roll da generare, foto che mancano. */
+  placeholders: number;
+  seconds: number;
+  /** La traccia della musica del brand usata: nulla senza musica, assente nei montaggi di prima. */
+  trackId?: string | null;
+  /** Di quale regia è il montaggio (`cutKey`): se la regia cambia, va rimontato. */
+  from: string;
+  madeAt: string;
+}
+
+/** L'impronta di script e regia: la confronta chi deve dire «la regia è cambiata, rimonta». */
+export function cutKey(visual: Pick<ContentVisual, 'script' | 'scenes' | 'musicId'>): string {
+  // Del materiale conta quale file è, non l'indirizzo firmato, che cambia a ogni lettura.
+  // Il fotogramma e il lucchetto non cambiano il montaggio; la clip sì.
+  const scenes = visual.scenes
+    .map(readScene)
+    .map(({ footage, frame: _frame, clip, locked: _locked, ...scene }) => ({
+      ...scene,
+      footage: footage?.path ?? footage?.url ?? null,
+      // Solo se c'è: così i montaggi fatti prima delle clip non risultano da rifare.
+      ...(clip && { clip: clip.path ?? clip.url }),
+    }));
+  // La scelta della musica solo quando c'è: «la sceglie chi monta» non cambia i montaggi di prima.
+  const text = JSON.stringify([visual.script ?? '', scenes, ...(visual.musicId !== undefined ? [visual.musicId] : [])]);
+  let hash = 5381;
+  for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+  return (hash >>> 0).toString(36);
 }
 
 export interface ContentVisual {
   /** Titolo della copertina o della prima slide. */
   headline: string;
   slides: CarouselSlide[];
+  /** Lo script del video: aggancio, sviluppo e chiusura in poche righe. Vuoto negli altri formati. */
+  script: string;
+  /** La regia del video, scena per scena. */
   scenes: VideoScene[];
+  /** Il montaggio, quando l'utente lo chiede: resta anche se la regia cambia, e allora va rifatto. */
+  cut?: VideoCut | null;
+  /**
+   * La musica del video, tra le tracce del brand: assente, la sceglie chi monta; `null`, senza musica; un id, quella
+   * traccia.
+   */
+  musicId?: string | null;
   /**
    * Le card del post: proposta con la bozza, create quando l'utente lo chiede. Nulla per i video e
    * per le bozze nate prima dei visivi (vedi `fallbackDesign`).

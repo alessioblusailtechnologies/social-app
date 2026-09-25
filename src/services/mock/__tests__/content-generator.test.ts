@@ -28,7 +28,7 @@ describe('generateContent', () => {
     expect(generateContent(brand, idea, ['instagram'], 'carousel', 0).visual.slides.length).toBeGreaterThanOrEqual(4);
     const scenes = generateContent(brand, idea, ['instagram'], 'video', 0).visual.scenes;
     expect(scenes.some((scene) => scene.source === 'shoot')).toBe(true);
-    expect(scenes.some((scene) => scene.source === 'generated')).toBe(true);
+    expect(scenes.some((scene) => scene.source === 'graphic')).toBe(true);
   });
 
   it('propone il visivo con la bozza: una card per il post, una per slide, nessuna per il video', () => {

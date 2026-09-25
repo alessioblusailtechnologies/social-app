@@ -50,7 +50,7 @@ export function ffmpegDir(): string | null {
  * Le clip arrivano in `media/`, che è anche la cartella pubblica del progetto: `staticFile('x.mp4')`
  * dentro la composizione prende la clip che Higgsfield ha appena girato.
  */
-export async function prepareStudio(dir: string): Promise<string> {
+export async function prepareStudio(dir: string, where = ''): Promise<string> {
   const { mkdir, writeFile } = await import('node:fs/promises');
   await mkdir(join(dir, 'remotion'), { recursive: true });
   await mkdir(join(dir, 'media'), { recursive: true });
@@ -67,7 +67,7 @@ export async function prepareStudio(dir: string): Promise<string> {
     if (name !== 'MONTAGGIO.md' && existsSync(join(dir, name))) continue;
     await writeFile(join(dir, name), content, 'utf8');
   }
-  return '`remotion/`, il progetto con cui si monta il video, e `MONTAGGIO.md` che dice come si rende';
+  return `\`${where}remotion/\`, il progetto con cui si monta il video, e \`${where}MONTAGGIO.md\` che dice come si rende`;
 }
 
 const MONTAGGIO_TSX = `import { AbsoluteFill, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame } from 'remotion';

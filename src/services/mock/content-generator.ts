@@ -216,26 +216,42 @@ export function generateContent(
   const scenes: VideoScene[] =
     format === 'video'
       ? [
-          { title: 'Aggancio', description: `Testo a schermo: «${shortHook(idea.title)}»`, seconds: 3, source: 'generated' as const },
+          {
+            title: 'Aggancio',
+            description: 'Tipografia animata nei colori del brand, su fondo pieno.',
+            seconds: 3,
+            source: 'graphic' as const,
+            overlay: shortHook(idea.title),
+          },
           {
             title: 'Contesto',
-            description: 'Inquadra il luogo di lavoro o le mani al lavoro, senza parlare.',
-            seconds: 5,
-            source: 'shoot' as const,
+            description: 'Il luogo di lavoro la mattina, prima di aprire: luce dalla finestra, nessuno in scena.',
+            seconds: 3,
+            source: 'broll' as const,
+            overlay: '',
           },
           {
             title: 'Il punto',
-            description: `A voce, guardando in camera: ${angle[0] ?? idea.angle}`,
-            seconds: 8,
+            description: 'Le mani al lavoro, inquadratura stretta dall’alto, luce naturale laterale. Tieni il telefono fermo per 6 secondi.',
+            seconds: 6,
             source: 'shoot' as const,
+            overlay: angle[0] ?? idea.angle,
           },
-          { title: 'La prova', description: 'Grafica con il dato chiave e il logo piccolo in basso.', seconds: 5, source: 'generated' as const },
-          { title: 'Chiusura', description: closing, seconds: 3, source: 'generated' as const },
-        ].map((scene) => ({ ...scene, description: clean(scene.description) }))
+          {
+            title: 'La prova',
+            description: 'Una foto di un lavoro finito, con uno zoom lento verso il dettaglio.',
+            seconds: 4,
+            source: 'photo' as const,
+            overlay: '',
+          },
+          { title: 'Chiusura', description: 'Il logo che entra, su fondo pieno.', seconds: 3, source: 'graphic' as const, overlay: closing },
+        ].map((scene) => ({ ...scene, description: clean(scene.description), overlay: clean(scene.overlay) }))
       : [];
+  const script =
+    format === 'video' ? clean([`Aggancio: ${shortHook(idea.title)}`, `Sviluppo: ${angle.slice(0, 2).join(' ')}`, `Chiusura: ${closing}`].join('\n')) : '';
 
   // Nessun visivo con la bozza: la card si disegna dopo, come nel backend vero.
-  return { format, variants, visual: { headline: clean(shortHook(idea.title)), slides, scenes, design: null } };
+  return { format, variants, visual: { headline: clean(shortHook(idea.title)), slides, script, scenes, design: null } };
 }
 
 /**

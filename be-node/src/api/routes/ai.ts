@@ -48,6 +48,12 @@ export function registerAiRoutes(app: FastifyInstance, deps: Deps): void {
     return queueJob(deps, request, reply, { kind: 'visual-style', input: body });
   });
 
+  /** Il profilo video del brand, rifatto dal Profilo: si restituisce, non si salva. */
+  app.post('/api/ai/video-profile/job', (request, reply) => {
+    const body = visualStyleRequestSchema.omit({ restart: true }).parse(request.body);
+    return queueJob(deps, request, reply, { kind: 'video-profile', input: body });
+  });
+
   app.post('/api/media/references', (request) => {
     const { dataUri } = referenceUploadSchema.parse(request.body);
     return uploadReference(deps, request.identity, parsePhotoDataUri(dataUri));

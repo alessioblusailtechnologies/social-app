@@ -33,6 +33,8 @@ import { useProfileJob, useProposeVisualStyle, useUploadReference } from '@/serv
 import type { VisualStyle } from '@/services/types';
 
 import { Swatches } from './BrandVisuals';
+import { MusicPanel } from './MusicPanel';
+import { VideoProfilePanel } from './VideoProfilePanel';
 import type { EditorProps } from './types';
 
 /** Sul web il logo finisce nello storage locale come data URI: oltre questa soglia lo rifiutiamo. */
@@ -145,6 +147,8 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
       direction: style.direction,
       line: style.line,
       examples: style.examples,
+      // Il profilo video nasce con la prima linea; uno che c'era già resta.
+      ...(style.video && { video: style.video }),
     });
   };
 
@@ -156,23 +160,25 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
   const preparing = propose.isPending || resumed.resuming;
   const lineSteps = propose.isPending ? propose.steps : resumed.steps;
 
+  /** Chi è il brand adesso, con le modifiche non ancora salvate: serve alla linea e al profilo video. */
+  const describe = () => ({
+    identity: context.draft.identity,
+    themes: context.draft.themes.map((theme) => theme.name).filter(Boolean),
+    visual: latest.current,
+    channels,
+    goals: context.draft.positioning.goals,
+    audiences: context.draft.positioning.audiences,
+    voice: currentVoiceCard(context.draft.voice),
+    siteSummary: context.insights?.summary || undefined,
+  });
+
   const generate = (restart: boolean) => {
     Keyboard.dismiss();
     const applied = correctable && !restart && written;
     const request: Visual = { ...latest.current, notes: notes.trim() };
     onChange(request);
     propose.mutate(
-      {
-        identity: context.draft.identity,
-        themes: context.draft.themes.map((theme) => theme.name).filter(Boolean),
-        visual: request,
-        channels,
-        goals: context.draft.positioning.goals,
-        audiences: context.draft.positioning.audiences,
-        voice: currentVoiceCard(context.draft.voice),
-        siteSummary: context.insights?.summary || undefined,
-        restart,
-      },
+      { ...describe(), visual: request, restart },
       {
         onSuccess: (style) => {
           applyStyle(style);
@@ -349,6 +355,12 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
           </Button>
         )}
       </Panel>
+
+      <VideoProfilePanel value={value.video} onChange={(video) => onChange({ ...latest.current, video })} request={describe} />
+
+      {context.brandId ? (
+        <MusicPanel brandId={context.brandId} value={value.music} onChange={(music) => onChange({ ...latest.current, music })} />
+      ) : null}
 
       <ImageViewer
         items={

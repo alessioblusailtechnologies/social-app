@@ -80,7 +80,10 @@ export function HomeScreen({ brand }: { brand: Brand }) {
   const { percent } = completeness(brand);
 
   const openTask = (task: HomeTask) => {
-    if (task.slot) openSlot(task.slot);
+    // Chi deve girare va dritto al Video Studio, dove si caricano i girati.
+    if (task.slot && task.kind === 'shoot') {
+      router.push({ pathname: '/content/[slotId]', params: { slotId: task.slot.id, step: 'visual' } });
+    } else if (task.slot) openSlot(task.slot);
     else if (task.content) router.push({ pathname: '/draft/[contentId]', params: { contentId: task.content.id } });
   };
 

@@ -195,6 +195,37 @@ export interface VisualExample {
   photoDescription?: string;
 }
 
+/**
+ * Come si racconta il brand in video: lo scrive l'AI accanto alla linea, lo corregge l'utente, lo legge chi fa la
+ * regia di ogni video. È qui che un parrucchiere e una trattoria diventano diversi, non nel codice.
+ */
+export interface BrandVideo {
+  /** Quello che il brand vende e che si mostra sempre vero, girato o in foto: un modello lo altererebbe. */
+  real: string;
+  /** Quello che si può generare senza tradire nessuno: ambienti, materiali, luce, atmosfera. */
+  generated: string;
+  /** Le riprese tipiche da chiedere a chi pubblica, nel mondo del brand. */
+  shots: string[];
+  /** Come si muove: colore, grana, ritmo, come entrano i titoli. */
+  look: string;
+  /** Come suona la musica del brand: genere, velocità, strumenti, atmosfera. */
+  sound: string;
+}
+
+/**
+ * Una traccia della musica del brand: strumentale, generata dal «come suona» del profilo video. Il brand ne ha poche,
+ * di atmosfere diverse, e ogni video ne usa una: così suona sempre riconoscibile, e si paga una volta sola.
+ */
+export interface BrandTrack {
+  id: string;
+  /** L'atmosfera, in italiano: «calma del mattino», «energia del sabato». */
+  mood: string;
+  /** La velocità, fissata nel piano della traccia: chi monta fa cadere gli stacchi sul tempo. */
+  bpm: number;
+  seconds: number;
+  file: MediaFile;
+}
+
 export interface Visual {
   logoUri: string | null;
   palette: Palette;
@@ -211,6 +242,10 @@ export interface Visual {
   /** La linea grafica: manca nei brand salvati prima del motore delle card. */
   line?: BrandLine | null;
   examples?: VisualExample[];
+  /** Il profilo video: manca nei brand salvati prima del Video Studio, e si scrive al primo video. */
+  video?: BrandVideo | null;
+  /** La musica del brand: manca finché non si monta il primo video, o non la si chiede dal Profilo. */
+  music?: BrandTrack[];
 }
 
 export interface SignalSource {

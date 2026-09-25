@@ -1,4 +1,4 @@
-import type { Brand } from '@/domain/brand';
+import type { Brand, BrandVideo } from '@/domain/brand';
 import type { Content } from '@/domain/content';
 import type { Idea, IdeaDraft } from '@/domain/idea';
 import type { PlanSlot, SlotDraft } from '@/domain/plan';
@@ -34,6 +34,7 @@ export function createHttpServices(api: ApiClient): Services {
     setActiveBrand: (brandId) => api.put<void>('/workspace/active-brand', { brandId }),
     loadDemoBrand: () => api.post<Brand>('/demo'),
     resetDemo: () => api.delete('/demo'),
+    remakeMusic: (brandId, onSteps) => api.job<Brand>(route`/brands/${brandId}/music/job`, {}, onSteps),
     uploadReference: (_uri, dataUri) => {
       if (!dataUri) return Promise.reject(new ApiError(400, 'INVALID_DATA', 'Non riesco a leggere l’immagine: riprova con un’altra.'));
       return api.post<MediaFile>('/media/references', { dataUri });
@@ -44,6 +45,7 @@ export function createHttpServices(api: ApiClient): Services {
     readWebsite: (site, identity, onSteps) => api.job<WebsiteInsights>('/ai/website/job', { site, identity }, onSteps),
     suggestThemes: (identity) => api.post<string[]>('/ai/themes', { identity }),
     proposeVisualStyle: (request, onSteps) => api.job<VisualStyle>('/ai/visual/job', request, onSteps),
+    proposeVideoProfile: (request, onSteps) => api.job<BrandVideo>('/ai/video-profile/job', request, onSteps),
     suggestPositioning: (identity, site, onSteps) =>
       api.job<PositioningIdeas>(
         '/ai/positioning/job',
@@ -120,6 +122,30 @@ export function createHttpServices(api: ApiClient): Services {
     proposeVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/propose`),
     designVisual: (contentId, channels, instruction, onSteps) =>
       api.job<Content>(route`/contents/${contentId}/visual/design/job`, { channels, instruction }, onSteps),
+    async uploadFootage(contentId, index, file) {
+      const scene = String(index);
+      const { path, uploadUrl } = await api.post<{ path: string; uploadUrl: string }>(
+        route`/contents/${contentId}/video/scenes/${scene}/upload`,
+        { mimeType: file.mimeType, bytes: file.bytes },
+      );
+      // Il file va dritto nel bucket: un girato non passa dall'API.
+      const body = await (await fetch(file.uri)).blob();
+      const sent = await fetch(uploadUrl, { method: 'PUT', headers: { 'content-type': file.mimeType, 'x-upsert': 'false' }, body });
+      if (!sent.ok) throw new ApiError(sent.status, 'UPLOAD_FAILED', 'Il caricamento non è riuscito. Riprova.');
+      return api.put<Content>(route`/contents/${contentId}/video/scenes/${scene}/footage`, { path });
+    },
+    removeFootage: (contentId, index) =>
+      api.put<Content>(route`/contents/${contentId}/video/scenes/${String(index)}/footage`, { path: null }),
+    replaceScene: (contentId, index, onSteps) =>
+      api.job<Content>(route`/contents/${contentId}/video/scenes/${String(index)}/replace/job`, {}, onSteps),
+    makeFrame: (contentId, index, onSteps) =>
+      api.job<Content>(route`/contents/${contentId}/video/scenes/${String(index)}/frame/job`, {}, onSteps),
+    makeClip: (contentId, index, onSteps) =>
+      api.job<Content>(route`/contents/${contentId}/video/scenes/${String(index)}/clip/job`, {}, onSteps),
+    lockScene: (contentId, index, locked) =>
+      api.put<Content>(route`/contents/${contentId}/video/scenes/${String(index)}/lock`, { locked }),
+    setMusic: (contentId, musicId) => api.put<Content>(route`/contents/${contentId}/video/music`, { musicId }),
+    cutVideo: (contentId, onSteps) => api.job<Content>(route`/contents/${contentId}/video/cut/job`, {}, onSteps),
     createVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/create`),
     regenerateImage: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/image`),
     uploadPhoto: (contentId, dataUri) => api.post<Content>(route`/contents/${contentId}/visual/photo`, { dataUri }),
