@@ -50,6 +50,9 @@ export async function cutVideo(
     task: 'video',
     // Solo quello che c'è: le generazioni a pagamento arrivano con un gesto a parte.
     generate: false,
+    // Rendere, guardare e correggere chiede più giri di un testo: con 40 un montaggio accurato si è fermato a un passo
+    // dalla consegna. Il tetto di spesa per lavoro resta.
+    maxTurns: 80,
     // Il suo progetto di montaggio: rimontando lo stesso video si riparte da lì.
     studio: `video/${content.id}`,
     onTool: stepsFromTools(log, { first: VIDEO_CUT_STEPS.thinking, next: VIDEO_CUT_STEPS.reflect }),
@@ -126,7 +129,7 @@ function cutPrompt(content: Content, music: BrandTrack[], chosen: 'auto' | 'trac
     '',
     '## Cosa c’è a disposizione',
     '- Grafica e testo a schermo li disegni tu nella composizione, coi colori e i caratteri del brand (BRAND.md, i CSS in linea/).',
-    '- Girati: quelli che il cliente ha caricato sono in media/, indicati scena per scena; gli altri non ci sono ancora. Del girato usa il pezzo indicato, se c’è; altrimenti prendi il migliore per la durata della scena.',
+    '- Girati: quelli che il cliente ha caricato sono in media/, indicati scena per scena; gli altri non ci sono ancora. Del girato usa il pezzo indicato, se c’è: viene dall’analisi del materiale già fatta, momento per momento; altrimenti prendi il migliore per la durata della scena.',
     '- B-roll: le clip già generate sono in media/, indicate scena per scena; le altre non ci sono ancora, e in questo montaggio non si generano.',
     '- Foto vive: se il cliente ha caricato la foto della scena è in media/; altrimenti le foto vere del brand sono in esempi/foto/ e riferimenti/, e se una va bene la puoi muovere, se no la scena aspetta la sua.',
     'Dove l’immagine manca metti un cartello nello stile del brand che dice cosa ci andrà (per un girato, l’indicazione di ripresa), così chi guarda capisce già ritmo e storia. Il testo a schermo della scena resta sopra, come nel video finito.',

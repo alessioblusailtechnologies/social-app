@@ -205,7 +205,7 @@ export class AgentEngine implements AiEngine {
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       persistSession: false,
-      maxTurns: this.options.maxTurns,
+      maxTurns: request.maxTurns ?? this.options.maxTurns,
       outputFormat: {
         type: 'json_schema',
         schema: z.toJSONSchema(request.schema, { target: 'draft-7' }) as Record<string, unknown>,

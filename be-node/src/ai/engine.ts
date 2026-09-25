@@ -67,6 +67,11 @@ export interface AiRequest<S extends z.ZodType> {
    * montaggio di un altro. Senza, la cartella stessa.
    */
   studio?: string;
+  /**
+   * Quanti giri può fare, quando il compito ne chiede più del solito: un montaggio rende, guarda e corregge. Senza,
+   * quelli della configurazione. Il tetto di spesa resta comunque.
+   */
+  maxTurns?: number;
   /** File della libreria da mettere nella cartella `media/` del montaggio, col nome con cui li cita il prompt. */
   media?: { path: string; name: string }[];
   /** Chi ha chiesto la generazione: finisce nei consumi. */
