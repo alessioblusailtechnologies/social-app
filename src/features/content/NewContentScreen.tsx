@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Platform } from 'react-native';
 
 import {
+  AgentStage,
   Button,
   Chip,
   ChipGroup,
@@ -13,10 +14,8 @@ import {
   Panel,
   ScreenFooter,
   ScreenTitle,
-  StepList,
   Text,
   TopBar,
-  radii,
   screenStyles,
   useToast,
 } from '@/design-system';
@@ -24,6 +23,7 @@ import type { Brand, ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
 import { FORMAT_LABELS, type IdeaFormat } from '@/domain/idea';
 import { selectedChannels } from '@/domain/plan';
+import { stageAspect } from '@/domain/visual';
 import { EMPTY_SOURCE, SOURCE_REASONS, SourceFields, sourceFromState, type SourceState } from '@/features/ideas/SourceFields';
 import { useCreateContent } from '@/services/queries';
 
@@ -76,9 +76,7 @@ export function NewContentScreen({ brand }: { brand: Brand }) {
         {create.isPending ? (
           <>
             <ScreenTitle title="Un attimo" subtitle="Scelgo il taglio, lo lego ai temi del profilo e scrivo seguendo la tua voce." />
-            <Panel gap={12} style={{ borderRadius: radii.card }}>
-              <StepList steps={create.steps} waiting="Rileggo il profilo" />
-            </Panel>
+            <AgentStage steps={create.steps} waiting="Rileggo il profilo" aspect={stageAspect(format)} />
           </>
         ) : (
           <>

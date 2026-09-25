@@ -6,6 +6,7 @@ import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 
 import { DEMO_MODE } from '@/config';
 import {
+  AgentStage,
   Button,
   FormScrollView,
   IconButton,
@@ -14,7 +15,6 @@ import {
   ProgressSegments,
   ScreenFooter,
   ScreenTitle,
-  StepList,
   Text,
   TopBar,
   motion,
@@ -201,7 +201,7 @@ export function OnboardingFlow({ mode }: { mode: 'first' | 'new' }) {
           )}
           {ideasPhase !== 'idle' && (
             <Panel gap={12}>
-              <StepList steps={firstIdeas.steps} waiting="Salvo il profilo" />
+              <AgentStage steps={firstIdeas.steps} waiting="Salvo il profilo" />
             </Panel>
           )}
           {sectionStep && draft && (

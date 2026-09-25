@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -12,6 +13,8 @@ export interface ViewerItem {
   key: string;
   /** L'immagine da mostrare; senza, o se non si carica, si usa `fallback`. */
   uri?: string | null;
+  /** Un video: si carica e parte solo quando è la pagina che si sta guardando. */
+  video?: string | null;
   /** Larghezza su altezza, se si conosce: l'immagine riempie lo schermo senza deformarsi. */
   aspectRatio?: number;
   label?: string;
@@ -24,7 +27,7 @@ const GUTTER = 16;
 const CHROME = 150;
 
 /**
- * Le immagini a tutto schermo, su fondo scuro: si scorre fra le altre del gruppo col dito, con le frecce ai lati
+ * Le immagini e i video a tutto schermo, su fondo scuro: si scorre fra le altre del gruppo col dito, con le frecce ai lati
  * (col mouse non si scorre di lato) o coi tasti freccia, e si chiude con un tocco.
  */
 export function ImageViewer({ items, index, onClose }: { items: ViewerItem[]; index: number | null; onClose: () => void }) {
@@ -69,14 +72,14 @@ export function ImageViewer({ items, index, onClose }: { items: ViewerItem[]; in
           scrollEventThrottle={32}
           onScroll={(event) => setCurrent(Math.round(event.nativeEvent.contentOffset.x / Math.max(1, width)))}
           onLayout={() => scroll.current?.scrollTo({ x: (index ?? 0) * width, animated: false })}>
-          {items.map((item) => (
+          {items.map((item, position) => (
             <Pressable
               key={item.key}
               accessibilityRole="button"
               accessibilityLabel="Chiudi l’immagine"
               onPress={onClose}
               style={[styles.page, { width, height, paddingTop: insets.top + 56, paddingBottom: insets.bottom + 24 }]}>
-              <ViewerPage item={item} boxWidth={boxWidth} boxHeight={boxHeight} />
+              <ViewerPage item={item} boxWidth={boxWidth} boxHeight={boxHeight} active={position === current} />
               {item.label ? (
                 <Text variant="caption" color={palette.white} align="center">
                   {item.label}
@@ -117,19 +120,36 @@ export function ImageViewer({ items, index, onClose }: { items: ViewerItem[]; in
   );
 }
 
-function ViewerPage({ item, boxWidth, boxHeight }: { item: ViewerItem; boxWidth: number; boxHeight: number }) {
+function ViewerPage({ item, boxWidth, boxHeight, active }: { item: ViewerItem; boxWidth: number; boxHeight: number; active: boolean }) {
   const [broken, setBroken] = useState(false);
   // Con la proporzione nota l'immagine occupa tutto lo spazio possibile; senza, sta dentro il riquadro.
   const fit = item.aspectRatio
     ? { width: Math.min(boxWidth, boxHeight * item.aspectRatio), height: Math.min(boxHeight, boxWidth / item.aspectRatio) }
     : { width: boxWidth, height: boxHeight };
+  if (item.video) {
+    // Un tocco sul video lo comanda, non chiude il visore: i controlli stanno sul video.
+    return (
+      <Pressable onPress={(event) => event.stopPropagation()} style={fit}>
+        {active ? <ViewerVideo uri={item.video} style={fit} /> : <View style={[fit, styles.videoIdle]} />}
+      </Pressable>
+    );
+  }
   if (item.uri && !broken) {
     return <Image source={{ uri: item.uri }} contentFit="contain" style={fit} onError={() => setBroken(true)} />;
   }
   return <View style={fit}>{item.fallback?.(fit.width)}</View>;
 }
 
+function ViewerVideo({ uri, style }: { uri: string; style: { width: number; height: number } }) {
+  const player = useVideoPlayer(uri, (created) => {
+    created.loop = true;
+    created.play();
+  });
+  return <VideoView player={player} style={style} nativeControls contentFit="contain" />;
+}
+
 const styles = StyleSheet.create({
+  videoIdle: { backgroundColor: 'rgba(255,255,255,0.06)' },
   backdrop: { flex: 1, backgroundColor: 'rgba(12,14,24,0.94)' },
   page: { alignItems: 'center', justifyContent: 'center', gap: 12 },
   close: { position: 'absolute', right: GUTTER },

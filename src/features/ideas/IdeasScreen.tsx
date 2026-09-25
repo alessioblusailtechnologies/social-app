@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import {
+  AgentStage,
   Button,
   Card,
   Chip,
@@ -11,7 +12,6 @@ import {
   LinkButton,
   Panel,
   SegmentedControl,
-  StepList,
   Text,
   TopBar,
   colors,
@@ -197,7 +197,7 @@ function Generating({ steps }: { steps: AiStep[] }) {
   return (
     <Panel gap={12} style={styles.generating}>
       <Text variant="strongSmall">Preparo le idee dal tuo Brand DNA</Text>
-      <StepList steps={steps} waiting="Rileggo il profilo" />
+      <AgentStage steps={steps} waiting="Rileggo il profilo" />
     </Panel>
   );
 }

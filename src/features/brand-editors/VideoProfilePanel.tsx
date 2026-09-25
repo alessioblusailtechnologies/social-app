@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, LinkButton, Panel, StepList, SunkenInput, Text, colors, useToast } from '@/design-system';
+import { AgentStage, Button, LinkButton, Panel, SunkenInput, Text, colors, useToast } from '@/design-system';
 import type { BrandVideo } from '@/domain/brand';
 import { apiErrorMessage } from '@/services';
 import { useProfileJob, useProposeVideoProfile } from '@/services/queries';
@@ -52,7 +52,7 @@ export function VideoProfilePanel({
   return (
     <Panel label="Come si racconta in video" action={action} gap={12}>
       {working ? (
-        <StepList steps={steps} />
+        <AgentStage steps={steps} aspect={9 / 16} />
       ) : value ? (
         ROWS.map(({ key, label }) => {
           const text = key === 'shots' ? value.shots.join('\n') : value[key];

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 
 import {
+  AgentStage,
   Button,
   Chip,
   ChipGroup,
@@ -12,7 +13,6 @@ import {
   LinkButton,
   Panel,
   Sheet,
-  StepList,
   SunkenInput,
   Text,
   colors,
@@ -21,11 +21,13 @@ import {
 } from '@/design-system';
 import type { Brand, ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
-import type { Content } from '@/domain/content';
+import { variantFormat, type Content } from '@/domain/content';
 import {
   CARD_FIELD_LABELS,
   CARD_LIMITS,
   VISUAL_STEP_LABELS,
+  aspectFor,
+  aspectRatio,
   brandKit,
   withDesignTemplates,
   imageRoles,
@@ -110,6 +112,8 @@ export function VisualPanel({ brand, content, channel, locked, drawingSteps }: V
   const drawing = draw.isPending || drawingSteps !== undefined;
 
   const design = content.visual.design;
+  /** Il riquadro in cui l'AI lavora ha le proporzioni della card di questo canale. */
+  const cardAspect = aspectRatio(aspectFor(channel, variantFormat(content, channel)));
   if (content.format === 'video') return null;
 
   /** Disegna la card da capo. Canali vuoti = deve reggere in tutti i formati del contenuto. */
@@ -149,7 +153,7 @@ export function VisualPanel({ brand, content, channel, locked, drawingSteps }: V
     if (drawing) {
       return (
         <Panel label="Visivo" gap={10}>
-          <StepList steps={drawingSteps ?? draw.steps} waiting="Guardo le card che hai approvato" />
+          <AgentStage steps={drawingSteps ?? draw.steps} waiting="Guardo le card che hai approvato" aspect={cardAspect} />
         </Panel>
       );
     }
@@ -289,7 +293,7 @@ export function VisualPanel({ brand, content, channel, locked, drawingSteps }: V
   if (drawing) {
     return (
       <Panel label="Visivo" gap={10}>
-        <StepList steps={drawingSteps ?? draw.steps} waiting="Guardo le card che hai approvato" />
+        <AgentStage steps={drawingSteps ?? draw.steps} waiting="Guardo le card che hai approvato" aspect={cardAspect} />
       </Panel>
     );
   }
@@ -300,7 +304,8 @@ export function VisualPanel({ brand, content, channel, locked, drawingSteps }: V
     const current = design.step ? steps.indexOf(design.step) : -1;
     return (
       <Panel label="Visivo" gap={10}>
-        <StepList
+        <AgentStage
+          aspect={cardAspect}
           steps={steps
             .slice(0, current < 0 ? steps.length : current + 1)
             .map((step, i) => ({ id: step, label: VISUAL_STEP_LABELS[step], status: i < current ? ('done' as const) : ('running' as const) }))}

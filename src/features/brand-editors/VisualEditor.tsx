@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Platform, StyleSheet, View } from 'react-native';
 
 import {
+  AgentStage,
   Button,
   IconButton,
   ImageViewer,
@@ -12,7 +13,6 @@ import {
   Panel,
   PressableScale,
   RadioMark,
-  StepList,
   SunkenInput,
   Switch,
   Text,
@@ -292,7 +292,7 @@ export function VisualEditor({ value, onChange, context }: EditorProps<Visual>) 
 
       <Panel label="Come escono le card" gap={12}>
         {preparing ? (
-          <StepList steps={lineSteps} />
+          <AgentStage steps={lineSteps} />
         ) : examples.length > 0 ? (
           <>
             {value.direction?.summary ? (

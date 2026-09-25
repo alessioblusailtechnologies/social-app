@@ -3,17 +3,17 @@ import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 
 import {
+  AgentStage,
   FormScrollView,
-  Panel,
   ProgressSegments,
   ScreenTitle,
-  StepList,
   TopBar,
   screenStyles,
   useToast,
 } from '@/design-system';
 import type { ChannelId } from '@/domain/brand';
 import { channelName } from '@/domain/catalog';
+import { stageAspect } from '@/domain/visual';
 import { useActiveBrand, useCreateContentFromIdea, useIdeas, useSetIdeaStatus } from '@/services/queries';
 
 /**
@@ -66,9 +66,7 @@ export default function WritingRoute() {
           title="Il testo"
           subtitle={names ? `Scrivo per ${names} seguendo la tua scheda voce.` : 'Scrivo seguendo la tua scheda voce.'}
         />
-        <Panel gap={12}>
-          <StepList steps={create.steps} waiting="Rileggo il profilo" />
-        </Panel>
+        <AgentStage steps={create.steps} waiting="Rileggo il profilo" aspect={stageAspect(idea?.formats[0] ?? 'post')} />
       </FormScrollView>
     </View>
   );

@@ -1,6 +1,6 @@
 import { Keyboard, StyleSheet, View } from 'react-native';
 
-import { Badge, Button, FieldCard, Panel, StepList, Text, colors, useToast } from '@/design-system';
+import { AgentStage, Badge, Button, FieldCard, Panel, Text, colors, useToast } from '@/design-system';
 import type { BrandKind, Identity } from '@/domain/brand';
 import { normalizeSite } from '@/lib/site';
 import { apiErrorMessage } from '@/services';
@@ -116,7 +116,7 @@ export function IdentityEditor({ value, onChange, context }: EditorProps<Identit
       {reading && (
         <Panel gap={12}>
           <Text variant="strongSmall">Sto leggendo {site}</Text>
-          <StepList steps={readingSteps} waiting="Mi collego al sito" />
+          <AgentStage steps={readingSteps} waiting="Mi collego al sito" />
         </Panel>
       )}
       {alreadyRead && context.insights && !reading && (

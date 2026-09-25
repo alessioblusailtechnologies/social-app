@@ -725,6 +725,19 @@ export function aspectFor(channel: ChannelId, format: IdeaFormat): Aspect {
   return '4:5';
 }
 
+/** Larghezza su altezza di un formato di card, per chi disegna un riquadro con le sue proporzioni. */
+export function aspectRatio(aspect: Aspect): number {
+  return ASPECT_SIZES[aspect].width / ASPECT_SIZES[aspect].height;
+}
+
+/**
+ * Il formato del riquadro in cui l'AI lavora a un contenuto: verticale per un video, orizzontale per un articolo, la
+ * card del feed per il resto.
+ */
+export function stageAspect(format: IdeaFormat): number {
+  return format === 'video' ? aspectRatio('9:16') : format === 'article' ? aspectRatio('1.91:1') : aspectRatio('4:5');
+}
+
 export function aspectsFor(channels: readonly ChannelId[], format: IdeaFormat): Aspect[] {
   return [...new Set(channels.map((channel) => aspectFor(channel, format)))];
 }

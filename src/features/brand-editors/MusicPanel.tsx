@@ -3,7 +3,7 @@ import { Pause, Play } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, IconButton, Panel, StepList, Text, colors, useToast } from '@/design-system';
+import { AgentStage, Button, IconButton, Panel, Text, colors, useToast } from '@/design-system';
 import type { Brand, BrandTrack } from '@/domain/brand';
 import { apiErrorMessage } from '@/services';
 import { MUSIC_STEPS } from '@/services/ai-steps';
@@ -60,7 +60,7 @@ export function MusicPanel({
   return (
     <Panel label="La musica del brand" gap={12}>
       {working ? (
-        <StepList steps={remake.isPending ? remake.steps : resumed.steps} waiting={MUSIC_STEPS.plan} />
+        <AgentStage steps={remake.isPending ? remake.steps : resumed.steps} waiting={MUSIC_STEPS.plan} aspect={9 / 16} />
       ) : tracks.length > 0 ? (
         tracks.map((track) => {
           const playing = current === track.id && status.playing;

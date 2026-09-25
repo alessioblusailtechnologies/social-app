@@ -2,7 +2,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Badge, Button, Panel, StepList, Text, colors, radii, useToast } from '@/design-system';
+import { AgentStage, Badge, Button, Panel, Text, colors, radii, useToast } from '@/design-system';
 import type { Brand } from '@/domain/brand';
 import { cutKey, type Content } from '@/domain/content';
 import { VIDEO_CUT_STEPS } from '@/services/ai-steps';
@@ -11,7 +11,7 @@ import type { AiStep } from '@/services/types';
 
 import { VideoMusicRow } from './VideoMusicRow';
 
-const PLAYER_WIDTH = 220;
+const PLAYER_WIDTH = 260;
 
 /**
  * Il montaggio nel Video Studio: si monta subito, anche senza girati. Dove manca il materiale c'è un cartello che
@@ -42,7 +42,7 @@ export function VideoCutPanel({
   if (cutting) {
     return (
       <Panel label="Montaggio" gap={10}>
-        <StepList steps={cuttingSteps ?? cutVideo.steps} waiting={VIDEO_CUT_STEPS.thinking} />
+        <AgentStage steps={cuttingSteps ?? cutVideo.steps} waiting={VIDEO_CUT_STEPS.thinking} aspect={9 / 16} />
         <Text variant="caption">Ci vuole qualche minuto: puoi uscire, il montaggio va avanti.</Text>
       </Panel>
     );

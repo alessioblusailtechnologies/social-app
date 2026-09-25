@@ -14,6 +14,7 @@ export { ProgressSegments, StackedBar, WeightBar } from './Progress';
 export { Switch } from './Switch';
 export { SkeletonLines } from './Skeleton';
 export { StepList, type StepItem } from './Steps';
+export { AgentStage } from './AgentStage';
 export { ImageViewer, type ViewerItem } from './ImageViewer';
 export { Sheet, type SheetProps } from './Sheet';
 export { ToastProvider, useToast } from './Toast';

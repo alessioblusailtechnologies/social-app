@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 
 import {
+  AgentStage,
   Badge,
   Button,
   FormScrollView,
@@ -16,7 +17,6 @@ import {
   ScreenFooter,
   ScreenTitle,
   SkeletonLines,
-  StepList,
   Text,
   TopBar,
   colors,
@@ -30,7 +30,7 @@ import { channelName } from '@/domain/catalog';
 import { channelsWaitingForVideo, channelsWithoutImage, type Content } from '@/domain/content';
 import { FORMAT_LABELS, type IdeaFormat } from '@/domain/idea';
 import { nextFreeDay, SLOT_STATUS_LABELS, type PlanSlot } from '@/domain/plan';
-import { channelsWaitingForVisual } from '@/domain/visual';
+import { channelsWaitingForVisual, stageAspect } from '@/domain/visual';
 import { ChannelMark } from '@/features/brand-editors';
 import { SLOT_TONES } from '@/features/plan/PlanParts';
 import { IdeaPicker, RemoveFromPlan, SlotSchedule } from '@/features/plan/SlotPanels';
@@ -360,9 +360,7 @@ export function ContentScreen({ brand, slot, content: loaded, loading }: Content
 
           {/* Mentre la bozza si scrive i passi si vedono nel passo in cui sei: il lavoro segue te, non il contrario. */}
           {busy && !empty && (
-            <Panel gap={12}>
-              <StepList steps={writingSteps} waiting="Rileggo il profilo" />
-            </Panel>
+            <AgentStage steps={writingSteps} waiting="Rileggo il profilo" aspect={stageAspect(format)} />
           )}
 
           {current === 'text' && !busy && (

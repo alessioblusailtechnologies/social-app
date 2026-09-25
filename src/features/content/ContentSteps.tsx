@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
+  AgentStage,
   Button,
   Chip,
   ChipGroup,
@@ -13,7 +14,6 @@ import {
   RadioMark,
   SegmentedControl,
   StatusDot,
-  StepList,
   SunkenInput,
   Text,
   colors,
@@ -35,15 +35,15 @@ import {
 } from '@/domain/content';
 import { FORMAT_LABELS, type IdeaFormat, type IdeaSource } from '@/domain/idea';
 import type { PlanSlot } from '@/domain/plan';
-import { channelsWaitingForVisual, needsMedia } from '@/domain/visual';
+import { channelsWaitingForVisual, needsMedia, stageAspect } from '@/domain/visual';
 import { DayTimePicker } from '@/features/plan/SlotPanels';
 import { VisualPanel } from '@/features/visual/VisualPanel';
 import { formatWeekdayShort } from '@/lib/dates';
 import { useEditVariant, useSetVariantLayout } from '@/services/queries';
 import type { AiStep } from '@/services/types';
 
-import { PostPreview, VideoStudio, VisualPreview, VoicePanel } from './ContentParts';
-import { SceneMaterial } from './SceneMaterial';
+import { PostPreview, VisualPreview, VoicePanel } from './ContentParts';
+import { VideoScenes } from './SceneMaterial';
 import { VideoCutPanel } from './VideoCutPanel';
 
 /** I quattro passi di un contenuto: prima il testo, poi il visivo, poi quando esce, infine la conferma. */
@@ -153,7 +153,7 @@ export function TextStep({
       {rewriting ? (
         <Panel gap={12}>
           <Text variant="strongSmall">Rivedo il testo per {channelName(variant.channel)}</Text>
-          <StepList steps={steps} waiting="Rileggo la bozza" />
+          <AgentStage steps={steps} waiting="Rileggo la bozza" aspect={stageAspect(content.format)} />
         </Panel>
       ) : editing ? (
         <Panel label={`Testo per ${channelName(variant.channel)}`} gap={10}>
@@ -358,10 +358,7 @@ export function VisualStep({ brand, content, channels, channel, onChannel, locke
         </Panel>
       ) : format === 'video' ? (
         <>
-          <VideoStudio
-            visual={content.visual}
-            renderScene={(scene, index) => <SceneMaterial content={content} scene={scene} index={index} locked={locked} />}
-          />
+          <VideoScenes content={content} locked={locked} />
           <VideoCutPanel brand={brand} content={content} locked={locked} cuttingSteps={cuttingSteps} />
           <Text variant="caption">
             Le scene «Da girare» le riprendi tu col telefono, e quello che vendi si mostra sempre vero. Le foto vive

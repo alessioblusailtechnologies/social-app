@@ -3,13 +3,13 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import {
+  AgentStage,
   Button,
   Chip,
   ChipGroup,
   IconButton,
   LinkButton,
   Panel,
-  StepList,
   SunkenInput,
   Text,
   screenStyles,
@@ -98,7 +98,7 @@ export function PositioningEditor({ value, onChange, context }: EditorProps<Posi
       <View style={styles.column}>
         <Panel gap={12}>
           <Text variant="strongSmall">Preparo obiettivi e pubblico su misura</Text>
-          <StepList steps={generated.steps} waiting="Rileggo quello che so del brand" />
+          <AgentStage steps={generated.steps} waiting="Rileggo quello che so del brand" />
         </Panel>
         <Frequency value={value} onChange={onChange} />
       </View>
