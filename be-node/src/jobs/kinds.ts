@@ -30,7 +30,7 @@ import {
 import { aiMeta, type Deps } from '../services/deps';
 import { generateBrandIdeas } from '../services/ideas';
 import { designContentVisual } from '../services/visual';
-import { cutContentVideo } from '../services/video-cut';
+import { cutContentVideo, makeContentCover } from '../services/video-cut';
 import { remakeBrandMusic } from '../services/music';
 import { makeBrollClip, makeBrollFrame } from '../services/video-broll';
 import { replaceShootScene } from '../services/video-footage';
@@ -149,6 +149,9 @@ export const JOB_KINDS: Record<string, JobKind> = {
   'video-cut': kind(contentRef, ({ deps, identity, onSteps }, { contentId }) => cutContentVideo(deps, identity, contentId, onSteps), signOne),
 
   // «Non posso girarla»: una scena della regia rifatta con un'altra strada.
+  // «Rifai la copertina»: dal montaggio che c'è, coi passi.
+  'video-cover': kind(contentRef, ({ deps, identity, onSteps }, { contentId }) => makeContentCover(deps, identity, contentId, onSteps), signOne),
+
   'video-scene': kind(sceneRef, ({ deps, identity, onSteps }, { contentId, index }) =>
     replaceShootScene(deps, identity, contentId, index, onSteps),
     signOne,

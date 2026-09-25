@@ -125,6 +125,28 @@ export interface VideoCut {
   madeAt: string;
 }
 
+/**
+ * La copertina del reel: nasce col montaggio, da un fotogramma vero rifinito (nitidezza, scontorno, fondo) e composto
+ * con un template del brand, in 9:16 con quello che conta nella fascia 3:4 che Instagram mostra nella griglia.
+ */
+export interface VideoCover {
+  /** Il PNG 1080 × 1920 da usare come copertina. */
+  file: MediaFile;
+  /** L'immagine su cui è composta: serve a ricomporla quando cambia il titolo. */
+  photo: MediaFile | null;
+  /** Il soggetto scontornato, per i template che lo vogliono. */
+  cutout: MediaFile | null;
+  /** Il template: un id della linea del brand, o un layout del motore. */
+  template: string;
+  title: string;
+  /** Il sopratitolo piccolo, se il template ce l'ha. */
+  kicker: string;
+  madeAt: string;
+}
+
+/** Quanto può essere lungo il titolo di una copertina: poche parole, che si leggono in miniatura. */
+export const COVER_TITLE_LIMIT = 60;
+
 /** L'impronta di script e regia: la confronta chi deve dire «la regia è cambiata, rimonta». */
 export function cutKey(visual: Pick<ContentVisual, 'script' | 'scenes' | 'musicId'>): string {
   // Del materiale conta quale file è, non l'indirizzo firmato, che cambia a ogni lettura.
@@ -154,6 +176,8 @@ export interface ContentVisual {
   scenes: VideoScene[];
   /** Il montaggio, quando l'utente lo chiede: resta anche se la regia cambia, e allora va rifatto. */
   cut?: VideoCut | null;
+  /** La copertina del reel, fatta col montaggio. */
+  cover?: VideoCover | null;
   /**
    * La musica del video, tra le tracce del brand: assente, la sceglie chi monta; `null`, senza musica; un id, quella
    * traccia.

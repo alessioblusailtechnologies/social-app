@@ -576,6 +576,18 @@ export function photoCarouselDesign(slides: readonly CarouselSlide[], line: Bran
   };
 }
 
+/**
+ * La pagina della copertina di un reel: un template della linea del brand (il suo id) o un layout del motore, col
+ * titolo e il sopratitolo. Nulla se il template non esiste.
+ */
+export function coverPage(line: BrandLine | null | undefined, template: string, title: string, kicker: string): VisualPage | null {
+  const text = cleanCardText({ ...emptyCardText(), headline: title, kicker });
+  const custom = line?.templates?.find((candidate) => candidate.id === template);
+  if (custom) return { templateId: custom.photo ? 'photo-cover' : 'statement', custom: custom.id, text };
+  if ((TEMPLATE_IDS as readonly string[]).includes(template)) return { templateId: template as TemplateId, text };
+  return null;
+}
+
 /** Una proposta senza AI, dai testi della bozza: per le bozze nate prima dei visivi. */
 export function fallbackDesign(format: IdeaFormat, headline: string, slides: readonly CarouselSlide[]): VisualDesign | null {
   return proposeDesign(

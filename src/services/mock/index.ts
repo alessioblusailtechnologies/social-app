@@ -41,6 +41,7 @@ import {
   MATERIAL_STEPS,
   stepsInSequence,
   MUSIC_STEPS,
+  VIDEO_COVER_STEPS,
   VIDEO_CUT_STEPS,
   VIDEO_SCENE_STEPS,
   pageStep,
@@ -726,6 +727,40 @@ function createMockContentService(): ContentService {
         const { musicId: _previous, ...visual } = content.visual;
         return { ...content, visual: musicId === 'auto' ? visual : { ...visual, musicId } };
       });
+    },
+
+    /** Il mock non ha copertine vere: una luce nei colori del brand, col titolo. */
+    async makeCover(contentId, onSteps) {
+      const log = createStepLog(onSteps);
+      log.start(THINKING_STEP, VIDEO_COVER_STEPS.thinking);
+      await delay(latency(900, 1300));
+      log.drop(THINKING_STEP);
+      log.start('done', VIDEO_COVER_STEPS.done);
+      log.finish('done');
+      const owner = (await contentsCollection.list()).find((content) => content.id === contentId);
+      const brand = await brandById(owner?.brandId ?? '');
+      return updateContent(contentId, (content) => ({
+        ...content,
+        visual: {
+          ...content.visual,
+          cover: {
+            file: { path: null, url: samplePhoto(brandKit(brand), `copertina|${Date.now()}`) },
+            photo: null,
+            cutout: null,
+            template: 'photo-only',
+            title: content.visual.headline || content.title,
+            kicker: '',
+            madeAt: new Date().toISOString(),
+          },
+        },
+      }));
+    },
+
+    async retitleCover(contentId, title, kicker) {
+      await delay(latency(200, 400));
+      return updateContent(contentId, (content) =>
+        content.visual.cover ? { ...content, visual: { ...content.visual, cover: { ...content.visual.cover, title, kicker } } } : content,
+      );
     },
 
     /** Il mock non monta: finge i passi e segna le scene che aspettano il materiale. Il video non c'è. */

@@ -253,6 +253,8 @@ export const visualStyleRequestSchema = z.object({
 export const footageUploadSchema = z.object({ mimeType: z.string().min(3).max(60), bytes: z.number().int().positive() });
 export const footageAttachSchema = z.object({ path: z.string().min(1).max(500).nullable() });
 export const sceneLockSchema = z.object({ locked: z.boolean() });
+/** Il titolo della copertina cambiato a mano: si ricompone senza AI. */
+export const coverTitleSchema = z.object({ title: z.string().trim().min(1).max(60), kicker: z.string().trim().max(40).default('') });
 /** La musica del video: l'id di una traccia del brand, `null` per nessuna, `auto` perché la scelga chi monta. */
 export const contentMusicSchema = z.object({ musicId: z.string().min(1).max(60).nullable() });
 

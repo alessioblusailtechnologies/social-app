@@ -293,3 +293,17 @@ la storia nasce da lì.
 
 Dopo: l'archivio del materiale nel brand (caricato una volta, pescato da più contenuti) e la voce originale delle clip,
 coi sottotitoli dalla trascrizione.
+
+## La copertina del reel
+
+Decisa il 2026-09-25, e nasce **insieme al video**: nello stesso lavoro di «Monta il video», subito dopo il montaggio.
+
+- L'agente (compito `video-cover`, nella stessa sala del montaggio) sceglie un fotogramma vero del montaggio, lo
+  **rifinisce sempre** con Higgsfield (nitidezza, scontorno, fondo nei colori del brand dietro il soggetto, inquadratura
+  allargata) senza toccare i pixel del soggetto, scrive il titolo e sceglie il template.
+- Compone con `componi_copertina`: il motore delle card in 9:16, e il PNG gli torna da guardare. Quello che conta sta
+  nella fascia centrale 3:4, il ritaglio della griglia del profilo.
+- Per TikTok, che la copertina la prende da un fotogramma, la mette in testa al montaggio per un istante.
+- Nell'app: intera e ritagliata come nella griglia, il titolo si cambia e si ricompone senza AI, «Rifai la copertina».
+- Se la copertina non riesce, il montaggio resta.
+- Alla pubblicazione via API: `cover_url` su Instagram, il primo istante su TikTok.

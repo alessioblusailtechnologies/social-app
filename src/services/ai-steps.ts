@@ -135,6 +135,14 @@ export const MATERIAL_STEPS = {
   story: 'Scelgo i pezzi migliori e scrivo la storia',
 } as const;
 
+/** Le parole della copertina del reel: il fotogramma, la rifinitura, la composizione. */
+export const VIDEO_COVER_STEPS = {
+  thinking: 'Cerco il fotogramma per la copertina',
+  reflect: 'Ragiono sulla copertina',
+  done: 'Copertina pronta',
+  compose: 'Compongo la copertina e me la guardo',
+} as const;
+
 /** Le parole delle idee proposte dal Brand DNA. */
 export const IDEAS_STEPS = {
   context: (name: string) => (name.trim() ? `Rileggo il profilo di ${name.trim()}` : 'Rileggo il profilo del brand'),

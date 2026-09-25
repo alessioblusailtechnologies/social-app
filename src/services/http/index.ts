@@ -156,6 +156,8 @@ export function createHttpServices(api: ApiClient): Services {
     lockScene: (contentId, index, locked) =>
       api.put<Content>(route`/contents/${contentId}/video/scenes/${String(index)}/lock`, { locked }),
     setMusic: (contentId, musicId) => api.put<Content>(route`/contents/${contentId}/video/music`, { musicId }),
+    makeCover: (contentId, onSteps) => api.job<Content>(route`/contents/${contentId}/video/cover/job`, {}, onSteps),
+    retitleCover: (contentId, title, kicker) => api.put<Content>(route`/contents/${contentId}/video/cover`, { title, kicker }),
     cutVideo: (contentId, onSteps) => api.job<Content>(route`/contents/${contentId}/video/cut/job`, {}, onSteps),
     createVisual: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/create`),
     regenerateImage: (contentId) => api.post<Content>(route`/contents/${contentId}/visual/image`),

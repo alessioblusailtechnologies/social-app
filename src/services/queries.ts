@@ -688,6 +688,30 @@ export function useSetMusic() {
   });
 }
 
+/** «Rifai la copertina», coi passi. */
+export function useMakeCover() {
+  const [steps, setSteps] = useState<AiStep[]>([]);
+  const client = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (contentId: string) => {
+      setSteps([]);
+      return services.contents.makeCover(contentId, setSteps);
+    },
+    onSuccess: (content) => cacheContent(client, content),
+  });
+  return { ...mutation, steps };
+}
+
+/** Il titolo della copertina cambiato a mano: si ricompone senza AI. */
+export function useRetitleCover() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contentId, title, kicker }: { contentId: string; title: string; kicker: string }) =>
+      services.contents.retitleCover(contentId, title, kicker),
+    onSuccess: (content) => cacheContent(client, content),
+  });
+}
+
 /** «Monta il video», coi passi mentre l'agente monta: `steps` riparte vuoto a ogni richiesta. */
 export function useCutVideo() {
   const [steps, setSteps] = useState<AiStep[]>([]);

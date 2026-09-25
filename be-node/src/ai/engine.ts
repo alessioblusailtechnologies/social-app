@@ -28,6 +28,8 @@ export type AiTask =
   /** Il b-roll di una scena: il fotogramma di partenza, poi la clip. Passano da Higgsfield, sempre `be-agent`. */
   | 'video-frame'
   | 'video-clip'
+  /** La copertina del reel: fotogramma, rifinitura e composizione col motore del brand. */
+  | 'video-cover'
   /** La musica del brand: il piano delle tracce lo scrive l'AI, le compone ElevenLabs. */
   | 'music-plan'
   | 'music'

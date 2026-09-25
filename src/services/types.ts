@@ -143,7 +143,8 @@ export type JobKind =
   | 'video-scene'
   | 'video-frame'
   | 'video-clip'
-  | 'brand-music';
+  | 'brand-music'
+  | 'video-cover';
 
 export interface JobView<T> {
   id: string;
@@ -286,6 +287,9 @@ export interface ContentService {
   lockScene(contentId: string, index: number, locked: boolean): Promise<Content>;
   /** La musica del video: l'id di una traccia del brand, `null` per nessuna, `'auto'` perché la scelga chi monta. */
   setMusic(contentId: string, musicId: string | null): Promise<Content>;
+  /** La copertina del reel rifatta dal montaggio, coi passi; e il suo titolo cambiato a mano, senza AI. */
+  makeCover(contentId: string, onSteps?: OnAiSteps): Promise<Content>;
+  retitleCover(contentId: string, title: string, kicker: string): Promise<Content>;
   /** Monta il video dalla regia, coi cartelli dove manca il materiale. Minuti: si seguono i passi. */
   cutVideo(contentId: string, onSteps?: OnAiSteps): Promise<Content>;
   /** Crea il visivo proposto (foto se serve, scontorno, composizione). Risponde subito, a creazione avviata. */

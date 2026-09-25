@@ -9,6 +9,7 @@ import { VIDEO_CUT_STEPS } from '@/services/ai-steps';
 import { useCutVideo } from '@/services/queries';
 import type { AiStep } from '@/services/types';
 
+import { VideoCoverRow } from './VideoCoverRow';
 import { VideoMusicRow } from './VideoMusicRow';
 
 const PLAYER_WIDTH = 260;
@@ -83,11 +84,12 @@ export function VideoCutPanel({
         </>
       ) : (
         <Text variant="caption">
-          Monto la regia così com’è: grafica e testi a schermo nei colori del brand, la musica del brand sotto, e un cartello dove manca il materiale.
+          Monto la regia così com’è: grafica e testi a schermo nei colori del brand, la musica del brand sotto, un cartello dove manca il materiale, e la copertina.
           Vedi subito ritmo e storia, prima di girare.
         </Text>
       )}
       <VideoMusicRow brand={brand} content={content} disabled={locked && content.status !== 'approved'} />
+      <VideoCoverRow content={content} disabled={locked && content.status !== 'approved'} />
       {/* Si rimonta anche a contenuto approvato: arrivano i girati, e il video si completa. */}
       {(!locked || content.status === 'approved') && (
         <Button size="sm" variant={cut && !stale ? 'secondary' : 'primary'} onPress={start}>

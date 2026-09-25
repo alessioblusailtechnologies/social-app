@@ -5,6 +5,7 @@ import type { Content } from '@/domain/content';
 import { ApiError } from '../../contract/errors';
 import {
   contentMusicSchema,
+  coverTitleSchema,
   footageAttachSchema,
   footageUploadSchema,
   photoUploadSchema,
@@ -23,7 +24,7 @@ import {
   uploadVisualPhoto,
 } from '../../services/visual';
 import { lockBrollScene } from '../../services/video-broll';
-import { setContentMusic } from '../../services/video-cut';
+import { retitleCover, setContentMusic } from '../../services/video-cut';
 import { attachFootage, footageUploadUrl } from '../../services/video-footage';
 import { signContent } from '../../visual/files';
 import { queueJob } from './jobs';
@@ -80,6 +81,18 @@ export function registerVisualRoutes(app: FastifyInstance, deps: Deps): void {
       setContentMusic(deps, request.identity, contentId(request.params.contentId), contentMusicSchema.parse(request.body).musicId),
     ),
   );
+
+  /** «Rifai la copertina»: in coda, coi passi; nasce anche da sola a ogni montaggio. */
+  app.post<ContentParams>('/api/contents/:contentId/video/cover/job', (request, reply) => {
+    const id = contentId(request.params.contentId);
+    return queueJob(deps, request, reply, { kind: 'video-cover', input: { contentId: id }, ref: id });
+  });
+
+  /** Il titolo della copertina, cambiato a mano: si ricompone col motore, senza AI. */
+  app.put<ContentParams>('/api/contents/:contentId/video/cover', (request) => {
+    const { title, kicker } = coverTitleSchema.parse(request.body);
+    return signed(retitleCover(deps, request.identity, contentId(request.params.contentId), title, kicker));
+  });
 
   /** «Monta il video»: l'agente monta la regia, con un cartello dove manca il materiale. In coda come il disegno. */
   app.post<ContentParams>('/api/contents/:contentId/video/cut/job', (request, reply) => {

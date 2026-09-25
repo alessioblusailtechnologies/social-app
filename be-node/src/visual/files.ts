@@ -56,6 +56,12 @@ function mapVisualFilesOf(visual: ContentVisual, change: (file: MediaFile) => Me
     ...visual,
     design: design && mapDesignFiles(design, change),
     cut: cut && { ...cut, file: change(cut.file) },
+    cover: visual.cover && {
+      ...visual.cover,
+      file: change(visual.cover.file),
+      photo: visual.cover.photo && change(visual.cover.photo),
+      cutout: visual.cover.cutout && change(visual.cover.cutout),
+    },
     scenes: visual.scenes.map((scene) => ({
       ...scene,
       ...(scene.footage && { footage: change(scene.footage) }),
@@ -68,7 +74,7 @@ function mapVisualFilesOf(visual: ContentVisual, change: (file: MediaFile) => Me
 function contentPaths(visual: ContentVisual): string[] {
   return [
     ...designPaths(visual.design),
-    ...[visual.cut?.file, ...visual.scenes.flatMap((scene) => [scene.footage, scene.frame, scene.clip])]
+    ...[visual.cut?.file, visual.cover?.file, visual.cover?.photo, visual.cover?.cutout, ...visual.scenes.flatMap((scene) => [scene.footage, scene.frame, scene.clip])]
       .map((file) => file?.path)
       .filter((path): path is string => Boolean(path)),
   ];

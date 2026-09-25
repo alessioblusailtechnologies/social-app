@@ -127,7 +127,8 @@ export class AgentEngine implements AiEngine {
 
     // Chi gira un video monta nella cartella di lavoro: ffmpeg nel PATH, e due strumenti nostri —
     // guardare quello che ha montato, e consegnarlo nella libreria.
-    const filming = request.task === 'video' && brand !== null;
+    // Chi fa la copertina lavora nella stessa sala del montaggio: il video, ffmpeg, guarda e consegna.
+    const filming = (request.task === 'video' || request.task === 'video-cover') && brand !== null;
     const delivered = new Map<string, string>();
     const studio = request.studio ? join(workspace.dir, request.studio) : workspace.dir;
 
@@ -142,6 +143,7 @@ export class AgentEngine implements AiEngine {
         storage: this.options.storage,
         log: this.options.log,
         delivered,
+        ...(request.task === 'video-cover' && { cover: { brand, renderer: this.options.renderer } }),
       });
     }
 

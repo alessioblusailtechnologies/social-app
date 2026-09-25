@@ -9,6 +9,11 @@ import { createSdkMcpServer, tool, type HookCallback } from '@anthropic-ai/claud
 import type { FastifyBaseLogger } from 'fastify';
 import { z } from 'zod';
 
+import type { Brand } from '@/domain/brand';
+import { COVER_TITLE_LIMIT } from '@/domain/content';
+import { TEMPLATE_IDS, brandKit, coverPage } from '@/domain/visual';
+
+import type { CardRenderer } from '../../be-node/src/media/renderer';
 import type { MediaStorage } from '../../be-node/src/media/storage';
 import { mediaPath } from '../../be-node/src/visual/files';
 
@@ -147,6 +152,67 @@ export interface VideoToolsContext {
   log: FastifyBaseLogger;
   /** I file consegnati, per percorso nella libreria: li rilegge chi salva il contenuto. */
   delivered: Map<string, string>;
+  /** Solo per chi fa la copertina: il brand e il motore delle card, per comporla e guardarla. */
+  cover?: { brand: Brand; renderer: CardRenderer };
+}
+
+const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
+
+/** Un'immagine della cartella di lavoro come data URI: be-render la apre senza che passi dallo Storage. */
+async function imageData(dir: string, file: string): Promise<string> {
+  const extension = file.split('.').pop()?.toLowerCase() ?? '';
+  const type = IMAGE_TYPES[extension];
+  if (!type) throw new Error(`${file} non è un PNG, un JPEG o un WebP`);
+  const bytes = await readFile(inside(dir, file));
+  return `data:${type};base64,${bytes.toString('base64')}`;
+}
+
+/**
+ * La copertina composta dal motore delle card, in 9:16, col template che l'agente sceglie: uno della linea del brand
+ * o un layout del motore. Gli torna il PNG, così la guarda come guarda il montaggio, e resta come `copertina.png`.
+ */
+function coverTool(context: VideoToolsContext & { cover: NonNullable<VideoToolsContext['cover']> }) {
+  const { brand, renderer } = context.cover;
+  const brandTemplates = brand.visual.line?.templates ?? [];
+  return tool(
+    'componi_copertina',
+    'Compone la copertina del reel col motore del brand, in 9:16, e te la restituisce come immagine. Passa l’immagine su cui comporla (e lo scontorno, se il template lo usa), il template e il titolo. Guardala: il titolo si legge in piccolo? Quello che conta sta nella fascia centrale 3:4 che Instagram mostra nella griglia? Se no, correggi e richiama. Il PNG resta come copertina.png nella cartella.',
+    {
+      foto: z.string().describe('L’immagine della copertina, un file nella cartella di lavoro.'),
+      scontorno: z.string().nullable().default(null).describe('Il soggetto scontornato (PNG trasparente), per i template «cutout».'),
+      template: z.string().describe('L’id di un template della linea del brand o di un layout del motore.'),
+      titolo: z.string().min(1).max(COVER_TITLE_LIMIT),
+      sopratitolo: z.string().max(40).default(''),
+    },
+    async ({ foto, scontorno, template, titolo, sopratitolo }) => {
+      try {
+        const page = coverPage(brand.visual.line, template, titolo, sopratitolo);
+        if (!page) throw new Error(`template sconosciuto: usa uno di ${[...brandTemplates.map((t) => t.id), ...TEMPLATE_IDS].join(', ')}`);
+        const kit = brandKit(brand);
+        // Il logo passa solo se be-render lo può aprire: un percorso del telefono non si vede dal server.
+        const logoUrl = kit.logoUrl && /^(https:|data:image\/)/.test(kit.logoUrl) ? kit.logoUrl : null;
+        const png = await renderer.render({
+          kit: { ...kit, logoUrl, signature: kit.signature && logoUrl !== null },
+          page,
+          pageIndex: 0,
+          pageCount: 1,
+          photoUrl: await imageData(context.dir, foto),
+          cutoutUrl: scontorno ? await imageData(context.dir, scontorno) : null,
+          aspect: '9:16',
+        });
+        const { writeFile } = await import('node:fs/promises');
+        await writeFile(join(context.dir, 'copertina.png'), png);
+        return {
+          content: [
+            { type: 'text' as const, text: 'Ecco la copertina, salvata come copertina.png. Guardala intera e pensa al ritaglio 3:4 della griglia.' },
+            { type: 'image' as const, data: Buffer.from(png).toString('base64'), mimeType: 'image/png' },
+          ],
+        };
+      } catch (error) {
+        return problem(`Non sono riuscito a comporre la copertina: ${message(error)}`);
+      }
+    },
+  );
 }
 
 const MAX_BYTES = 256 * 1024 * 1024;
@@ -160,6 +226,8 @@ const TYPES: Record<string, string> = {
   wav: 'audio/wav',
   png: 'image/png',
   jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
 };
 
 export function videoTools(context: VideoToolsContext) {
@@ -169,6 +237,7 @@ export function videoTools(context: VideoToolsContext) {
     name: 'montaggio',
     version: '0.1.0',
     tools: [
+      ...(context.cover ? [coverTool({ ...context, cover: context.cover })] : []),
       tool(
         'guarda',
         'Ti restituisce dei fotogrammi di un video della cartella di lavoro, così lo vedi davvero prima di consegnarlo. Usalo sul montaggio finito e anche sulle singole clip: il testo ci sta tutto? lo stacco cade dove volevi? la clip mostra quello che avevi chiesto? Se qualcosa non va, rifai e riguarda.',
