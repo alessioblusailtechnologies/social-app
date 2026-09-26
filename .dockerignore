@@ -1,11 +1,13 @@
-# Contesto delle immagini Docker costruite dalla radice (oggi solo be-render/Dockerfile).
+# Contesto delle immagini Docker costruite dalla radice (oggi solo backend/be-render/Dockerfile).
 **/node_modules
 **/dist
 .git
 .expo
 design
-be-render/build
-be-render/out
-be-node/.env
-be-render/.env
+backend/be-render/build
+backend/be-render/out
+backend/*/.env
+backend/be-agent/.workspaces
+app-mobile
+website
 .env*

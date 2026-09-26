@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Moonbrand",
+    "slug": "moonbrand",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "moonbrand",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#ECEEEF",
+    "android": {
+      "package": "com.blusail.moonbrand",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "./plugins/with-apk-name",
+      "./plugins/with-cleartext",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Serve per caricare il logo del brand."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ECEEEF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      "expo-video",
+      "expo-audio"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true,
+      "tsconfigPaths": false
+    }
+  }
+}

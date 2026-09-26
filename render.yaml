@@ -1,12 +1,12 @@
 # Blueprint Render di Presenza: l'API (be-node), il render delle card (be-render) e l'app web statica.
 #
 # Render → New → Blueprint → questo repo. I segreti (sync: false) li chiede una volta alla
-# creazione: si copiano da be-node/.env. A ogni sync il Blueprint riscrive le variabili con
+# creazione: si copiano da backend/be-node/.env. A ogni sync il Blueprint riscrive le variabili con
 # `value:`, quindi gli indirizzi si correggono qui e non nel pannello.
-# Passi e limiti in be-node/README.md, «Deploy su Render».
+# Passi e limiti in backend/be-node/README.md, «Deploy su Render».
 services:
   # --- API: Fastify, Supabase, Agent SDK ---------------------------------------
-  # Si costruisce dalla radice del repo: il bundle include src/domain e src/lib dell'app.
+  # Si costruisce dalla radice del repo: il bundle include il codice condiviso con l'app (shared/).
   # Piano free per ora: si addormenta dopo 15 minuti senza richieste e ha 512 MB, stretti
   # per il processo di Claude Code che ogni generazione AI avvia.
   - type: web
@@ -16,23 +16,19 @@ services:
     region: frankfurt
     branch: master
     # Con NODE_ENV=production npm salterebbe le dipendenze di sviluppo, e la build usa esbuild.
-    buildCommand: cd be-node && npm ci --include=dev && npm run build
-    startCommand: node be-node/dist/server.mjs
+    buildCommand: cd backend/be-node && npm ci --include=dev && npm run build
+    startCommand: node backend/be-node/dist/server.mjs
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     # Riparte solo quando cambia qualcosa che finisce nel bundle.
     buildFilter:
       paths:
-        - be-node/**
-        - src/domain/**
-        - src/lib/**
-        - src/services/mock/**
-        - src/services/types.ts
-        - src/design-system/tokens.ts
+        - backend/be-node/**
+        - shared/**
         - render.yaml
       ignoredPaths:
-        - be-node/test/**
-        - be-node/README.md
+        - backend/be-node/test/**
+        - backend/be-node/README.md
     envVars:
       - key: NODE_VERSION
         value: "24"
@@ -42,7 +38,7 @@ services:
         value: info
       - key: APP_TIME_ZONE
         value: Europe/Rome
-      # DeepSeek diretta (server in Cina); con un Claude, `claude-opus-5`. Vedi be-node/src/ai/providers.ts.
+      # DeepSeek diretta (server in Cina); con un Claude, `claude-opus-5`. Vedi backend/be-node/src/ai/providers.ts.
       - key: AI_MODEL
         value: deepseek-flash
       # L'app web qui sotto. Se Render le assegna un altro sottodominio, va corretto qui.
@@ -91,7 +87,7 @@ services:
         value: "180000"
 
   # --- Render delle card: Remotion + Chromium (be-render) ----------------------
-  # Docker dalla radice del repo, perché il sito Remotion include src/templates e src/domain dell'app.
+  # Docker dalla radice del repo, perché il sito Remotion include il codice condiviso (shared/).
   # Per ora sul piano gratuito: 512 MB, stretti per Chromium (quindi un solo processo e uno scatto alla
   # volta), e si addormenta dopo 15 minuti. Se un PNG non arriva il visivo resta pronto lo stesso.
   # Per l'uso vero: piano standard da 2 GB e licenza Remotion (docs/piano-visivi.md, «Decisioni aperte»).
@@ -101,20 +97,17 @@ services:
     plan: free
     region: frankfurt
     branch: master
-    dockerfilePath: ./be-render/Dockerfile
+    dockerfilePath: ./backend/be-render/Dockerfile
     dockerContext: .
     healthCheckPath: /health
     autoDeployTrigger: commit
     buildFilter:
       paths:
-        - be-render/**
-        - src/templates/**
-        - src/domain/**
-        - src/lib/**
-        - src/design-system/tokens.ts
+        - backend/be-render/**
+        - shared/**
       ignoredPaths:
-        - be-render/README.md
-        - be-render/tools/**
+        - backend/be-render/README.md
+        - backend/be-render/tools/**
     envVars:
       - key: RENDER_TOKEN
         generateValue: true
@@ -126,13 +119,12 @@ services:
     name: presenza-app
     runtime: static
     branch: master
-    buildCommand: npm ci && npx expo export --platform web
-    staticPublishPath: dist
+    buildCommand: cd app-mobile && npm ci && npx expo export --platform web
+    staticPublishPath: app-mobile/dist
     autoDeployTrigger: commit
     buildFilter:
       ignoredPaths:
-        - be-node/**
-        - be-render/**
+        - backend/**
         - website/**
     envVars:
       - key: NODE_VERSION

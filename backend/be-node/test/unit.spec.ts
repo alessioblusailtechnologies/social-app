@@ -1,0 +1,245 @@
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { describe, expect, it } from 'vitest';
+
+import { createEmptyDraft } from '@shared/domain/catalog';
+import type { Brand } from '@shared/domain/brand';
+import type { Content } from '@shared/domain/content';
+import { createThemes } from '@shared/domain/themes';
+import { createStepLog } from '@shared/services/ai-steps';
+import type { AiStep } from '@shared/services/types';
+
+import { cleanLabels, describeBrand } from '../src/ai/brand-context';
+import { cleanHashtags } from '../src/ai/content';
+import { fallbackDesign } from '@shared/domain/visual';
+import { photoPrompt } from '../src/ai/image-prompt';
+import type { MediaStorage } from '../src/media/storage';
+import { parsePhotoDataUri } from '../src/services/visual';
+import { signContents, unsignedVisual } from '../src/visual/files';
+import { fitChannels } from '../src/ai/ideas';
+import { costAtTariff, modelTarget } from '../src/ai/providers';
+import { colorsFromHtml, countColors } from '../src/ai/site-colors';
+import { toolEvents } from '../src/ai/engine';
+import { stepsFromTools } from '../src/ai/steps';
+import { isPrivateAddress, toWebUrl } from '../src/lib/public-url';
+import { scheduleKey, toSlot } from '../src/data/slots';
+
+function brand(): Brand {
+  const draft = createEmptyDraft('company');
+  return {
+    ...draft,
+    id: 'b1',
+    createdAt: '',
+    updatedAt: '',
+    identity: { ...draft.identity, name: 'Forno Aurora', sector: 'Panificio', pitch: 'Pane a lievito madre a Bologna.' },
+    channels: { ...draft.channels, instagram: { selected: true, handle: null }, facebook: { selected: true, handle: '@aurora' } },
+    themes: createThemes(['Il pane di ogni giorno', 'Dietro il banco']),
+  };
+}
+
+describe('indirizzi pubblici', () => {
+  it('riconosce gli indirizzi privati, locali e mappati', () => {
+    for (const address of ['127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.169.254', '::1', 'fd00::1', '::ffff:10.0.0.1']) {
+      expect(isPrivateAddress(address), address).toBe(true);
+    }
+    for (const address of ['93.184.216.34', '2606:2800:220:1:248:1893:25c8:1946']) {
+      expect(isPrivateAddress(address), address).toBe(false);
+    }
+  });
+
+  it('completa lo schema e rifiuta quello che non è web', () => {
+    expect(toWebUrl('nodo.it').toString()).toBe('https://nodo.it/');
+    expect(() => toWebUrl('ftp://nodo.it')).toThrow();
+    expect(() => toWebUrl('https://utente:segreto@nodo.it')).toThrow();
+  });
+});
+
+describe('colori del sito', () => {
+  it('pesa theme-color, conta gli stili e trova i fogli collegati', () => {
+    const html = `<meta name="theme-color" content="#1f3a5f"><style>a{color:#e9c46a}b{color:#E9C46A}</style>
+      <div style="background:#fff"></div><link rel="stylesheet" href="/app.css">`;
+    const { counts, stylesheets } = colorsFromHtml(html);
+    expect(counts.get('#1F3A5F')).toBe(10);
+    expect(counts.get('#E9C46A')).toBe(2);
+    expect(counts.get('#FFFFFF')).toBe(1);
+    expect(stylesheets).toEqual(['/app.css']);
+    expect(countColors(['#abc #aabbcc']).get('#AABBCC')).toBe(2);
+  });
+});
+
+describe('ripulitura delle risposte AI', () => {
+  it('tiene hashtag puliti, senza doppioni e fino al tetto', () => {
+    expect(cleanHashtags(['#Pane', 'pane', 'lievito madre', '#Bologna!', '#extra'], 3)).toEqual(['#Pane', '#lievitomadre', '#Bologna']);
+  });
+
+  it('pulisce le etichette e toglie i doppioni', () => {
+    expect(cleanLabels([' famiglie.', 'Famiglie', '', 'Ristoratori di zona'], 3)).toEqual(['Famiglie', 'Ristoratori di zona']);
+  });
+
+  it('restringe i canali a quelli del brand', () => {
+    expect(fitChannels(brand(), ['linkedin', 'instagram'], ['post'])).toEqual(['instagram']);
+    expect(fitChannels(brand(), ['tiktok'], ['carousel'])).toEqual(['instagram']);
+    expect(fitChannels(brand(), [], ['article'])).toEqual(['instagram', 'facebook']);
+  });
+
+  it('descrive il brand con gli id dei temi e dei canali', () => {
+    const text = describeBrand(brand(), new Date(2026, 8, 15, 10));
+    const [first] = brand().themes;
+    expect(text).toContain('Forno Aurora');
+    expect(text).toContain('pesa 60% del piano');
+    expect(text).toContain('id "instagram"');
+    expect(text).toContain('collegato come @aurora');
+    expect(text).toMatch(/martedì 15 settembre 2026/);
+    expect(first.id).toMatch(/^theme_/);
+  });
+});
+
+describe('uscite', () => {
+  const row = {
+    id: 's1',
+    brand_id: 'b1',
+    publish_date: '2026-09-15',
+    publish_time: '09:00',
+    channels: ['linkedin' as const],
+    theme_id: null,
+    idea_id: null,
+    content_title: null,
+    status: 'scheduled' as const,
+    origin: 'manual' as const,
+    created_at: new Date('2026-09-01T10:00:00Z'),
+  };
+
+  it('una programmata col suo orario passato risulta pubblicata', () => {
+    expect(scheduleKey(new Date(2026, 8, 15, 8, 5))).toBe('2026-09-15T08:05');
+    expect(toSlot(row, new Date(2026, 8, 15, 8, 59)).status).toBe('scheduled');
+    expect(toSlot(row, new Date(2026, 8, 15, 9, 1)).status).toBe('published');
+    expect(toSlot({ ...row, status: 'toApprove' }, new Date(2026, 8, 16)).status).toBe('toApprove');
+  });
+});
+
+describe('visivi', () => {
+  const card = { kicker: 'Il pane', headline: 'Ore di lievitazione', body: '', value: '', items: [], author: '' };
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+  it('il prompt della foto porta descrizione, stile e palette; niente testo, e per un personal brand niente volti', () => {
+    const company = brand();
+    const photo = photoPrompt({ description: 'Pagnotte sul bancone', role: 'photo', aspectRatio: '4:5', brand: company, references: 0 });
+    expect(photo).toContain('Pagnotte sul bancone');
+    expect(photo).toContain(company.visual.palette.colors[0]);
+    expect(photo).toContain('No text, no letters');
+    expect(photo).not.toContain('attached');
+
+    const person = { ...company, identity: { ...company.identity, kind: 'person' as const } };
+    const cutout = photoPrompt({ description: 'Una tazza', role: 'cutout', aspectRatio: '9:16', brand: person, references: 2 });
+    expect(cutout).toContain('one single subject');
+    expect(cutout).toContain('No faces at all');
+    expect(cutout).toContain('head completely outside the frame');
+    expect(cutout).toContain('The 2 attached images');
+  });
+
+
+  it('accetta solo foto vere, fino a 3 MB', () => {
+    expect(parsePhotoDataUri(`data:image/png;base64,${PNG}`).mimeType).toBe('image/png');
+    expect(() => parsePhotoDataUri(`data:image/jpeg;base64,${PNG}`)).toThrow('non è una foto valida');
+    expect(() => parsePhotoDataUri('data:image/svg+xml;base64,PHN2Zz4=')).toThrow('PNG, un JPEG o un WebP');
+    expect(() => parsePhotoDataUri(`data:image/png;base64,${Buffer.alloc(3 * 1024 * 1024 + 1).toString('base64')}`)).toThrow('3 MB');
+  });
+
+  it('nel database gli indirizzi restano vuoti, in risposta si firmano tutti in una chiamata', async () => {
+    const design = {
+      ...fallbackDesign('post', 'Titolo', [])!,
+      status: 'ready' as const,
+      image: { description: '', source: 'generated' as const, photo: { path: 'a/b/foto.png', url: 'https://scaduto' }, cutout: null },
+      renders: [{ page: 0, aspect: '4:5' as const, file: { path: 'a/b/card.png', url: 'https://scaduto' } }],
+    };
+    const visual = { headline: '', slides: [], script: '', scenes: [], design };
+    expect(unsignedVisual(visual).design?.image.photo?.url).toBe('');
+    expect(unsignedVisual({ ...visual, design: undefined as never }).design).toBeNull();
+
+    let calls = 0;
+    const storage: MediaStorage = {
+      upload: () => Promise.resolve(),
+      download: () => Promise.reject(new Error('non serve')),
+      sign: (paths) => {
+        calls += 1;
+        return Promise.resolve(new Map(paths.map((path) => [path, `https://firmato/${path}`])));
+      },
+      uploadUrl: () => Promise.reject(new Error('non serve')),
+    };
+    const content = { id: 'c1', visual } as unknown as Content;
+    const [first, second] = await signContents(storage, [content, { ...content, id: 'c2' }]);
+    expect(calls).toBe(1);
+    expect(first.visual.design?.renders[0].file.url).toBe('https://firmato/a/b/card.png');
+    expect(second.visual.design?.image.photo?.url).toBe('https://firmato/a/b/foto.png');
+  });
+});
+
+describe('fornitori del modello', () => {
+  const deepseek = { key: 'sk-deepseek-prova', baseUrl: 'https://api.deepseek.com/anthropic' };
+
+  it('un Claude va ad Anthropic, e senza chiave l’AI resta spenta', () => {
+    expect(modelTarget('claude-opus-5', { anthropic: 'sk-ant-prova', deepseek })).toEqual({});
+    expect(modelTarget('claude-opus-5', { anthropic: undefined, deepseek })).toBeNull();
+  });
+
+  it('DeepSeek cambia indirizzo e chiave del processo, e nient’altro', () => {
+    const processEnv = { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-ant-prova', CLAUDE_CODE_OAUTH_TOKEN: 'oauth-prova' };
+    const target = modelTarget('deepseek-flash', { anthropic: undefined, deepseek }, processEnv);
+    expect(target?.env).toEqual({
+      PATH: '/usr/bin',
+      ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+      ANTHROPIC_API_KEY: 'sk-deepseek-prova',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-flash',
+    });
+    expect(target?.tariff).toEqual({ input: 0.3, output: 1.2, cache: 0.006 });
+    expect(modelTarget('deepseek-flash', { anthropic: 'sk-ant-prova', deepseek: { ...deepseek, key: undefined } })).toBeNull();
+  });
+
+  it('il costo al listino tiene a parte la cache', () => {
+    const tariff = { input: 0.3, output: 1.2, cache: 0.006 };
+    expect(costAtTariff({ input: 1_000_000, output: 100_000, cacheRead: 2_000_000, cacheWrite: 0 }, tariff)).toBe(0.432);
+  });
+});
+
+describe('passi della lettura del sito', () => {
+  const assistant = (content: unknown[]) => ({ type: 'assistant', parent_tool_use_id: null, message: { content } }) as unknown as SDKMessage;
+  const user = (content: unknown[], parent: string | null = null) =>
+    ({ type: 'user', parent_tool_use_id: parent, message: { role: 'user', content } }) as unknown as SDKMessage;
+
+  it('dai messaggi della sessione prende solo gli strumenti web della sessione principale', () => {
+    expect(
+      toolEvents(
+        assistant([
+          { type: 'text', text: 'Apro la home.' },
+          { type: 'tool_use', id: 't1', name: 'WebFetch', input: { url: 'https://nodo.it/', prompt: 'x' } },
+          { type: 'tool_use', id: 't2', name: 'StructuredOutput', input: {} },
+        ]),
+      ),
+    ).toEqual([{ type: 'start', id: 't1', tool: 'WebFetch', input: { url: 'https://nodo.it/', prompt: 'x' } }]);
+    expect(toolEvents(user([{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: '404' }]))).toEqual([
+      { type: 'end', id: 't1', ok: false },
+    ]);
+    expect(toolEvents(user([{ type: 'tool_result', tool_use_id: 't9', content: 'ok' }], 'padre'))).toEqual([]);
+  });
+
+  it('una pagina per passo, e fra una e l’altra un passo di passaggio che sparisce', () => {
+    let steps: AiStep[] = [];
+    const onTool = stepsFromTools(createStepLog((next) => (steps = next)), { first: 'Scelgo', next: 'Ragiono' });
+    expect(steps).toEqual([{ id: 'thinking', label: 'Scelgo', status: 'running' }]);
+
+    onTool({ type: 'start', id: 'a', tool: 'WebFetch', input: { url: 'https://nodo.it/' } });
+    onTool({ type: 'start', id: 'b', tool: 'WebFetch', input: { url: 'https://nodo.it/chi-siamo' } });
+    onTool({ type: 'end', id: 'a', ok: true });
+    expect(steps.map((step) => [step.id, step.status])).toEqual([
+      ['a', 'done'],
+      ['b', 'running'],
+    ]);
+
+    onTool({ type: 'end', id: 'b', ok: false });
+    onTool({ type: 'end', id: 'sconosciuto', ok: true });
+    expect(steps).toEqual([
+      { id: 'a', label: 'Apro la home', detail: 'nodo.it', status: 'done' },
+      { id: 'b', label: 'Apro la pagina «Chi siamo»', detail: 'nodo.it/chi-siamo', status: 'failed' },
+      { id: 'thinking', label: 'Ragiono', status: 'running' },
+    ]);
+  });
+});
