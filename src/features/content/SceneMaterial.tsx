@@ -6,7 +6,7 @@ import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { AgentStage, Badge, ImageViewer, LinkButton, Text, colors, palette, radii, useToast, type ViewerItem } from '@/design-system';
-import { FOOTAGE_TYPES, SCENE_SOURCE_LABELS, footageKind, readScene, type Content, type VideoScene } from '@/domain/content';
+import { FOOTAGE_TYPES, SCENE_SOURCE_LABELS, footageTooHeavy, footageKind, readScene, type Content, type VideoScene } from '@/domain/content';
 import { apiErrorMessage } from '@/services';
 import { BROLL_STEPS, VIDEO_SCENE_STEPS } from '@/services/ai-steps';
 import { useLockScene, useMakeBroll, useRemoveFootage, useReplaceScene, useUploadFootage } from '@/services/queries';
@@ -138,7 +138,7 @@ function SceneMaterial({
     // Quanto pesa, se il selettore non lo dice: lo si chiede al file.
     const bytes = asset.fileSize ?? (await (await fetch(asset.uri)).blob()).size;
     if (bytes > accepted.maxBytes) {
-      toast(`Il file è troppo pesante: al massimo ${Math.round(accepted.maxBytes / 1024 / 1024)} MB.`);
+      toast(footageTooHeavy(asset.fileName ?? (kind === 'video' ? 'Il girato' : 'La foto'), bytes, kind));
       return;
     }
     upload.mutate(

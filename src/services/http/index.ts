@@ -1,5 +1,5 @@
 import type { Brand, BrandVideo } from '@/domain/brand';
-import type { Content } from '@/domain/content';
+import { FOOTAGE_LIMIT_NOTE, type Content } from '@/domain/content';
 import type { Idea, IdeaDraft } from '@/domain/idea';
 import type { PlanSlot, SlotDraft } from '@/domain/plan';
 import type { MediaFile } from '@/domain/visual';
@@ -20,6 +20,15 @@ import type {
   Workspace,
 } from '../types';
 import { ApiError, route, type ApiClient } from './client';
+
+/** Perché un caricamento diretto nello spazio dei file è fallito, detto a chi carica. */
+async function uploadError(sent: Response): Promise<ApiError> {
+  const body = await sent.text().catch(() => '');
+  if (sent.status === 413 || body.includes('EntityTooLarge')) {
+    return new ApiError(413, 'TOO_LARGE', `Il file pesa troppo per lo spazio dei file. ${FOOTAGE_LIMIT_NOTE}`);
+  }
+  return new ApiError(sent.status, 'UPLOAD_FAILED', 'Il caricamento non è riuscito: controlla la connessione e riprova.');
+}
 
 type ContentWithSlot = { content: Content; slot: PlanSlot };
 type OpenJob = Awaited<ReturnType<JobService['open']>>;
@@ -42,7 +51,7 @@ export function createHttpServices(api: ApiClient): Services {
       // Il file va dritto nel bucket: un video non passa dall'API.
       const body = await (await fetch(file.uri)).blob();
       const sent = await fetch(uploadUrl, { method: 'PUT', headers: { 'content-type': file.mimeType, 'x-upsert': 'false' }, body });
-      if (!sent.ok) throw new ApiError(sent.status, 'UPLOAD_FAILED', 'Il caricamento non è riuscito. Riprova.');
+      if (!sent.ok) throw await uploadError(sent);
       return { path, url: '' };
     },
     remakeMusic: (brandId, onSteps) => api.job<Brand>(route`/brands/${brandId}/music/job`, {}, onSteps),
@@ -142,7 +151,7 @@ export function createHttpServices(api: ApiClient): Services {
       // Il file va dritto nel bucket: un girato non passa dall'API.
       const body = await (await fetch(file.uri)).blob();
       const sent = await fetch(uploadUrl, { method: 'PUT', headers: { 'content-type': file.mimeType, 'x-upsert': 'false' }, body });
-      if (!sent.ok) throw new ApiError(sent.status, 'UPLOAD_FAILED', 'Il caricamento non è riuscito. Riprova.');
+      if (!sent.ok) throw await uploadError(sent);
       return api.put<Content>(route`/contents/${contentId}/video/scenes/${scene}/footage`, { path });
     },
     removeFootage: (contentId, index) =>

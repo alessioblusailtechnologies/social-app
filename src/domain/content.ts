@@ -87,11 +87,26 @@ export function footageKind(source: SceneSource): 'video' | 'image' | null {
   return source === 'shoot' ? 'video' : source === 'photo' ? 'image' : null;
 }
 
-/** I tipi di file accettati come materiale, con quanto possono pesare. */
+/**
+ * I tipi di file accettati come materiale, con quanto possono pesare. Il tetto dei video è quello dello spazio dei file
+ * (Supabase, 50 MB per file sul piano di adesso): oltre, il caricamento viene rifiutato a metà.
+ */
 export const FOOTAGE_TYPES: Record<'video' | 'image', { mimeTypes: readonly string[]; maxBytes: number }> = {
-  video: { mimeTypes: ['video/mp4', 'video/quicktime'], maxBytes: 200 * 1024 * 1024 },
+  video: { mimeTypes: ['video/mp4', 'video/quicktime'], maxBytes: 50 * 1024 * 1024 },
   image: { mimeTypes: ['image/png', 'image/jpeg', 'image/webp'], maxBytes: 10 * 1024 * 1024 },
 };
+
+/** L'avviso sempre visibile dove si scelgono i file: il limite, e cosa fare se si sfora. */
+export const FOOTAGE_LIMIT_NOTE =
+  'Video MP4 o MOV fino a 50 MB, foto PNG, JPEG o WebP fino a 10 MB. Un video del telefono in 4K pesa di più: tagliane il pezzo che serve o esportalo in 1080p dalla galleria, e caricalo così.';
+
+/** «Ricci.mp4 pesa 83 MB: …»: perché un file resta fuori, con quello che si può fare. */
+export function footageTooHeavy(name: string, bytes: number, kind: 'video' | 'image'): string {
+  const size = Math.round(bytes / 1024 / 1024);
+  return kind === 'video'
+    ? `«${name}» pesa ${size} MB: i video passano fino a 50 MB. Tagliane il pezzo che serve o esportalo in 1080p dalla galleria, e riprova.`
+    : `«${name}» pesa ${size} MB: le foto passano fino a 10 MB.`;
+}
 
 /** Le scene da girare che aspettano ancora il girato. */
 export function scenesWaitingFootage(scenes: readonly VideoScene[]): VideoScene[] {
